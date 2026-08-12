@@ -1,0 +1,56 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 800 >>
+stream
+0.13 0.20 0.29 RG
+3 w
+90 100 m 700 100 l 700 380 l 480 380 l 480 520 l 90 520 l h S
+1.2 w
+320 100 m 320 330 l S
+320 330 m 90 330 l S
+480 100 m 480 250 l S
+480 300 m 480 380 l S
+230 330 m 230 520 l S
+0.35 0.42 0.55 RG 0.8 w
+320 330 m 320 385.2 l S
+320 385.2 m 350.5 372.6 375.2 347.9 375.2 330 c S
+0.13 0.20 0.29 RG 2 w
+150 100 m 220 100 l S 150 104 m 220 104 l S
+540 100 m 610 100 l S 540 104 m 610 104 l S
+700 180 m 700 250 l S 696 180 m 696 250 l S
+120 520 m 190 520 l S 120 516 m 190 516 l S
+BT /F1 13 Tf 0.36 0.42 0.53 rg
+1 0 0 1 150 210 Tm (DRAWING ROOM) Tj
+1 0 0 1 380 210 Tm (KITCHEN) Tj
+1 0 0 1 545 250 Tm (BED ROOM) Tj
+1 0 0 1 120 420 Tm (VERANDAH) Tj
+1 0 0 1 300 420 Tm (BATH) Tj
+ET
+BT /F1 10 Tf 0.5 0.55 0.63 rg 1 0 0 1 90 70 Tm (SAMPLE RESIDENCE - GROUND FLOOR - Plot 61 ft x 42 ft) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+xref
+0 6
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000115 00000 n 
+0000000241 00000 n 
+0000001092 00000 n 
+trailer
+<< /Size 6 /Root 1 0 R >>
+startxref
+1162
+%%EOF

@@ -1,0 +1,261 @@
+import { create } from 'zustand'
+import type { BgState, CompassState, Pt, ProjectFile, ScaleSource, Tool, Unit, ViewState } from './types'
+
+export interface Toast {
+  id: number
+  msg: string
+  kind: 'ok' | 'warn' | 'info'
+  actionLabel?: string
+  onAction?: () => void
+}
+
+interface Snapshot { pts: Pt[]; closed: boolean }
+
+export interface VastuStore {
+  bg: BgState
+  metersPerPx: number | null
+  scaleSource: ScaleSource
+  unit: Unit
+  pts: Pt[]
+  closed: boolean
+  centerOverride: Pt | null
+  northDeg: number
+  compass: CompassState
+  tool: Tool
+  view: ViewState
+  calA: Pt | null
+  calB: Pt | null
+  northA: Pt | null
+  sheetOpen: boolean
+  calDialogOpen: boolean
+  angleSnap: boolean
+  showEdgeLabels: boolean
+  mapOpen: boolean
+  dwgNotice: boolean
+  busy: string | null
+  toasts: Toast[]
+  undoStack: Snapshot[]
+  redoStack: Snapshot[]
+
+  setBg: (bg: Partial<BgState>) => void
+  replaceBg: (bg: BgState, metersPerPx: number | null, source: ScaleSource) => void
+  setTool: (t: Tool) => void
+  setView: (v: ViewState) => void
+  setUnit: (u: Unit) => void
+  setMetersPerPx: (m: number | null, source: ScaleSource) => void
+  addPoint: (p: Pt) => void
+  movePoint: (i: number, p: Pt) => void
+  insertPoint: (i: number, p: Pt) => void
+  deletePoint: (i: number) => void
+  popPoint: () => void
+  closePolygon: () => void
+  reopenPolygon: () => void
+  clearOutline: () => void
+  setCenterOverride: (p: Pt | null) => void
+  setNorth: (deg: number) => void
+  setCompass: (c: Partial<CompassState>) => void
+  setCal: (a: Pt | null, b: Pt | null) => void
+  setNorthA: (p: Pt | null) => void
+  setSheetOpen: (open: boolean) => void
+  setCalDialogOpen: (open: boolean) => void
+  setAngleSnap: (on: boolean) => void
+  setShowEdgeLabels: (on: boolean) => void
+  setMapOpen: (open: boolean) => void
+  setDwgNotice: (open: boolean) => void
+  setBusy: (msg: string | null) => void
+  toast: (msg: string, kind?: Toast['kind'], actionLabel?: string, onAction?: () => void) => void
+  dismissToast: (id: number) => void
+  undo: () => void
+  redo: () => void
+  loadProject: (p: ProjectFile) => void
+}
+
+export const DEFAULT_COMPASS: CompassState = {
+  id: 'none',
+  scalePct: 100,
+  opacity: 0.95,
+  fillPct: 26,
+  clip: true,
+  labels: true,
+  degreeRing: true,
+  brahmasthan: true,
+  devtas: true,
+  customRotDeg: 0,
+}
+
+const DEFAULT_BG: BgState = { kind: 'none', w: 0, h: 0, opacity: 1, grayscale: false, invert: false }
+
+let toastSeq = 1
+
+export const useStore = create<VastuStore>()((set, get) => {
+  const push = () => {
+    const { pts, closed, undoStack } = get()
+    const stack = [...undoStack, { pts, closed }]
+    if (stack.length > 100) stack.shift()
+    set({ undoStack: stack, redoStack: [] })
+  }
+
+  return {
+    bg: DEFAULT_BG,
+    metersPerPx: null,
+    scaleSource: null,
+    unit: 'ft',
+    pts: [],
+    closed: false,
+    centerOverride: null,
+    northDeg: 0,
+    compass: { ...DEFAULT_COMPASS },
+    tool: 'select',
+    view: { tx: 0, ty: 0, k: 1 },
+    calA: null,
+    calB: null,
+    northA: null,
+    sheetOpen: typeof window === 'undefined' || window.innerWidth > 760,
+    calDialogOpen: false,
+    angleSnap: true,
+    showEdgeLabels: true,
+    mapOpen: false,
+    dwgNotice: false,
+    busy: null,
+    toasts: [],
+    undoStack: [],
+    redoStack: [],
+
+    setBg: (bg) => set((s) => ({ bg: { ...s.bg, ...bg } })),
+    // a new background defines a new pixel space — the old scale and outline never apply to it
+    replaceBg: (bg, metersPerPx, source) => {
+      push()
+      set(() => ({
+        bg,
+        metersPerPx,
+        scaleSource: metersPerPx != null ? source : null,
+        pts: [],
+        closed: false,
+        centerOverride: null,
+        calA: null,
+        calB: null,
+      }))
+    },
+    // entering a pick-two-points tool always starts a fresh pair
+    setTool: (tool) =>
+      set({
+        tool,
+        ...(tool !== 'calibrate' ? { calA: null, calB: null } : {}),
+        northA: null,
+      }),
+    setView: (view) => set({ view }),
+    setUnit: (unit) => set({ unit }),
+    setMetersPerPx: (metersPerPx, scaleSource) => set({ metersPerPx, scaleSource }),
+
+    addPoint: (p) => { push(); set((s) => ({ pts: [...s.pts, p] })) },
+    movePoint: (i, p) =>
+      set((s) => ({ pts: s.pts.map((q, j) => (j === i ? p : q)) })),
+    insertPoint: (i, p) => { push(); set((s) => ({ pts: [...s.pts.slice(0, i), p, ...s.pts.slice(i)] })) },
+    deletePoint: (i) => {
+      push()
+      set((s) => {
+        const pts = s.pts.filter((_, j) => j !== i)
+        return { pts, closed: pts.length >= 3 ? s.closed : false }
+      })
+    },
+    popPoint: () => {
+      const { pts, closed } = get()
+      if (closed || pts.length === 0) return
+      push()
+      set((s) => ({ pts: s.pts.slice(0, -1) }))
+    },
+    closePolygon: () => {
+      const s = get()
+      if (s.pts.length < 3 || s.closed) return
+      push()
+      set({
+        closed: true,
+        tool: 'select',
+        // closing re-asserts the automatic compass ratio for the new boundary
+        compass: {
+          ...s.compass,
+          id: s.compass.id === 'none' ? 'zones16' : s.compass.id,
+          scalePct: 100,
+        },
+      })
+      get().toast('Outline closed — centre located', 'ok')
+    },
+    reopenPolygon: () => { push(); set({ closed: false }) },
+    clearOutline: () => { push(); set({ pts: [], closed: false, centerOverride: null }) },
+    setCenterOverride: (centerOverride) => set({ centerOverride }),
+    setNorth: (northDeg) => set({ northDeg: ((northDeg % 360) + 360) % 360 }),
+    setCompass: (c) => set((s) => ({ compass: { ...s.compass, ...c } })),
+    setCal: (calA, calB) => set({ calA, calB }),
+    setNorthA: (northA) => set({ northA }),
+    setSheetOpen: (sheetOpen) => set({ sheetOpen }),
+    setCalDialogOpen: (calDialogOpen) => set({ calDialogOpen }),
+    setAngleSnap: (angleSnap) => set({ angleSnap }),
+    setShowEdgeLabels: (showEdgeLabels) => set({ showEdgeLabels }),
+    setMapOpen: (mapOpen) => set({ mapOpen }),
+    setDwgNotice: (dwgNotice) => set({ dwgNotice }),
+    setBusy: (busy) => set({ busy }),
+
+    toast: (msg, kind = 'info', actionLabel, onAction) => {
+      const id = toastSeq++
+      set((s) => ({ toasts: [...s.toasts.slice(-3), { id, msg, kind, actionLabel, onAction }] }))
+      window.setTimeout(() => get().dismissToast(id), actionLabel ? 9000 : 4200)
+    },
+    dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+
+    undo: () => {
+      const { undoStack, pts, closed } = get()
+      if (undoStack.length === 0) return
+      const prev = undoStack[undoStack.length - 1]
+      set((s) => ({
+        pts: prev.pts,
+        closed: prev.closed,
+        undoStack: s.undoStack.slice(0, -1),
+        redoStack: [...s.redoStack, { pts, closed }],
+      }))
+    },
+    redo: () => {
+      const { redoStack, pts, closed } = get()
+      if (redoStack.length === 0) return
+      const next = redoStack[redoStack.length - 1]
+      set((s) => ({
+        pts: next.pts,
+        closed: next.closed,
+        redoStack: s.redoStack.slice(0, -1),
+        undoStack: [...s.undoStack, { pts, closed }],
+      }))
+    },
+
+    loadProject: (p) =>
+      set({
+        bg: p.bg,
+        metersPerPx: p.metersPerPx,
+        scaleSource: p.scaleSource,
+        unit: p.unit,
+        pts: p.pts,
+        closed: p.closed,
+        centerOverride: p.centerOverride,
+        northDeg: p.northDeg,
+        compass: { ...DEFAULT_COMPASS, ...p.compass },
+        undoStack: [],
+        redoStack: [],
+        calA: null,
+        calB: null,
+      }),
+  }
+})
+
+export function serializeProject(s: VastuStore): ProjectFile {
+  return {
+    app: 'vastu-studio',
+    version: 1,
+    bg: s.bg,
+    metersPerPx: s.metersPerPx,
+    scaleSource: s.scaleSource,
+    unit: s.unit,
+    pts: s.pts,
+    closed: s.closed,
+    centerOverride: s.centerOverride,
+    northDeg: s.northDeg,
+    compass: s.compass,
+  }
+}
