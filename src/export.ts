@@ -46,6 +46,7 @@ export async function exportPng(): Promise<void> {
 
     const scene = createElement(Scene, {
       bg: s.bg, dxf, pts: s.pts, bulges: s.bulges, closed: s.closed, center, R,
+      centerOverridden: !!s.centerOverride,
       northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
       unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels, idPrefix: 'exp',
     })

@@ -16,6 +16,7 @@ export interface SceneProps {
   bulges: number[]
   closed: boolean
   center: Pt | null
+  centerOverridden?: boolean
   R: number
   northDeg: number
   compass: CompassState
@@ -497,6 +498,12 @@ function CenterMarker(props: {
         stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={4.2 / k} fill={overridden ? '#F2A65A' : GOLD}
         stroke="#FFFDF4" strokeWidth={1.4 / k} />
+      {overridden && (
+        <text x={c.x} y={c.y + 16 / k} fontSize={9.5 / k} fontFamily={FONT} fontWeight={700}
+          fill="#F2A65A" textAnchor="middle" {...haloProps(2.6 / k)}>
+          centre pinned
+        </text>
+      )}
       {areaText && (
         <text x={c.x} y={c.y + 30 / k} fontSize={12.5 / k} fontFamily={FONT} fontWeight={700}
           fill="#F3E9CF" textAnchor="middle" {...haloProps(3.4 / k)}>
@@ -550,7 +557,7 @@ export function Scene(props: SceneProps) {
         showEdgeLabels={showEdgeLabels} center={center} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center} R={RS} k={k} brahmasthan={compass.brahmasthan && compass.id !== 'none'}
-          closed={closed} areaText={areaText} overridden={false} />
+          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} />
       )}
     </g>
   )

@@ -15,6 +15,9 @@ const pushHistory = () =>
     redoStack: [],
   }))
 
+/** One hint per session when geometry edits happen while the centre is pinned. */
+let warnedPinnedCenter = false
+
 function snapPoint(prev: Pt, p: Pt): Pt {
   const dx = p.x - prev.x, dy = p.y - prev.y
   const len = Math.hypot(dx, dy)
@@ -206,7 +209,13 @@ export function CanvasStage() {
       return
     }
     if (d.mode === 'vertex' && d.moved) {
-      if (!d.pushed) { pushHistory(); d.pushed = true }
+      if (!d.pushed) {
+        pushHistory(); d.pushed = true
+        if (s.centerOverride && !warnedPinnedCenter) {
+          warnedPinnedCenter = true
+          s.toast('Centre is pinned, so it won’t follow shape edits — reset it in the panel', 'warn')
+        }
+      }
       let p = world
       if (s.angleSnap && s.pts.length > 1) {
         const prev = s.pts[(d.idx - 1 + s.pts.length) % s.pts.length]
@@ -231,7 +240,13 @@ export function CanvasStage() {
       return
     }
     if (d.mode === 'bulge' && d.moved) {
-      if (!d.pushed) { pushHistory(); d.pushed = true }
+      if (!d.pushed) {
+        pushHistory(); d.pushed = true
+        if (s.centerOverride && !warnedPinnedCenter) {
+          warnedPinnedCenter = true
+          s.toast('Centre is pinned, so it won’t follow shape edits — reset it in the panel', 'warn')
+        }
+      }
       const n = s.pts.length
       const p1 = s.pts[d.idx], p2 = s.pts[(d.idx + 1) % n]
       if (p1 && p2) {
@@ -354,6 +369,7 @@ export function CanvasStage() {
       <g id="world" transform={`translate(${tx} ${ty}) scale(${k})`}>
         <Scene
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
+          centerOverridden={!!centerOverride}
           northDeg={northDeg} compass={compass} metersPerPx={metersPerPx} unit={unit}
           k={k} showEdgeLabels={showEdgeLabels} idPrefix="live"
         />
@@ -471,9 +487,10 @@ export function CanvasStage() {
           )
         })}
 
-        {/* center drag handle */}
-        {center && pts.length >= 3 && (
-          <circle data-role="center" cx={center.x} cy={center.y} r={(COARSE ? 20 : 15) / k}
+        {/* center drag handle — ONLY in the Pin-centre tool, so panning and
+            curve-handle drags near the middle can never pin it by accident */}
+        {tool === 'center' && center && pts.length >= 3 && (
+          <circle data-role="center" cx={center.x} cy={center.y} r={(COARSE ? 22 : 15) / k}
             fill="rgba(0,0,0,0)" style={{ cursor: 'move' }} />
         )}
       </g>
