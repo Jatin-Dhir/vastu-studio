@@ -88,6 +88,97 @@ export function wedgeClip(poly: Pt[], c: Pt, a0: number, a1: number): Pt[] {
   return clipHalfPlane(p1, c, { x: d1.y, y: -d1.x })
 }
 
+/* ------------------------------------------------------------------ */
+/* Curved edges — DXF-style bulge: b = tan(sweep/4).                    */
+/* Positive bulge bows toward the left normal of travel (y-down),      */
+/* which renders as SVG sweep-flag 1.                                   */
+/* ------------------------------------------------------------------ */
+
+export interface ArcSeg { c: Pt; R: number; a1: number; sweep: number }
+
+export function arcFromBulge(p1: Pt, p2: Pt, b: number): ArcSeg | null {
+  if (Math.abs(b) < 1e-4) return null
+  const L = dist(p1, p2)
+  if (L < 1e-9) return null
+  const theta = 4 * Math.atan(b)
+  const R = L / (2 * Math.sin(Math.abs(theta) / 2))
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+  const nx = (p2.y - p1.y) / L, ny = -(p2.x - p1.x) / L
+  const s = (L / 2) * b
+  const t = s / 2 - (L * L) / (8 * s)
+  const c = { x: mid.x + nx * t, y: mid.y + ny * t }
+  const a1 = Math.atan2(p1.y - c.y, p1.x - c.x)
+  return { c, R, a1, sweep: theta }
+}
+
+/** Bulge of the arc from p1 to p2 passing through m (0 if nearly straight). */
+export function bulgeFromMid(p1: Pt, p2: Pt, m: Pt): number {
+  const L = dist(p1, p2)
+  if (L < 1e-9) return 0
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+  const nx = (p2.y - p1.y) / L, ny = -(p2.x - p1.x) / L
+  const s = (m.x - mid.x) * nx + (m.y - mid.y) * ny
+  const b = (2 * s) / L
+  return Math.max(-3, Math.min(3, b))
+}
+
+/** Point at parameter t (0..1) along the edge p1→p2 with the given bulge. */
+export function edgePoint(p1: Pt, p2: Pt, b: number, t: number): Pt {
+  const arc = arcFromBulge(p1, p2, b)
+  if (!arc) return { x: p1.x + (p2.x - p1.x) * t, y: p1.y + (p2.y - p1.y) * t }
+  const a = arc.a1 + arc.sweep * t
+  return { x: arc.c.x + arc.R * Math.cos(a), y: arc.c.y + arc.R * Math.sin(a) }
+}
+
+export function edgeLength(p1: Pt, p2: Pt, b: number): number {
+  const arc = arcFromBulge(p1, p2, b)
+  return arc ? arc.R * Math.abs(arc.sweep) : dist(p1, p2)
+}
+
+function sampleEdgeInto(p1: Pt, p2: Pt, b: number, out: Pt[]) {
+  const arc = arcFromBulge(p1, p2, b)
+  if (!arc) { out.push(p2); return }
+  const K = Math.max(6, Math.ceil(Math.abs(arc.sweep) / (Math.PI / 24)))
+  for (let i = 1; i <= K; i++) {
+    const a = arc.a1 + (arc.sweep * i) / K
+    out.push({ x: arc.c.x + arc.R * Math.cos(a), y: arc.c.y + arc.R * Math.sin(a) })
+  }
+}
+
+/** Flatten a bulged outline into a plain polygon for area/centroid/clipping math. */
+export function sampledPolygon(pts: Pt[], bulges: number[], closed: boolean): Pt[] {
+  if (pts.length < 2) return pts
+  const out: Pt[] = [pts[0]]
+  const n = pts.length
+  const edges = closed ? n : n - 1
+  for (let i = 0; i < edges; i++) {
+    sampleEdgeInto(pts[i], pts[(i + 1) % n], bulges[i] ?? 0, out)
+  }
+  if (closed && out.length > 1) out.pop() // last sample = first point
+  return out
+}
+
+/** SVG path with true arc segments. */
+export function outlinePathD(pts: Pt[], bulges: number[], closed: boolean): string {
+  if (pts.length === 0) return ''
+  let d = `M${pts[0].x} ${pts[0].y}`
+  const n = pts.length
+  const edges = closed ? n : n - 1
+  for (let i = 0; i < edges; i++) {
+    const p2 = pts[(i + 1) % n]
+    const b = bulges[i] ?? 0
+    const arc = arcFromBulge(pts[i], p2, b)
+    if (!arc) d += `L${p2.x} ${p2.y}`
+    else {
+      const large = Math.abs(arc.sweep) > Math.PI ? 1 : 0
+      const sweepFlag = arc.sweep > 0 ? 1 : 0
+      d += `A${arc.R} ${arc.R} 0 ${large} ${sweepFlag} ${p2.x} ${p2.y}`
+    }
+  }
+  if (closed) d += 'Z'
+  return d
+}
+
 export function distToSegment(p: Pt, a: Pt, b: Pt): number {
   const dx = b.x - a.x, dy = b.y - a.y
   const l2 = dx * dx + dy * dy

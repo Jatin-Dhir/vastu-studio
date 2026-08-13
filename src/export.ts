@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import interWoff2 from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline'
 import { Scene } from './canvas/Scene'
 import { importDxf } from './importers/dxf'
-import { centroid, circumradius } from './geometry'
+import { centroid, circumradius, sampledPolygon } from './geometry'
 import { useStore } from './store'
 import { downloadBlob } from './importers/project'
 import type { Pt } from './types'
@@ -16,15 +16,16 @@ export async function exportPng(): Promise<void> {
   }
   s.setBusy('Rendering export…')
   try {
-    const center: Pt | null = s.centerOverride ?? (s.pts.length >= 3 ? centroid(s.pts) : null)
-    const R = center && s.pts.length >= 3 ? circumradius(center, s.pts) * 1.03 : 0
+    const sampled = sampledPolygon(s.pts, s.bulges, s.closed)
+    const center: Pt | null = s.centerOverride ?? (s.pts.length >= 3 ? centroid(sampled) : null)
+    const R = center && s.pts.length >= 3 ? circumradius(center, sampled) * 1.03 : 0
     const RS = R * (s.compass.scalePct / 100)
 
     let minX = 0, minY = 0, maxX = Math.max(1, s.bg.w), maxY = Math.max(1, s.bg.h)
     if (s.bg.kind === 'none') {
       minX = Infinity; minY = Infinity; maxX = -Infinity; maxY = -Infinity
     }
-    for (const p of s.pts) {
+    for (const p of sampled) {
       minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
       maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
     }
@@ -44,7 +45,7 @@ export async function exportPng(): Promise<void> {
     const dxf = s.bg.kind === 'dxf' && s.bg.dxfText ? importDxf(s.bg.dxfText) : null
 
     const scene = createElement(Scene, {
-      bg: s.bg, dxf, pts: s.pts, closed: s.closed, center, R,
+      bg: s.bg, dxf, pts: s.pts, bulges: s.bulges, closed: s.closed, center, R,
       northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
       unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels, idPrefix: 'exp',
     })

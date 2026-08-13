@@ -9,7 +9,7 @@ export interface Toast {
   onAction?: () => void
 }
 
-interface Snapshot { pts: Pt[]; closed: boolean }
+interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[] }
 
 export interface VastuStore {
   bg: BgState
@@ -17,6 +17,7 @@ export interface VastuStore {
   scaleSource: ScaleSource
   unit: Unit
   pts: Pt[]
+  bulges: number[]
   closed: boolean
   centerOverride: Pt | null
   northDeg: number
@@ -48,6 +49,7 @@ export interface VastuStore {
   insertPoint: (i: number, p: Pt) => void
   deletePoint: (i: number) => void
   popPoint: () => void
+  setBulge: (i: number, b: number) => void
   closePolygon: () => void
   reopenPolygon: () => void
   clearOutline: () => void
@@ -89,8 +91,8 @@ let toastSeq = 1
 
 export const useStore = create<VastuStore>()((set, get) => {
   const push = () => {
-    const { pts, closed, undoStack } = get()
-    const stack = [...undoStack, { pts, closed }]
+    const { pts, closed, bulges, undoStack } = get()
+    const stack = [...undoStack, { pts, closed, bulges }]
     if (stack.length > 100) stack.shift()
     set({ undoStack: stack, redoStack: [] })
   }
@@ -101,6 +103,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     scaleSource: null,
     unit: 'ft',
     pts: [],
+    bulges: [],
     closed: false,
     centerOverride: null,
     northDeg: 0,
@@ -130,6 +133,7 @@ export const useStore = create<VastuStore>()((set, get) => {
         metersPerPx,
         scaleSource: metersPerPx != null ? source : null,
         pts: [],
+        bulges: [],
         closed: false,
         centerOverride: null,
         calA: null,
@@ -147,23 +151,35 @@ export const useStore = create<VastuStore>()((set, get) => {
     setUnit: (unit) => set({ unit }),
     setMetersPerPx: (metersPerPx, scaleSource) => set({ metersPerPx, scaleSource }),
 
-    addPoint: (p) => { push(); set((s) => ({ pts: [...s.pts, p] })) },
+    addPoint: (p) => { push(); set((s) => ({ pts: [...s.pts, p], bulges: [...s.bulges, 0] })) },
     movePoint: (i, p) =>
       set((s) => ({ pts: s.pts.map((q, j) => (j === i ? p : q)) })),
-    insertPoint: (i, p) => { push(); set((s) => ({ pts: [...s.pts.slice(0, i), p, ...s.pts.slice(i)] })) },
+    insertPoint: (i, p) => {
+      push()
+      set((s) => {
+        const bulges = [...s.bulges]
+        if (i > 0) bulges[i - 1] = 0 // the split edge becomes two straight halves
+        bulges.splice(i, 0, 0)
+        return { pts: [...s.pts.slice(0, i), p, ...s.pts.slice(i)], bulges }
+      })
+    },
     deletePoint: (i) => {
       push()
       set((s) => {
         const pts = s.pts.filter((_, j) => j !== i)
-        return { pts, closed: pts.length >= 3 ? s.closed : false }
+        const bulges = s.bulges.filter((_, j) => j !== i)
+        if (bulges.length > 0) bulges[(i - 1 + bulges.length) % bulges.length] = 0 // merged edge straightens
+        return { pts, bulges, closed: pts.length >= 3 ? s.closed : false }
       })
     },
     popPoint: () => {
       const { pts, closed } = get()
       if (closed || pts.length === 0) return
       push()
-      set((s) => ({ pts: s.pts.slice(0, -1) }))
+      set((s) => ({ pts: s.pts.slice(0, -1), bulges: s.bulges.slice(0, -1) }))
     },
+    setBulge: (i, b) =>
+      set((s) => ({ bulges: s.bulges.map((q, j) => (j === i ? b : q)) })),
     closePolygon: () => {
       const s = get()
       if (s.pts.length < 3 || s.closed) return
@@ -181,7 +197,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       get().toast('Outline closed — centre located', 'ok')
     },
     reopenPolygon: () => { push(); set({ closed: false }) },
-    clearOutline: () => { push(); set({ pts: [], closed: false, centerOverride: null }) },
+    clearOutline: () => { push(); set({ pts: [], bulges: [], closed: false, centerOverride: null }) },
     setCenterOverride: (centerOverride) => set({ centerOverride }),
     setNorth: (northDeg) => set({ northDeg: ((northDeg % 360) + 360) % 360 }),
     setCompass: (c) => set((s) => ({ compass: { ...s.compass, ...c } })),
@@ -206,22 +222,25 @@ export const useStore = create<VastuStore>()((set, get) => {
       const { undoStack, pts, closed } = get()
       if (undoStack.length === 0) return
       const prev = undoStack[undoStack.length - 1]
+      const bulgesNow = get().bulges
       set((s) => ({
         pts: prev.pts,
         closed: prev.closed,
+        bulges: prev.bulges,
         undoStack: s.undoStack.slice(0, -1),
-        redoStack: [...s.redoStack, { pts, closed }],
+        redoStack: [...s.redoStack, { pts, closed, bulges: bulgesNow }],
       }))
     },
     redo: () => {
-      const { redoStack, pts, closed } = get()
+      const { redoStack, pts, closed, bulges } = get()
       if (redoStack.length === 0) return
       const next = redoStack[redoStack.length - 1]
       set((s) => ({
         pts: next.pts,
         closed: next.closed,
+        bulges: next.bulges,
         redoStack: s.redoStack.slice(0, -1),
-        undoStack: [...s.undoStack, { pts, closed }],
+        undoStack: [...s.undoStack, { pts, closed, bulges }],
       }))
     },
 
@@ -232,6 +251,7 @@ export const useStore = create<VastuStore>()((set, get) => {
         scaleSource: p.scaleSource,
         unit: p.unit,
         pts: p.pts,
+        bulges: p.bulges && p.bulges.length === p.pts.length ? p.bulges : p.pts.map(() => 0),
         closed: p.closed,
         centerOverride: p.centerOverride,
         northDeg: p.northDeg,
@@ -253,6 +273,7 @@ export function serializeProject(s: VastuStore): ProjectFile {
     scaleSource: s.scaleSource,
     unit: s.unit,
     pts: s.pts,
+    bulges: s.bulges,
     closed: s.closed,
     centerOverride: s.centerOverride,
     northDeg: s.northDeg,

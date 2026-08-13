@@ -25,16 +25,21 @@ const OSM = {
 
 interface Hit { name: string; lat: number; lon: number }
 
-/** Query Nominatim and Photon in parallel and merge — better coverage for partial and local names. */
-async function geocode(text: string): Promise<Hit[]> {
+/** Query Nominatim and Photon in parallel and merge — better coverage for partial and local names.
+ *  `near` biases results toward the current map view, which is what "places around me" needs. */
+async function geocode(text: string, near?: { lat: number; lon: number }): Promise<Hit[]> {
   const q = encodeURIComponent(text.trim())
-  const nominatim = fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8&q=${q}`)
+  const box = near
+    ? `&viewbox=${near.lon - 0.4},${near.lat + 0.4},${near.lon + 0.4},${near.lat - 0.4}`
+    : ''
+  const prox = near ? `&lat=${near.lat}&lon=${near.lon}` : ''
+  const nominatim = fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8${box}&q=${q}`)
     .then(async (r) => (r.ok ? await r.json() : []))
     .then((j: any[]) => (Array.isArray(j) ? j : []).map((h) => ({
       name: String(h.display_name ?? ''), lat: parseFloat(h.lat), lon: parseFloat(h.lon),
     })))
     .catch(() => [] as Hit[])
-  const photon = fetch(`https://photon.komoot.io/api/?limit=8&q=${q}`)
+  const photon = fetch(`https://photon.komoot.io/api/?limit=8${prox}&q=${q}`)
     .then(async (r) => (r.ok ? await r.json() : { features: [] }))
     .then((j: any) => (j.features ?? []).map((f: any) => ({
       name: [f.properties?.name, f.properties?.district, f.properties?.city, f.properties?.state, f.properties?.country]
@@ -75,7 +80,7 @@ export function MapModal() {
     const map = L.map(mapDiv.current, {
       center: [20.59, 78.96],
       zoom: 5,
-      maxZoom: 19,
+      maxZoom: 21,
       attributionControl: false,
     })
     mapRef.current = map
@@ -90,10 +95,10 @@ export function MapModal() {
     overlayRefs.current.forEach((l) => l.remove())
     overlayRefs.current = []
     const cfg = style === 'sat' ? SAT : OSM
-    layerRef.current = L.tileLayer(cfg.url, { maxZoom: 19, crossOrigin: 'anonymous' }).addTo(map)
+    const opts = { maxZoom: 21, maxNativeZoom: 19, crossOrigin: 'anonymous' as const }
+    layerRef.current = L.tileLayer(cfg.url, opts).addTo(map)
     if (style === 'sat') {
-      overlayRefs.current = SAT_OVERLAYS.map((url) =>
-        L.tileLayer(url, { maxZoom: 19, crossOrigin: 'anonymous' }).addTo(map))
+      overlayRefs.current = SAT_OVERLAYS.map((url) => L.tileLayer(url, opts).addTo(map))
     }
   }, [style])
 
@@ -101,7 +106,9 @@ export function MapModal() {
     const seq = ++searchSeq.current
     setSearching(true)
     try {
-      const found = await geocode(text)
+      const c = mapRef.current?.getCenter()
+      const zoomedIn = (mapRef.current?.getZoom() ?? 0) >= 8
+      const found = await geocode(text, c && zoomedIn ? { lat: c.lat, lon: c.lng } : undefined)
       if (seq !== searchSeq.current) return // a newer search superseded this one
       setHits(found)
       setNoResults(found.length === 0)

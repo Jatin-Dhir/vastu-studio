@@ -1,7 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, LocateFixed, Navigation, RotateCcw } from 'lucide-react'
 import { useStore } from '../store'
-import { centroid, circumradius, perimeter, polygonArea, polar, wedgeClip } from '../geometry'
+import { centroid, perimeter, polygonArea, sampledPolygon, wedgeClip } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
 import type { CompassId, Pt } from '../types'
@@ -222,6 +222,7 @@ export function RightPanel() {
   const scaleSource = useStore((s) => s.scaleSource)
   const unit = useStore((s) => s.unit)
   const pts = useStore((s) => s.pts)
+  const bulges = useStore((s) => s.bulges)
   const closed = useStore((s) => s.closed)
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
@@ -235,18 +236,19 @@ export function RightPanel() {
   const customFileRef = useRef<HTMLInputElement>(null)
   const [pageBusy, setPageBusy] = useState(false)
 
+  const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
   const center = useMemo<Pt | null>(
-    () => centerOverride ?? (pts.length >= 3 ? centroid(pts) : null),
-    [pts, centerOverride],
+    () => centerOverride ?? (pts.length >= 3 ? centroid(sampled) : null),
+    [pts.length, sampled, centerOverride],
   )
   const areaM2 = useMemo(() => {
     if (!closed || pts.length < 3 || !metersPerPx) return null
-    return polygonArea(pts) * metersPerPx * metersPerPx
-  }, [pts, closed, metersPerPx])
+    return polygonArea(sampled) * metersPerPx * metersPerPx
+  }, [sampled, pts.length, closed, metersPerPx])
   const perimM = useMemo(() => {
     if (pts.length < 2 || !metersPerPx) return null
-    return perimeter(pts, closed) * metersPerPx
-  }, [pts, closed, metersPerPx])
+    return perimeter(sampled, closed) * metersPerPx
+  }, [sampled, pts.length, closed, metersPerPx])
 
   const setPdfPage = async (delta: number) => {
     if (!bg.pdfPages || !hasPdfOpen() || pageBusy) return
@@ -283,20 +285,24 @@ export function RightPanel() {
   const sheetOpen = useStore((s) => s.sheetOpen)
   const setSheetOpen = useStore((s) => s.setSheetOpen)
   const asideRef = useRef<HTMLElement>(null)
-  const swipe = useRef<{ startY: number; startOpen: boolean; moved: boolean } | null>(null)
+  const swipe = useRef<{ startY: number; startOpen: boolean; moved: boolean; lastY: number; lastT: number; vel: number } | null>(null)
 
   /* swipe the sheet handle up/down like a native bottom sheet (mobile only) */
   const collapsedOffset = () => Math.max(0, (asideRef.current?.getBoundingClientRect().height ?? 0) - 54)
   const onHandleDown = (e: React.PointerEvent) => {
     if (window.innerWidth > 760) return
     try { (e.target as Element).setPointerCapture?.(e.pointerId) } catch { /* synthetic */ }
-    swipe.current = { startY: e.clientY, startOpen: sheetOpen, moved: false }
+    swipe.current = { startY: e.clientY, startOpen: sheetOpen, moved: false, lastY: e.clientY, lastT: performance.now(), vel: 0 }
     if (asideRef.current) asideRef.current.style.transition = 'none'
   }
   const onHandleMove = (e: React.PointerEvent) => {
     const sw = swipe.current
     const el = asideRef.current
     if (!sw || !el) return
+    const now = performance.now()
+    const dt = now - sw.lastT
+    if (dt > 0) sw.vel = 0.6 * sw.vel + 0.4 * ((e.clientY - sw.lastY) / dt)
+    sw.lastY = e.clientY; sw.lastT = now
     const dy = e.clientY - sw.startY
     if (Math.abs(dy) > 6) sw.moved = true
     const base = sw.startOpen ? 0 : collapsedOffset()
@@ -312,6 +318,8 @@ export function RightPanel() {
     el.style.transition = ''
     el.style.transform = ''
     if (!sw.moved) { setSheetOpen(!sheetOpen); return }
+    // a decisive flick wins over position
+    if (Math.abs(sw.vel) > 0.45) { setSheetOpen(sw.vel < 0); return }
     const base = sw.startOpen ? 0 : collapsedOffset()
     const off = Math.min(collapsedOffset(), Math.max(0, base + dy))
     setSheetOpen(off < collapsedOffset() * 0.5)
@@ -505,7 +513,7 @@ export function RightPanel() {
               <RotateCcw size={13} />
             </button>
           </header>
-          <ZoneChart pts={pts} center={center} northDeg={northDeg} />
+          <ZoneChart pts={sampled} center={center} northDeg={northDeg} />
         </section>
       )}
     </aside>

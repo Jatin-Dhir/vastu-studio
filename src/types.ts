@@ -45,6 +45,8 @@ export interface ProjectFile {
   scaleSource: ScaleSource
   unit: Unit
   pts: Pt[]
+  /** bulge[i] curves the edge pts[i]→pts[i+1]; tan(sweep/4), 0 = straight */
+  bulges?: number[]
   closed: boolean
   centerOverride: Pt | null
   northDeg: number

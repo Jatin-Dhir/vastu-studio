@@ -1,7 +1,7 @@
 import { Fragment, useMemo } from 'react'
 import type { BgState, CompassState, Pt, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
-import { dist, polar, signedArea, polygonArea, wedgeClip } from '../geometry'
+import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen } from '../format'
 import { DIRS8, GATES32, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName } from '../vastu'
 
@@ -13,6 +13,7 @@ export interface SceneProps {
   bg: BgState
   dxf: DxfImport | null
   pts: Pt[]
+  bulges: number[]
   closed: boolean
   center: Pt | null
   R: number
@@ -68,13 +69,6 @@ function ringSectorPath(c: Pt, r0: number, r1: number, a0: number, a1: number): 
   return `M${q0.x} ${q0.y} A${r1} ${r1} 0 0 1 ${q1.x} ${q1.y} L${p1.x} ${p1.y} A${r0} ${r0} 0 0 0 ${p0.x} ${p0.y} Z`
 }
 
-function polyPathD(pts: Pt[], closed: boolean): string {
-  if (pts.length === 0) return ''
-  let d = `M${pts[0].x} ${pts[0].y}`
-  for (let i = 1; i < pts.length; i++) d += `L${pts[i].x} ${pts[i].y}`
-  if (closed) d += 'Z'
-  return d
-}
 
 /* ------------------------------------------------------------------ */
 /* Background                                                          */
@@ -121,15 +115,15 @@ function Background({ bg, dxf, k }: { bg: BgState; dxf: DxfImport | null; k: num
 /* ------------------------------------------------------------------ */
 
 function Outline(props: {
-  pts: Pt[]; closed: boolean; k: number; metersPerPx: number | null; unit: Unit
+  pts: Pt[]; bulges: number[]; closed: boolean; k: number; metersPerPx: number | null; unit: Unit
   showEdgeLabels: boolean; center: Pt | null
 }) {
-  const { pts, closed, k, metersPerPx, unit, showEdgeLabels, center } = props
+  const { pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center } = props
   if (pts.length === 0) return null
-  const d = polyPathD(pts, closed)
+  const d = outlinePathD(pts, bulges, closed)
   const n = pts.length
-  const edges: [Pt, Pt][] = []
-  for (let i = 0; i < (closed ? n : n - 1); i++) edges.push([pts[i], pts[(i + 1) % n]])
+  const edges: [Pt, Pt, number][] = []
+  for (let i = 0; i < (closed ? n : n - 1); i++) edges.push([pts[i], pts[(i + 1) % n], bulges[i] ?? 0])
 
   return (
     <g>
@@ -140,13 +134,14 @@ function Outline(props: {
         strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke="#FFF3D6" strokeWidth={0.7 / k}
         strokeLinejoin="round" strokeLinecap="round" opacity={0.55} />
-      {showEdgeLabels && metersPerPx && edges.map(([a, b], i) => {
-        const L = dist(a, b)
+      {showEdgeLabels && metersPerPx && edges.map(([a, b, bu], i) => {
+        const L = edgeLength(a, b, bu)
         if (L * k < 46) return null
-        const mid = { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 }
+        const chordL = Math.hypot(b.x - a.x, b.y - a.y) || 1
+        const mid = edgePoint(a, b, bu, 0.5) // tangent at the arc midpoint is parallel to the chord
         let rot = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
         if (rot > 90 || rot < -90) rot += 180
-        let nx = (b.y - a.y) / L, ny = -(b.x - a.x) / L
+        let nx = (b.y - a.y) / chordL, ny = -(b.x - a.x) / chordL
         if (center) {
           const toC = { x: center.x - mid.x, y: center.y - mid.y }
           if (nx * toC.x + ny * toC.y > 0) { nx = -nx; ny = -ny }
@@ -517,18 +512,20 @@ function CenterMarker(props: {
 /* ------------------------------------------------------------------ */
 
 export function Scene(props: SceneProps) {
-  const { bg, dxf, pts, closed, center, R, northDeg, compass, metersPerPx, unit, k, showEdgeLabels, idPrefix } = props
+  const { bg, dxf, pts, bulges, closed, center, R, northDeg, compass, metersPerPx, unit, k, showEdgeLabels, idPrefix } = props
 
   const RS = R * (compass.scalePct / 100)
   const showCompass = compass.id !== 'none' && closed && center && RS > 0
 
+  const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
+
   const areaText = useMemo(() => {
     if (!closed || pts.length < 3 || !metersPerPx) return null
-    return formatArea(polygonArea(pts) * metersPerPx * metersPerPx, unit)
-  }, [pts, closed, metersPerPx, unit])
+    return formatArea(polygonArea(sampled) * metersPerPx * metersPerPx, unit)
+  }, [sampled, pts.length, closed, metersPerPx, unit])
 
   const chakraProps: ChakraProps | null = showCompass && center
-    ? { c: center, R: RS, north: northDeg, compass, k, pts, closed, idPrefix }
+    ? { c: center, R: RS, north: northDeg, compass, k, pts: sampled, closed, idPrefix }
     : null
 
   return (
@@ -536,7 +533,7 @@ export function Scene(props: SceneProps) {
       <defs>
         {pts.length >= 3 && (
           <clipPath id={`${idPrefix}-plotclip`}>
-            <path d={polyPathD(pts, true)} />
+            <path d={outlinePathD(pts, bulges, true)} />
           </clipPath>
         )}
       </defs>
@@ -549,7 +546,7 @@ export function Scene(props: SceneProps) {
         {chakraProps && compass.id === 'grid9' && <Grid9 {...chakraProps} />}
         {chakraProps && compass.id === 'dial' && <Dial {...chakraProps} />}
       </g>
-      <Outline pts={pts} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
+      <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center} R={RS} k={k} brahmasthan={compass.brahmasthan && compass.id !== 'none'}

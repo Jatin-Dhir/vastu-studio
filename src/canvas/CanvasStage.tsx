@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
-import { angleOf, boundsOf, centroid, circumradius, dist, distToSegment, polar } from '../geometry'
+import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, polar, sampledPolygon } from '../geometry'
 import { formatLen } from '../format'
 import type { Pt } from '../types'
 
@@ -11,7 +11,7 @@ const CLOSE_PX = COARSE ? 20 : 13
 const HIT_PX = COARSE ? 18 : 12
 const pushHistory = () =>
   useStore.setState((s) => ({
-    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed }].slice(-100),
+    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges }].slice(-100),
     redoStack: [],
   }))
 
@@ -28,21 +28,23 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge'
   idx: number
   startX: number
   startY: number
   moved: boolean
   pushed: boolean
+  grabbed: Pt | null
 }
 
 /** What the magnifier loupe is following, if anything. */
-interface LoupeState { mode: 'vertex' | 'center' | 'calA' | 'calB'; idx: number }
+interface LoupeState { mode: 'vertex' | 'center' | 'calA' | 'calB' | 'bulge'; idx: number }
 
 export function CanvasStage() {
   const svgRef = useRef<SVGSVGElement>(null)
   const bg = useStore((s) => s.bg)
   const pts = useStore((s) => s.pts)
+  const bulges = useStore((s) => s.bulges)
   const closed = useStore((s) => s.closed)
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
@@ -58,7 +60,7 @@ export function CanvasStage() {
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, moved: false, pushed: false })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastPinch = useRef<{ d: number; mx: number; my: number } | null>(null)
 
@@ -67,13 +69,15 @@ export function CanvasStage() {
     try { return importDxf(bg.dxfText) } catch { return null }
   }, [bg.kind, bg.dxfText])
 
+  const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
+
   const center = useMemo<Pt | null>(() => {
     if (centerOverride) return centerOverride
-    if (pts.length >= 3) return centroid(pts)
+    if (pts.length >= 3) return centroid(sampled)
     return null
-  }, [pts, centerOverride])
+  }, [pts.length, sampled, centerOverride])
 
-  const R = useMemo(() => (center && pts.length >= 3 ? circumradius(center, pts) * 1.03 : 0), [center, pts])
+  const R = useMemo(() => (center && pts.length >= 3 ? circumradius(center, sampled) * 1.03 : 0), [center, pts.length, sampled])
 
   const toWorld = (clientX: number, clientY: number): Pt => {
     const rect = svgRef.current!.getBoundingClientRect()
@@ -146,16 +150,20 @@ export function CanvasStage() {
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-role]')
+    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-role]')
     const vidx = target?.getAttribute('data-vidx')
+    const bidx = target?.getAttribute('data-bidx')
     const role = target?.getAttribute('data-role')
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY; d.moved = false; d.pushed = false
+    d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx) }
-    else if (role === 'center' || role === 'calA' || role === 'calB') { d.mode = role }
+    else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx) }
+    else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
     else { d.mode = 'maybe-pan' }
-    if (e.pointerType !== 'mouse' && (d.mode === 'vertex' || d.mode === 'center' || d.mode === 'calA' || d.mode === 'calB')) {
+    if (e.pointerType !== 'mouse' &&
+      (d.mode === 'vertex' || d.mode === 'center' || d.mode === 'calA' || d.mode === 'calB' || d.mode === 'bulge')) {
       setLoupe({ mode: d.mode, idx: d.idx })
     }
   }
@@ -214,6 +222,25 @@ export function CanvasStage() {
     if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
       if (d.mode === 'calA') s.setCal(world, s.calB)
       else s.setCal(s.calA, world)
+      return
+    }
+    if (d.mode === 'calLine' && d.moved && d.grabbed && s.calA && s.calB) {
+      const dx = world.x - d.grabbed.x, dy = world.y - d.grabbed.y
+      d.grabbed = world
+      s.setCal({ x: s.calA.x + dx, y: s.calA.y + dy }, { x: s.calB.x + dx, y: s.calB.y + dy })
+      return
+    }
+    if (d.mode === 'bulge' && d.moved) {
+      if (!d.pushed) { pushHistory(); d.pushed = true }
+      const n = s.pts.length
+      const p1 = s.pts[d.idx], p2 = s.pts[(d.idx + 1) % n]
+      if (p1 && p2) {
+        let b = bulgeFromMid(p1, p2, world)
+        const chord = dist(p1, p2)
+        // snap back to straight when the sagitta is a few screen px
+        if (Math.abs((b * chord) / 2) < 5 / s.view.k) b = 0
+        s.setBulge(d.idx, b)
+      }
     }
   }
 
@@ -227,7 +254,6 @@ export function CanvasStage() {
     d.mode = 'idle'
     if (e.button === 2 || moved) return
     if (pointers.current.size > 0) return
-    if (mode === 'calA' || mode === 'calB') return
 
     const s = useStore.getState()
     const world = toWorld(e.clientX, e.clientY)
@@ -237,7 +263,9 @@ export function CanvasStage() {
       if (s.tool === 'trace' && !s.closed && d.idx === 0 && s.pts.length >= 3) s.closePolygon()
       return
     }
-    if (mode === 'center') return
+    // a tap only ever places/dispatches from a plain press on empty canvas —
+    // never from handle presses or the tail end of a pinch (mode 'idle')
+    if (mode !== 'maybe-pan') return
 
     switch (s.tool) {
       case 'trace': {
@@ -325,7 +353,7 @@ export function CanvasStage() {
     >
       <g id="world" transform={`translate(${tx} ${ty}) scale(${k})`}>
         <Scene
-          bg={bg} dxf={dxf} pts={pts} closed={closed} center={center} R={R}
+          bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
           northDeg={northDeg} compass={compass} metersPerPx={metersPerPx} unit={unit}
           k={k} showEdgeLabels={showEdgeLabels} idPrefix="live"
         />
@@ -358,7 +386,12 @@ export function CanvasStage() {
               const pins: [Pt, 'calA' | 'calB'][] = calB ? [[calA, 'calA'], [calB, 'calB']] : [[calA, 'calA']]
               return (
                 <g>
-                  <line x1={calA.x} y1={calA.y} x2={b.x} y2={b.y} stroke="#6FC7CE"
+                  {calB && (
+                    <line data-role="calLine" x1={calA.x} y1={calA.y} x2={b.x} y2={b.y}
+                      stroke="rgba(0,0,0,0)" strokeWidth={(COARSE ? 30 : 14) / k}
+                      style={{ cursor: 'move' }} />
+                  )}
+                  <line x1={calA.x} y1={calA.y} x2={b.x} y2={b.y} stroke="#6FC7CE" pointerEvents="none"
                     strokeWidth={2.2 / k} strokeDasharray={calB ? undefined : `${8 / k} ${6 / k}`} />
                   {pins.map(([p, role]) => (
                     <g key={role} data-role={role} style={{ cursor: 'grab' }}>
@@ -404,6 +437,22 @@ export function CanvasStage() {
           })()
         )}
 
+        {/* curve (bulge) handles — drag an edge midpoint to bow the wall */}
+        {tool === 'select' && pts.length >= 2 && (closed ? pts : pts.slice(0, -1)).map((p, i) => {
+          const p2 = pts[(i + 1) % pts.length]
+          const m = edgePoint(p, p2, bulges[i] ?? 0, 0.5)
+          const size = (COARSE ? 6.5 : 5) / k
+          return (
+            <g key={`b${i}`} data-bidx={i} style={{ cursor: 'grab' }}>
+              <circle cx={m.x} cy={m.y} r={(COARSE ? 17 : 10) / k} fill="rgba(0,0,0,0)" data-bidx={i} />
+              <rect x={m.x - size} y={m.y - size} width={size * 2} height={size * 2}
+                transform={`rotate(45 ${m.x} ${m.y})`}
+                fill={Math.abs(bulges[i] ?? 0) > 1e-4 ? GOLD : '#151820'}
+                stroke={GOLD} strokeWidth={1.5 / k} opacity={0.95} />
+            </g>
+          )
+        })}
+
         {/* vertex handles */}
         {showHandles && pts.map((p, i) => {
           const isFirst = i === 0
@@ -436,7 +485,11 @@ export function CanvasStage() {
         if (loupe.mode === 'vertex') wp = s.pts[loupe.idx] ?? null
         else if (loupe.mode === 'center') wp = s.centerOverride ?? center
         else if (loupe.mode === 'calA') wp = s.calA
-        else wp = s.calB
+        else if (loupe.mode === 'calB') wp = s.calB
+        else {
+          const p1 = s.pts[loupe.idx], p2 = s.pts[(loupe.idx + 1) % s.pts.length]
+          wp = p1 && p2 ? edgePoint(p1, p2, s.bulges[loupe.idx] ?? 0, 0.5) : null
+        }
         if (!wp) return null
         const sx = wp.x * k + tx
         const sy = wp.y * k + ty

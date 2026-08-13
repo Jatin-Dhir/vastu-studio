@@ -545,6 +545,7 @@ kbd {
   cursor: default;
 }
 @keyframes toastIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes toastInTop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
 .toast.ok svg { color: var(--ok); }
 .toast.warn svg { color: #E8A54B; }
 .toast.info svg { color: var(--teal); }
@@ -782,7 +783,10 @@ kbd {
     border-top: 1px solid rgba(217,180,91,0.28);
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -14px 44px rgba(0,0,0,0.55);
-    touch-action: none;
+    touch-action: pan-y; /* content must stay natively scrollable */
+    overscroll-behavior: contain;
+    will-change: transform;
+    z-index: 23; /* the sheet slides OVER the tool bar */
   }
   .panel .card {
     margin: 0 10px 11px;
@@ -827,7 +831,30 @@ kbd {
   .panel:not(.collapsed) ~ .tool-rail { display: none; }
 
   .status-chip { display: none; }
-  .toasts { bottom: 138px; }
+
+  /* notifications: pinned to the top, one full-width line each */
+  .toasts {
+    top: 58px;
+    bottom: auto;
+    left: 8px;
+    right: 8px;
+    transform: none;
+    align-items: stretch;
+  }
+  .toast {
+    width: 100%;
+    max-width: none;
+    animation: toastInTop 0.22s ease;
+  }
+  .toast > span {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: left;
+  }
+
   .cal-bar { bottom: 136px; max-width: calc(100vw - 16px); }
   .cal-bar .btn-ghost, .cal-bar .btn-primary { padding: 7px 10px; font-size: 12px; }
 
