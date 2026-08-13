@@ -11,7 +11,7 @@ import { CalibrateDialog, DwgDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
-import { formatScale } from './format'
+import { formatLen, formatScale } from './format'
 import type { ProjectFile } from './types'
 
 const EMPTY_PROJECT: ProjectFile = {
@@ -20,6 +20,28 @@ const EMPTY_PROJECT: ProjectFile = {
   metersPerPx: null, scaleSource: null, unit: 'ft',
   pts: [], closed: false, centerOverride: null, northDeg: 0,
   compass: { ...DEFAULT_COMPASS },
+}
+
+function CalibrateBar() {
+  const tool = useStore((s) => s.tool)
+  const calA = useStore((s) => s.calA)
+  const calB = useStore((s) => s.calB)
+  const metersPerPx = useStore((s) => s.metersPerPx)
+  const unit = useStore((s) => s.unit)
+  const dialogOpen = useStore((s) => s.calDialogOpen)
+  if (tool !== 'calibrate' || !calA || !calB || dialogOpen) return null
+  const px = Math.hypot(calB.x - calA.x, calB.y - calA.y)
+  return (
+    <div className="cal-bar">
+      <span className="cal-bar-len">
+        {px.toFixed(0)} px{metersPerPx ? ` · ${formatLen(px * metersPerPx, unit)}` : ''}
+      </span>
+      <button className="btn-ghost" onClick={() => useStore.getState().setCal(null, null)}>Redraw</button>
+      <button className="btn-primary" onClick={() => useStore.getState().setCalDialogOpen(true)}>
+        Enter length
+      </button>
+    </div>
+  )
 }
 
 function StatusChip() {
@@ -73,7 +95,7 @@ export default function App() {
           if (s.tool === 'trace' && !s.closed && s.pts.length > 0) { e.preventDefault(); s.popPoint() }
           break
         case 'Escape':
-          if (s.calDialogOpen) { s.setCalDialogOpen(false); s.setCal(null, null) }
+          if (s.calDialogOpen) s.setCalDialogOpen(false)
           else if (s.tool === 'calibrate' && s.calA) s.setCal(null, null)
           else if (s.tool === 'trace' && !s.closed && s.pts.length > 0) s.popPoint()
           break
@@ -153,6 +175,7 @@ export default function App() {
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
+        <CalibrateBar />
         <StatusChip />
       </div>
       <Toasts />

@@ -51,9 +51,9 @@ export function CalibrateDialog() {
   if (!open || !calA || !calB) return null
   const px = dist(calA, calB)
 
+  // closing the dialog keeps the pins — the user may want to fine-tune and reopen
   const close = () => {
     useStore.getState().setCalDialogOpen(false)
-    useStore.getState().setCal(null, null)
   }
 
   const apply = () => {

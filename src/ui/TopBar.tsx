@@ -53,6 +53,15 @@ export function TopBar() {
         ))}
       </nav>
 
+      {/* mobile: one labelled chip for the current step instead of four dots */}
+      <button
+        className="step-now"
+        onClick={() => onStep(active === -1 ? 3 : active)}
+      >
+        <span className="step-num">{active === -1 ? <Check size={11} strokeWidth={3.5} /> : active + 1}</span>
+        {active === -1 ? 'Ready' : `Next: ${STEPS[active]}`}
+      </button>
+
       <div className="topbar-right">
         <div className="seg">
           <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>

@@ -12,6 +12,11 @@ const SAT = {
     `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,
   credit: 'Imagery © Esri — Maxar, Earthstar Geographics',
 }
+/** Label + road overlays shown on top of satellite imagery in the interactive map (not baked into captures). */
+const SAT_OVERLAYS = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Transportation/MapServer/tile/{z}/{y}/{x}',
+  'https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}',
+]
 const OSM = {
   url: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
   tile: (z: number, x: number, y: number) => `https://tile.openstreetmap.org/${z}/${x}/${y}.png`,
@@ -20,30 +25,33 @@ const OSM = {
 
 interface Hit { name: string; lat: number; lon: number }
 
+/** Query Nominatim and Photon in parallel and merge — better coverage for partial and local names. */
 async function geocode(text: string): Promise<Hit[]> {
   const q = encodeURIComponent(text.trim())
-  try {
-    const r = await fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=6&q=${q}`)
-    if (r.ok) {
-      const j = await r.json()
-      const hits = (Array.isArray(j) ? j : []).map((h: any) => ({
-        name: String(h.display_name ?? ''), lat: parseFloat(h.lat), lon: parseFloat(h.lon),
-      })).filter((h: Hit) => h.name && isFinite(h.lat))
-      if (hits.length) return hits
-    }
-  } catch { /* fall through to Photon */ }
-  try {
-    const r = await fetch(`https://photon.komoot.io/api/?limit=6&q=${q}`)
-    if (r.ok) {
-      const j = await r.json()
-      return (j.features ?? []).map((f: any) => ({
-        name: [f.properties?.name, f.properties?.city, f.properties?.state, f.properties?.country]
-          .filter(Boolean).join(', '),
-        lat: f.geometry?.coordinates?.[1], lon: f.geometry?.coordinates?.[0],
-      })).filter((h: Hit) => h.name && isFinite(h.lat))
-    }
-  } catch { /* no results */ }
-  return []
+  const nominatim = fetch(`https://nominatim.openstreetmap.org/search?format=json&limit=8&q=${q}`)
+    .then(async (r) => (r.ok ? await r.json() : []))
+    .then((j: any[]) => (Array.isArray(j) ? j : []).map((h) => ({
+      name: String(h.display_name ?? ''), lat: parseFloat(h.lat), lon: parseFloat(h.lon),
+    })))
+    .catch(() => [] as Hit[])
+  const photon = fetch(`https://photon.komoot.io/api/?limit=8&q=${q}`)
+    .then(async (r) => (r.ok ? await r.json() : { features: [] }))
+    .then((j: any) => (j.features ?? []).map((f: any) => ({
+      name: [f.properties?.name, f.properties?.district, f.properties?.city, f.properties?.state, f.properties?.country]
+        .filter(Boolean).join(', '),
+      lat: f.geometry?.coordinates?.[1], lon: f.geometry?.coordinates?.[0],
+    })))
+    .catch(() => [] as Hit[])
+  const [a, b] = await Promise.all([nominatim, photon])
+  const merged: Hit[] = []
+  for (const h of [...a, ...b]) {
+    if (!h.name || !isFinite(h.lat) || !isFinite(h.lon)) continue
+    const dup = merged.some((m) =>
+      Math.abs(m.lat - h.lat) < 0.002 && Math.abs(m.lon - h.lon) < 0.002)
+    if (!dup) merged.push(h)
+    if (merged.length >= 9) break
+  }
+  return merged
 }
 
 export function MapModal() {
@@ -51,6 +59,8 @@ export function MapModal() {
   const mapDiv = useRef<HTMLDivElement>(null)
   const mapRef = useRef<L.Map | null>(null)
   const layerRef = useRef<L.TileLayer | null>(null)
+  const overlayRefs = useRef<L.TileLayer[]>([])
+  const markerRef = useRef<L.CircleMarker | null>(null)
   const [style, setStyle] = useState<'sat' | 'osm'>('sat')
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
@@ -77,8 +87,14 @@ export function MapModal() {
     const map = mapRef.current
     if (!map) return
     layerRef.current?.remove()
+    overlayRefs.current.forEach((l) => l.remove())
+    overlayRefs.current = []
     const cfg = style === 'sat' ? SAT : OSM
     layerRef.current = L.tileLayer(cfg.url, { maxZoom: 19, crossOrigin: 'anonymous' }).addTo(map)
+    if (style === 'sat') {
+      overlayRefs.current = SAT_OVERLAYS.map((url) =>
+        L.tileLayer(url, { maxZoom: 19, crossOrigin: 'anonymous' }).addTo(map))
+    }
   }, [style])
 
   const runSearch = async (text: string) => {
@@ -106,7 +122,13 @@ export function MapModal() {
     setHits([])
     setNoResults(false)
     setQ(h.name.split(',').slice(0, 2).join(','))
-    mapRef.current?.setView([h.lat, h.lon], 18)
+    const map = mapRef.current
+    if (!map) return
+    map.setView([h.lat, h.lon], 18)
+    markerRef.current?.remove()
+    markerRef.current = L.circleMarker([h.lat, h.lon], {
+      radius: 9, color: '#D9B45B', weight: 2.5, fillColor: '#D9B45B', fillOpacity: 0.25,
+    }).addTo(map)
   }
 
   const capture = async () => {

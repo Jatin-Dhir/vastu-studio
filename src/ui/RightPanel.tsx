@@ -282,10 +282,50 @@ export function RightPanel() {
 
   const sheetOpen = useStore((s) => s.sheetOpen)
   const setSheetOpen = useStore((s) => s.setSheetOpen)
+  const asideRef = useRef<HTMLElement>(null)
+  const swipe = useRef<{ startY: number; startOpen: boolean; moved: boolean } | null>(null)
+
+  /* swipe the sheet handle up/down like a native bottom sheet (mobile only) */
+  const collapsedOffset = () => Math.max(0, (asideRef.current?.getBoundingClientRect().height ?? 0) - 54)
+  const onHandleDown = (e: React.PointerEvent) => {
+    if (window.innerWidth > 760) return
+    try { (e.target as Element).setPointerCapture?.(e.pointerId) } catch { /* synthetic */ }
+    swipe.current = { startY: e.clientY, startOpen: sheetOpen, moved: false }
+    if (asideRef.current) asideRef.current.style.transition = 'none'
+  }
+  const onHandleMove = (e: React.PointerEvent) => {
+    const sw = swipe.current
+    const el = asideRef.current
+    if (!sw || !el) return
+    const dy = e.clientY - sw.startY
+    if (Math.abs(dy) > 6) sw.moved = true
+    const base = sw.startOpen ? 0 : collapsedOffset()
+    const off = Math.min(collapsedOffset(), Math.max(0, base + dy))
+    el.style.transform = `translateY(${off}px)`
+  }
+  const onHandleUp = (e: React.PointerEvent) => {
+    const sw = swipe.current
+    const el = asideRef.current
+    swipe.current = null
+    if (!sw || !el) { return }
+    const dy = e.clientY - sw.startY
+    el.style.transition = ''
+    el.style.transform = ''
+    if (!sw.moved) { setSheetOpen(!sheetOpen); return }
+    const base = sw.startOpen ? 0 : collapsedOffset()
+    const off = Math.min(collapsedOffset(), Math.max(0, base + dy))
+    setSheetOpen(off < collapsedOffset() * 0.5)
+  }
 
   return (
-    <aside className={`panel ${sheetOpen ? '' : 'collapsed'}`}>
-      <button className="sheet-handle" onClick={() => setSheetOpen(!sheetOpen)}>
+    <aside ref={asideRef} className={`panel ${sheetOpen ? '' : 'collapsed'}`}>
+      <button
+        className="sheet-handle"
+        onPointerDown={onHandleDown}
+        onPointerMove={onHandleMove}
+        onPointerUp={onHandleUp}
+        onPointerCancel={onHandleUp}
+      >
         <span className="grip" />
         <span>{sheetOpen ? 'Hide controls' : 'Controls & analysis'}</span>
         {sheetOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}

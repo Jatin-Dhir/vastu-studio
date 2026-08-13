@@ -28,13 +28,16 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB'
   idx: number
   startX: number
   startY: number
   moved: boolean
   pushed: boolean
 }
+
+/** What the magnifier loupe is following, if anything. */
+interface LoupeState { mode: 'vertex' | 'center' | 'calA' | 'calB'; idx: number }
 
 export function CanvasStage() {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -54,6 +57,7 @@ export function CanvasStage() {
   const showEdgeLabels = useStore((s) => s.showEdgeLabels)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
+  const [loupe, setLoupe] = useState<LoupeState | null>(null)
   const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, moved: false, pushed: false })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastPinch = useRef<{ d: number; mx: number; my: number } | null>(null)
@@ -148,9 +152,12 @@ export function CanvasStage() {
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY; d.moved = false; d.pushed = false
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx) }
-    else if (role === 'center') { d.mode = 'center' }
+    else if (role === 'center' || role === 'calA' || role === 'calB') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
     else { d.mode = 'maybe-pan' }
+    if (e.pointerType !== 'mouse' && (d.mode === 'vertex' || d.mode === 'center' || d.mode === 'calA' || d.mode === 'calB')) {
+      setLoupe({ mode: d.mode, idx: d.idx })
+    }
   }
 
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
@@ -202,18 +209,25 @@ export function CanvasStage() {
     }
     if (d.mode === 'center' && d.moved) {
       s.setCenterOverride(world)
+      return
+    }
+    if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
+      if (d.mode === 'calA') s.setCal(world, s.calB)
+      else s.setCal(s.calA, world)
     }
   }
 
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     pointers.current.delete(e.pointerId)
     if (pointers.current.size < 2) lastPinch.current = null
+    setLoupe(null)
     const d = drag.current
     const mode = d.mode
     const moved = d.moved
     d.mode = 'idle'
     if (e.button === 2 || moved) return
     if (pointers.current.size > 0) return
+    if (mode === 'calA' || mode === 'calB') return
 
     const s = useStore.getState()
     const world = toWorld(e.clientX, e.clientY)
@@ -236,7 +250,10 @@ export function CanvasStage() {
       }
       case 'calibrate': {
         if (!s.calA || (s.calA && s.calB)) s.setCal(world, null)
-        else { s.setCal(s.calA, world); s.setCalDialogOpen(true) }
+        else {
+          s.setCal(s.calA, world)
+          s.toast('Drag the pins to fine-tune, then tap “Enter length”', 'info')
+        }
         break
       }
       case 'center': {
@@ -306,7 +323,7 @@ export function CanvasStage() {
       onDoubleClick={onDblClick}
       onContextMenu={onContextMenu}
     >
-      <g transform={`translate(${tx} ${ty}) scale(${k})`}>
+      <g id="world" transform={`translate(${tx} ${ty}) scale(${k})`}>
         <Scene
           bg={bg} dxf={dxf} pts={pts} closed={closed} center={center} R={R}
           northDeg={northDeg} compass={compass} metersPerPx={metersPerPx} unit={unit}
@@ -336,17 +353,24 @@ export function CanvasStage() {
               if (!b) return null
               const mid = { x: (calA.x + b.x) / 2, y: (calA.y + b.y) / 2 }
               const L = dist(calA, b)
+              const pinR = COARSE ? 8 : 5.5
+              const hitR = COARSE ? 24 : 13
+              const pins: [Pt, 'calA' | 'calB'][] = calB ? [[calA, 'calA'], [calB, 'calB']] : [[calA, 'calA']]
               return (
                 <g>
                   <line x1={calA.x} y1={calA.y} x2={b.x} y2={b.y} stroke="#6FC7CE"
                     strokeWidth={2.2 / k} strokeDasharray={calB ? undefined : `${8 / k} ${6 / k}`} />
-                  {[calA, b].map((p, i) => (
-                    <g key={i}>
-                      <circle cx={p.x} cy={p.y} r={5 / k} fill="#0E1116" stroke="#6FC7CE" strokeWidth={2 / k} />
-                      <circle cx={p.x} cy={p.y} r={1.6 / k} fill="#6FC7CE" />
+                  {pins.map(([p, role]) => (
+                    <g key={role} data-role={role} style={{ cursor: 'grab' }}>
+                      <circle cx={p.x} cy={p.y} r={hitR / k} fill="rgba(0,0,0,0)" data-role={role} />
+                      <circle cx={p.x} cy={p.y} r={pinR / k} fill="#0E1116" stroke="#6FC7CE" strokeWidth={2.2 / k} />
+                      <circle cx={p.x} cy={p.y} r={2 / k} fill="#6FC7CE" />
                     </g>
                   ))}
-                  <text x={mid.x} y={mid.y - 12 / k} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
+                  {!calB && cursor && (
+                    <circle cx={b.x} cy={b.y} r={4 / k} fill="none" stroke="#6FC7CE" strokeWidth={1.2 / k} opacity={0.7} />
+                  )}
+                  <text x={mid.x} y={mid.y - 14 / k} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
                     fill="#BFEDF2" textAnchor="middle"
                     stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                     {metersPerPx ? formatLen(L * metersPerPx, unit) : `${L.toFixed(0)} px`}
@@ -404,6 +428,40 @@ export function CanvasStage() {
             fill="rgba(0,0,0,0)" style={{ cursor: 'move' }} />
         )}
       </g>
+
+      {/* magnifier loupe while dragging a point on touch — screen space */}
+      {loupe && (() => {
+        const s = useStore.getState()
+        let wp: Pt | null = null
+        if (loupe.mode === 'vertex') wp = s.pts[loupe.idx] ?? null
+        else if (loupe.mode === 'center') wp = s.centerOverride ?? center
+        else if (loupe.mode === 'calA') wp = s.calA
+        else wp = s.calB
+        if (!wp) return null
+        const sx = wp.x * k + tx
+        const sy = wp.y * k + ty
+        const R = 62, MAG = 2.4, M = 16
+        const svgW = svgRef.current?.clientWidth ?? 400
+        const nearLeft = sx < R * 2 + M * 2 && sy < R * 2 + M * 2
+        const cx = nearLeft ? svgW - R - M : R + M
+        const cy = R + M
+        return (
+          <g pointerEvents="none">
+            <defs>
+              <clipPath id="loupe-clip"><circle cx={cx} cy={cy} r={R} /></clipPath>
+            </defs>
+            <circle cx={cx + 2} cy={cy + 4} r={R + 3} fill="rgba(0,0,0,0.45)" />
+            <circle cx={cx} cy={cy} r={R + 2.5} fill="#0B0C10" />
+            <g clipPath="url(#loupe-clip)">
+              <rect x={cx - R} y={cy - R} width={R * 2} height={R * 2} fill="#101318" />
+              <use href="#world" transform={`translate(${cx - MAG * sx} ${cy - MAG * sy}) scale(${MAG})`} />
+            </g>
+            <line x1={cx - 11} y1={cy} x2={cx + 11} y2={cy} stroke="#F26B57" strokeWidth={1.4} />
+            <line x1={cx} y1={cy - 11} x2={cx} y2={cy + 11} stroke="#F26B57" strokeWidth={1.4} />
+            <circle cx={cx} cy={cy} r={R + 2.5} fill="none" stroke={GOLD} strokeWidth={2} />
+          </g>
+        )
+      })()}
     </svg>
   )
 }
