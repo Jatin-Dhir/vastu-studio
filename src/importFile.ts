@@ -11,17 +11,28 @@ function freshBgDefaults() {
   return { opacity: 1, grayscale: false, invert: false }
 }
 
-export async function importFiles(files: FileList | File[] | Blob[], nameHint?: string) {
-  const file = Array.from(files as ArrayLike<File>)[0]
+export async function importFiles(files: FileList | File[] | Blob[], opts?: { force?: boolean; nameHint?: string }) {
+  const all = Array.from(files as ArrayLike<File>)
+  const file = all[0]
   if (!file) return
   const s = useStore.getState()
-  const name = (file as File).name ?? nameHint ?? 'imported'
+  const name = (file as File).name ?? opts?.nameHint ?? 'imported'
   const ext = name.toLowerCase().split('.').pop() ?? ''
 
   try {
     if (ext === 'dwg') {
       s.setDwgNotice(true)
       return
+    }
+    // a traced outline is real work — never let a stray paste or mis-tap wipe it silently
+    if (s.pts.length >= 3 && !opts?.force) {
+      s.toast(`Importing “${name}” replaces the current plan, outline and scale`, 'warn', 'Replace', () => {
+        void importFiles(all, { force: true })
+      })
+      return
+    }
+    if (all.length > 1) {
+      s.toast(`One file at a time — importing “${name}”`, 'info')
     }
     if (ext === 'vastu' || (ext === 'json' && name.includes('.vastu'))) {
       const text = await (file as File).text()

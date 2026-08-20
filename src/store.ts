@@ -300,6 +300,7 @@ export const useStore = create<VastuStore>()((set, get) => {
         closed: p.closed,
         centerOverride: p.centerOverride,
         northDeg: p.northDeg,
+        northSource: p.northSource ?? null,
         compass: { ...DEFAULT_COMPASS, ...p.compass },
         locked: p.locked ?? false,
         selectedVertex: null,
@@ -325,6 +326,7 @@ export function serializeProject(s: VastuStore): ProjectFile {
     closed: s.closed,
     centerOverride: s.centerOverride,
     northDeg: s.northDeg,
+    northSource: s.northSource,
     compass: s.compass,
     locked: s.locked,
   }

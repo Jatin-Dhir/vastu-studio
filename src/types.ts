@@ -52,6 +52,7 @@ export interface ProjectFile {
   closed: boolean
   centerOverride: Pt | null
   northDeg: number
+  northSource?: NorthSource
   compass: CompassState
   locked?: boolean
 }

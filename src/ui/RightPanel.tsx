@@ -5,7 +5,7 @@ import { centroid, perimeter, polygonArea, sampledPolygon, wedgeClip } from '../
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
 import type { CompassId, Pt } from '../types'
-import { hasPdfOpen, renderPdfPage } from '../importers/pdf'
+import { detectPdfScaleRatio, hasPdfOpen, renderPdfPage } from '../importers/pdf'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
 
@@ -116,9 +116,9 @@ function NorthSourceLine() {
   const src = useStore((s) => s.northSource)
   const deg = useStore((s) => s.northDeg)
   const label =
-    src === 'map' ? 'true north from map — automatic'
-      : src === 'plan' ? 'aligned to the plan’s arrow'
-        : src === 'manual' ? 'set manually' : 'assumed straight up'
+    src === 'map' ? 'auto · from map'
+      : src === 'plan' ? 'from plan arrow'
+        : src === 'manual' ? 'set manually' : 'assumed up'
   return (
     <div className="row-between">
       <span className="lbl">North {deg}°</span>
@@ -270,8 +270,24 @@ export function RightPanel() {
     if (next === bg.pdfPage) return
     setPageBusy(true)
     try {
-      const { dataUrl, w, h } = await renderPdfPage(next)
+      const { dataUrl, w, h, pxPerPt } = await renderPdfPage(next)
       setBg({ dataUrl, w, h, pdfPage: next })
+      const st = useStore.getState()
+      if (st.pts.length >= 3 || st.metersPerPx) {
+        st.toast('Page changed — the outline and scale came from the previous page. Verify before measuring', 'warn')
+      }
+      // this page may state its own printed scale
+      const ratio = await detectPdfScaleRatio(next)
+      if (ratio) {
+        const mpp = (ratio * 0.0254) / 72 / pxPerPt
+        if (!st.metersPerPx || Math.abs(mpp - st.metersPerPx) / mpp > 0.01) {
+          useStore.getState().toast(`This page states 1 : ${ratio}`, 'info', 'Apply scale', () => {
+            const s2 = useStore.getState()
+            s2.setMetersPerPx(mpp, 'pdf')
+            s2.toast(`Scale set from page ${next}'s printed 1 : ${ratio}`, 'ok')
+          })
+        }
+      }
     } catch {
       useStore.getState().toast('Could not render that page', 'warn')
     } finally {

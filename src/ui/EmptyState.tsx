@@ -31,7 +31,9 @@ export function EmptyState() {
         <div className="empty-drop" onClick={() => window.dispatchEvent(new CustomEvent('vastu:open-file'))}>
           <FileUp size={20} />
           <div>
-            <b>Drop a file here</b> or click to browse
+            <b>{typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+              ? 'Tap to choose a file'
+              : 'Drop a file here or click to browse'}</b>
             <span>PDF · DXF (AutoCAD) · PNG / JPG · .vastu project</span>
           </div>
         </div>

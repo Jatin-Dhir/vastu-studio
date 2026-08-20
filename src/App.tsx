@@ -161,10 +161,10 @@ export default function App() {
     let timer = 0
     const unsub = useStore.subscribe((s, prev) => {
       if (
-        s.pts !== prev.pts || s.bg !== prev.bg || s.closed !== prev.closed ||
+        s.pts !== prev.pts || s.bulges !== prev.bulges || s.bg !== prev.bg || s.closed !== prev.closed ||
         s.compass !== prev.compass || s.northDeg !== prev.northDeg ||
         s.metersPerPx !== prev.metersPerPx || s.centerOverride !== prev.centerOverride ||
-        s.unit !== prev.unit
+        s.unit !== prev.unit || s.locked !== prev.locked
       ) {
         window.clearTimeout(timer)
         timer = window.setTimeout(autosave, 900)

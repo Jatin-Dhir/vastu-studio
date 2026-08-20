@@ -186,8 +186,10 @@ function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; no
     const p0 = polar(c, a, R - len)
     const p1 = polar(c, a, R)
     ticks.push(
+      <line key={`u${d}`} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
+        stroke={INKHALO} strokeWidth={(major ? 3 : 2) / k} opacity={0.55} />,
       <line key={d} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
-        stroke="#E8DDBE" strokeWidth={(major ? 1.4 : 0.8) / k} opacity={major ? 0.8 : 0.45} />,
+        stroke="#E8DDBE" strokeWidth={(major ? 1.4 : 0.8) / k} opacity={major ? 0.85 : 0.55} />,
     )
   }
   return (
@@ -195,7 +197,7 @@ function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; no
       {ticks}
       {numbers && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
         <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={R * 0.033}
-          text={String(d)} fill="#CBD2DF" weight={500} opacity={0.85} vr={vr} />
+          text={String(d)} fill="#CBD2DF" weight={500} opacity={0.9} halo={R * 0.008} vr={vr} />
       ))}
     </g>
   )
@@ -221,8 +223,14 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix }: ChakraP
       {ZONES16.map((_, i) => {
         const a = north - 11.25 + i * 22.5
         const p = polar(c, a, R)
-        return <line key={i} x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-          stroke="#EFE3C0" strokeWidth={0.9 / k} opacity={0.5} />
+        return (
+          <Fragment key={i}>
+            <line x1={c.x} y1={c.y} x2={p.x} y2={p.y}
+              stroke={INKHALO} strokeWidth={2.2 / k} opacity={0.45} />
+            <line x1={c.x} y1={c.y} x2={p.x} y2={p.y}
+              stroke="#EFE3C0" strokeWidth={0.9 / k} opacity={0.6} />
+          </Fragment>
+        )
       })}
       <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.6 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={R * 1.001} fill="none" stroke="#FFF6DF" strokeWidth={0.5 / k} opacity={0.4} />
@@ -438,8 +446,12 @@ function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
     const a = north + d
     const p0 = polar(c, a, R - len)
     const p1 = polar(c, a, R)
-    ticks.push(<line key={d} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
-      stroke="#EDE2C2" strokeWidth={(major ? 1.5 : 0.7) / k} opacity={major ? 0.9 : 0.5} />)
+    ticks.push(
+      <line key={`u${d}`} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
+        stroke={INKHALO} strokeWidth={(major ? 3 : 1.8) / k} opacity={0.5} />,
+      <line key={d} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
+        stroke="#EDE2C2" strokeWidth={(major ? 1.5 : 0.7) / k} opacity={major ? 0.92 : 0.6} />,
+    )
   }
   const nTip = polar(c, north, R * 0.995)
   const nL = polar(c, north + 4, R * 0.9)
@@ -500,9 +512,13 @@ function CenterMarker(props: {
         </g>
       )}
       <line x1={c.x - 15 / k} y1={c.y} x2={c.x + 15 / k} y2={c.y}
-        stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.9} />
+        stroke={INKHALO} strokeWidth={3.4 / k} opacity={0.7} />
       <line x1={c.x} y1={c.y - 15 / k} x2={c.x} y2={c.y + 15 / k}
-        stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.9} />
+        stroke={INKHALO} strokeWidth={3.4 / k} opacity={0.7} />
+      <line x1={c.x - 15 / k} y1={c.y} x2={c.x + 15 / k} y2={c.y}
+        stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.95} />
+      <line x1={c.x} y1={c.y - 15 / k} x2={c.x} y2={c.y + 15 / k}
+        stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.95} />
       <circle cx={c.x} cy={c.y} r={4.2 / k} fill={overridden ? '#F2A65A' : GOLD}
         stroke="#FFFDF4" strokeWidth={1.4 / k} />
       {overridden && (
@@ -555,7 +571,7 @@ export function Scene(props: SceneProps) {
         )}
       </defs>
       <Background bg={bg} dxf={dxf} k={k} />
-      <g opacity={compass.opacity}>
+      <g key={compass.id} className="compass-enter" opacity={compass.opacity}>
         {chakraProps && compass.id === 'custom' && <CustomOverlay {...chakraProps} />}
         {chakraProps && compass.id === 'zones16' && <Zones16 {...chakraProps} />}
         {chakraProps && compass.id === 'gates32' && <Gates32 {...chakraProps} />}

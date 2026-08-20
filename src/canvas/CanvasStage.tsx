@@ -466,12 +466,13 @@ export function CanvasStage() {
     const k = viewRef.current.k
     const n = s.pts.length
     const count = s.closed ? n : n - 1
-    let best = -1, bestD = 9 / k
+    let best = -1, bestD = 9 / k, bestT = 0.5, bestP: Pt | null = null
     for (let i = 0; i < count; i++) {
-      const dd = distToSegment(world, s.pts[i], s.pts[(i + 1) % n])
-      if (dd < bestD) { bestD = dd; best = i }
+      const r = nearestOnEdge(world, s.pts[i], s.pts[(i + 1) % n], s.bulges[i] ?? 0)
+      if (r.d < bestD) { bestD = r.d; best = i; bestT = r.t; bestP = r.point }
     }
-    if (best >= 0) s.insertPoint(best + 1, world)
+    // curve-preserving split — same math as the tap path, so arcs never flatten
+    if (best >= 0 && bestP && bestT > 0.02 && bestT < 0.98) s.insertPointOnEdge(best, bestP, bestT)
   }
 
   const onContextMenu = (e: React.MouseEvent<SVGSVGElement>) => {

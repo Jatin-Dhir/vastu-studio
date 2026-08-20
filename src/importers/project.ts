@@ -26,13 +26,22 @@ export function parseProject(text: string): ProjectFile {
 
 const AUTOSAVE_KEY = 'vastu-studio.autosave.v1'
 
+let warnedQuota = false
+
 export function autosave() {
   try {
     const s = useStore.getState()
     if (s.bg.kind === 'none' && s.pts.length === 0) return
     localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(serializeProject(s)))
   } catch {
-    // quota exceeded — silently skip
+    // quota exceeded — the user must know their work is NOT being kept
+    if (!warnedQuota) {
+      warnedQuota = true
+      useStore.getState().toast(
+        'Autosave failed — this plan is too large for browser storage. Use Save project (.vastu) to keep your work safe',
+        'warn',
+      )
+    }
   }
 }
 

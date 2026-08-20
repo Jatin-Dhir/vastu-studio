@@ -57,7 +57,7 @@ export function QuickBar() {
         ))}
         <span className="qsep" />
         <button className={`qpill deg ${degOpen ? 'on' : ''}`} onClick={() => setDegOpen(!degOpen)}>
-          N {northDeg}°
+          N{northDeg}°
         </button>
         <button className={`qpill lockpill ${locked ? 'on' : ''}`}
           title={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}

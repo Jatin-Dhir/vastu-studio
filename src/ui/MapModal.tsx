@@ -209,6 +209,12 @@ export function MapModal() {
       const results = await Promise.all(jobs)
       const okCount = results.filter(Boolean).length
       if (okCount === 0) throw new Error('Tiles could not be fetched — check the connection, or screenshot the map and paste it instead')
+      if (okCount < jobs.length) {
+        useStore.getState().toast(
+          `${jobs.length - okCount} of ${jobs.length} map tiles failed — the capture may have dark gaps. Retry on a better connection if so`,
+          'warn',
+        )
+      }
 
       // attribution baked into the capture
       ctx.font = '600 13px system-ui, sans-serif'
