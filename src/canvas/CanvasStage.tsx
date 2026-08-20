@@ -80,6 +80,7 @@ export function CanvasStage() {
   const [editDragging, setEditDragging] = useState(false)
   const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
+  const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
 
   /* ---------- gesture-speed view: DOM transform now, store commit at rest ---------- */
@@ -405,7 +406,25 @@ export function CanvasStage() {
     // a tap only ever places/dispatches from a plain press on empty canvas —
     // never from handle presses or the tail end of a pinch (mode 'idle')
     if (mode !== 'maybe-pan') return
-    if (s.tool === 'select') { s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); return }
+    if (s.tool === 'select') {
+      // double-tap zooms on touch — the gesture every map app taught the thumb
+      if (COARSE) {
+        const lt = lastTap.current
+        const now = performance.now()
+        if (lt && now - lt.t < 320 && Math.hypot(e.clientX - lt.x, e.clientY - lt.y) < 32) {
+          lastTap.current = null
+          const rect = svgRef.current!.getBoundingClientRect()
+          const mx = e.clientX - rect.left, my = e.clientY - rect.top
+          const v = viewRef.current
+          const nk = Math.min(60, v.k * 2.1)
+          setViewLive({ tx: mx - ((mx - v.tx) * nk) / v.k, ty: my - ((my - v.ty) * nk) / v.k, k: nk, rot: v.rot })
+          commitView()
+          return
+        }
+        lastTap.current = { t: now, x: e.clientX, y: e.clientY }
+      }
+      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); return
+    }
     if (s.locked) return
 
     switch (s.tool) {
@@ -475,6 +494,7 @@ export function CanvasStage() {
   }
 
   const onDblClick = (e: React.MouseEvent<SVGSVGElement>) => {
+    if (COARSE) return // touch double-tap zooms; point-insert stays a precise mouse gesture
     const s = useStore.getState()
     if (s.locked || s.tool !== 'select' || s.pts.length < 2) return
     const world = toWorld(e.clientX, e.clientY)

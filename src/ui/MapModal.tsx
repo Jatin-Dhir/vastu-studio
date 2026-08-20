@@ -39,6 +39,36 @@ function parseCoords(text: string): { lat: number; lon: number } | null {
 
 interface Hit { name: string; lat: number; lon: number }
 
+/* the map remembers where you work — no more starting from all of India every time */
+interface MapMemory { lat: number; lng: number; z: number; style: 'sat' | 'osm' }
+const MEM_KEY = 'vastu.map.state'
+const RECENTS_KEY = 'vastu.map.recents'
+
+function loadMem(): MapMemory | null {
+  try { return JSON.parse(localStorage.getItem(MEM_KEY) ?? 'null') } catch { return null }
+}
+function saveMem(m: MapMemory) {
+  try { localStorage.setItem(MEM_KEY, JSON.stringify(m)) } catch { /* private mode */ }
+}
+function loadRecents(): Hit[] {
+  try { return JSON.parse(localStorage.getItem(RECENTS_KEY) ?? '[]') } catch { return [] }
+}
+function pushRecent(h: Hit) {
+  try {
+    const list = loadRecents().filter((r) => Math.abs(r.lat - h.lat) > 0.001 || Math.abs(r.lon - h.lon) > 0.001)
+    list.unshift(h)
+    localStorage.setItem(RECENTS_KEY, JSON.stringify(list.slice(0, 6)))
+  } catch { /* private mode */ }
+}
+
+/** Capture sharpness by zoom — tells the user when they've zoomed enough. */
+function sharpness(z: number): { stars: string; note: string; good: boolean } {
+  if (z >= 18) return { stars: '★★★★', note: 'sharp capture', good: true }
+  if (z >= 17) return { stars: '★★★☆', note: 'good capture', good: true }
+  if (z >= 15) return { stars: '★★☆☆', note: 'zoom in for detail', good: false }
+  return { stars: '★☆☆☆', note: 'too far out to trace', good: false }
+}
+
 /** Query Nominatim and Photon in parallel and merge — better coverage for partial and local names.
  *  `near` biases results toward the current map view, which is what "places around me" needs. */
 async function geocode(text: string, near?: { lat: number; lon: number }): Promise<Hit[]> {
@@ -80,7 +110,9 @@ export function MapModal() {
   const layerRef = useRef<L.TileLayer | null>(null)
   const overlayRefs = useRef<L.TileLayer[]>([])
   const markerRef = useRef<L.CircleMarker | null>(null)
-  const [style, setStyle] = useState<'sat' | 'osm'>('sat')
+  const [style, setStyle] = useState<'sat' | 'osm'>(() => loadMem()?.style ?? 'sat')
+  const [zoomNow, setZoomNow] = useState<number>(() => loadMem()?.z ?? 5)
+  const [recents, setRecents] = useState<Hit[]>(loadRecents)
   const provider = (st = style) => (st === 'osm' ? { ...OSM, native: 19 } : { ...SAT, native: 19 })
   const shotRef = useRef<HTMLInputElement>(null)
   const [q, setQ] = useState('')
@@ -93,16 +125,27 @@ export function MapModal() {
 
   useEffect(() => {
     if (!mapDiv.current) return
+    const mem = loadMem()
     const map = L.map(mapDiv.current, {
-      center: [20.59, 78.96],
-      zoom: 5,
+      center: mem ? [mem.lat, mem.lng] : [20.59, 78.96],
+      zoom: mem?.z ?? 5,
       maxZoom: 21,
       attributionControl: false,
     })
     mapRef.current = map
+    map.on('zoomend', () => setZoomNow(map.getZoom()))
     if (import.meta.env.DEV) (window as any).__vastuMap = map
-    return () => { map.remove(); mapRef.current = null }
+    return () => {
+      const c = map.getCenter()
+      saveMem({ lat: c.lat, lng: c.lng, z: map.getZoom(), style: styleRef.current })
+      map.remove()
+      mapRef.current = null
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  const styleRef = useRef(style)
+  useEffect(() => { styleRef.current = style }, [style])
 
   useEffect(() => {
     const map = mapRef.current
@@ -155,6 +198,8 @@ export function MapModal() {
     setHits([])
     setNoResults(false)
     setQ(h.name.split(',').slice(0, 2).join(','))
+    pushRecent({ ...h, name: h.name.split(',').slice(0, 2).join(', ') })
+    setRecents(loadRecents())
     const map = mapRef.current
     if (!map) return
     map.setView([h.lat, h.lon], 18)
@@ -237,6 +282,9 @@ export function MapModal() {
         metersPerPx, 'map',
       )
       s.setNorth(0, 'map') // satellite/street tiles are true-north-up
+      pushRecent({ name: q.trim() || `${lat.toFixed(4)}, ${map.getCenter().lng.toFixed(4)}`, lat, lon: map.getCenter().lng })
+      const cNow = map.getCenter()
+      saveMem({ lat: cNow.lat, lng: cNow.lng, z: map.getZoom(), style })
       s.setTool('trace')
       s.setMapOpen(false)
       requestFit()
@@ -266,7 +314,7 @@ export function MapModal() {
   }
 
   return (
-    <Dialog title="Import from Maps" onClose={() => setMapOpen(false)} width={780} className="map-dialog">
+    <Dialog title="Import from Maps" onClose={() => setMapOpen(false)} width={1080} className="map-dialog">
       <div className="map-search">
         <Search size={15} />
         <input
@@ -283,13 +331,27 @@ export function MapModal() {
         {searching && <Loader2 size={15} className="spin" />}
         {(hits.length > 0 || (noResults && q.trim().length >= 3 && !searching)) && (
           <div className="map-results">
-            {hits.map((h, i) => (
-              <button key={i} onClick={() => goto(h)}>{h.name}</button>
-            ))}
-            {hits.length === 0 && <div className="map-noresults">No places found — try a broader search</div>}
+            {hits.map((h, i) => {
+              const [primary, ...rest] = h.name.split(',')
+              return (
+                <button key={i} onClick={() => goto(h)}>
+                  <b>{primary.trim()}</b>
+                  {rest.length > 0 && <span>{rest.join(',').trim()}</span>}
+                </button>
+              )
+            })}
+            {hits.length === 0 && <div className="map-noresults">No places found — try a broader search, or paste a Google Maps link</div>}
           </div>
         )}
       </div>
+
+      {recents.length > 0 && q.trim().length === 0 && (
+        <div className="map-recents">
+          {recents.map((r, i) => (
+            <button key={i} className="chip" onClick={() => goto(r)}>{r.name}</button>
+          ))}
+        </div>
+      )}
 
       <div className="map-holder">
         <div ref={mapDiv} className="map-container" />
@@ -306,7 +368,10 @@ export function MapModal() {
           <button className={style === 'sat' ? 'on' : ''} onClick={() => setStyle('sat')}>Satellite</button>
           <button className={style === 'osm' ? 'on' : ''} onClick={() => setStyle('osm')}>Street</button>
         </div>
-        <span className="lbl dim">Zoom right into your plot — capture inherits scale & north automatically.</span>
+        <span className={`map-quality ${sharpness(zoomNow).good ? 'good' : ''}`}>
+          {sharpness(zoomNow).stars} <em>{sharpness(zoomNow).note}</em>
+        </span>
+        <span className="lbl dim hide-mobile">Capture inherits scale & north automatically.</span>
         <button className="btn-primary" onClick={() => void capture()} disabled={capturing}>
           {capturing ? <Loader2 size={15} className="spin" /> : <Camera size={15} />}
           {capturing ? 'Capturing…' : 'Capture view'}

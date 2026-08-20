@@ -48,8 +48,12 @@ export function EmptyState() {
         </div>
 
         <div className="empty-foot">
-          <span>Paste a screenshot any time with <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
-          <span className="dot">·</span>
+          {!(typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches) && (
+            <>
+              <span>Paste a screenshot any time with <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+              <span className="dot">·</span>
+            </>
+          )}
           <button className="linkish" onClick={() => sample(`${import.meta.env.BASE_URL}samples/sample-plan.dxf`, 'sample-plan.dxf')}>
             try a DXF
           </button>

@@ -183,7 +183,13 @@ function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg:
         const delta = r.pct - 6.25
         return (
           <div key={r.key} className={`zone-row-wrap ${isOpen ? 'open' : ''}`}>
-            <button className="zone-row" onClick={() => setOpen(isOpen ? null : i)}>
+            <button className="zone-row" onClick={() => {
+              setOpen(isOpen ? null : i)
+              // on phones, drop the sheet to half so the highlighted wedge is actually visible
+              if (!isOpen && window.innerWidth <= 760 && useStore.getState().sheetPos === 'full') {
+                useStore.getState().setSheetPos('half')
+              }
+            }}>
               <span className="zone-chip" style={{ background: r.color }} />
               <span className="zone-key">{r.key}</span>
               <span className="zone-track">
@@ -307,17 +313,23 @@ export function RightPanel() {
           : scaleSource === 'demo' ? 'sample preset'
             : scaleSource === 'manual' ? 'calibrated' : null
 
-  const sheetOpen = useStore((s) => s.sheetOpen)
-  const setSheetOpen = useStore((s) => s.setSheetOpen)
+  const sheetPos = useStore((s) => s.sheetPos)
+  const setSheetPos = useStore((s) => s.setSheetPos)
   const asideRef = useRef<HTMLElement>(null)
-  const swipe = useRef<{ startY: number; startOpen: boolean; moved: boolean; lastY: number; lastT: number; vel: number } | null>(null)
+  const swipe = useRef<{ startY: number; startOff: number; moved: boolean; lastY: number; lastT: number; vel: number } | null>(null)
 
-  /* swipe the sheet handle up/down like a native bottom sheet (mobile only) */
-  const collapsedOffset = () => Math.max(0, (asideRef.current?.getBoundingClientRect().height ?? 0) - 54)
+  /* three-detent bottom sheet: peek (54px) · half (~42vh) · full — mobile only */
+  const sheetH = () => asideRef.current?.getBoundingClientRect().height ?? 0
+  const offsetFor = (pos: 'peek' | 'half' | 'full') => {
+    const h = sheetH()
+    if (pos === 'full') return 0
+    if (pos === 'half') return Math.max(0, h - Math.min(h, window.innerHeight * 0.42))
+    return Math.max(0, h - 54)
+  }
   const onHandleDown = (e: React.PointerEvent) => {
     if (window.innerWidth > 760) return
     try { (e.target as Element).setPointerCapture?.(e.pointerId) } catch { /* synthetic */ }
-    swipe.current = { startY: e.clientY, startOpen: sheetOpen, moved: false, lastY: e.clientY, lastT: performance.now(), vel: 0 }
+    swipe.current = { startY: e.clientY, startOff: offsetFor(sheetPos), moved: false, lastY: e.clientY, lastT: performance.now(), vel: 0 }
     if (asideRef.current) asideRef.current.style.transition = 'none'
   }
   const onHandleMove = (e: React.PointerEvent) => {
@@ -330,8 +342,7 @@ export function RightPanel() {
     sw.lastY = e.clientY; sw.lastT = now
     const dy = e.clientY - sw.startY
     if (Math.abs(dy) > 6) sw.moved = true
-    const base = sw.startOpen ? 0 : collapsedOffset()
-    const off = Math.min(collapsedOffset(), Math.max(0, base + dy))
+    const off = Math.min(offsetFor('peek'), Math.max(0, sw.startOff + dy))
     el.style.transform = `translateY(${off}px)`
   }
   const onHandleUp = (e: React.PointerEvent) => {
@@ -342,16 +353,31 @@ export function RightPanel() {
     const dy = e.clientY - sw.startY
     el.style.transition = ''
     el.style.transform = ''
-    if (!sw.moved) { setSheetOpen(!sheetOpen); return }
-    // a decisive flick wins over position
-    if (Math.abs(sw.vel) > 0.45) { setSheetOpen(sw.vel < 0); return }
-    const base = sw.startOpen ? 0 : collapsedOffset()
-    const off = Math.min(collapsedOffset(), Math.max(0, base + dy))
-    setSheetOpen(off < collapsedOffset() * 0.5)
+    if (!sw.moved) {
+      // tap cycles: peek → full → peek (half is reached by swiping or zone taps)
+      setSheetPos(sheetPos === 'peek' ? 'full' : 'peek')
+      return
+    }
+    const off = Math.min(offsetFor('peek'), Math.max(0, sw.startOff + dy))
+    // a decisive flick jumps a detent in its direction
+    if (Math.abs(sw.vel) > 0.45) {
+      const order: ('full' | 'half' | 'peek')[] = ['full', 'half', 'peek']
+      const idx = order.indexOf(sheetPos)
+      setSheetPos(order[Math.min(2, Math.max(0, idx + (sw.vel > 0 ? 1 : -1)))])
+      return
+    }
+    // otherwise snap to the nearest detent
+    const detents: ('peek' | 'half' | 'full')[] = ['peek', 'half', 'full']
+    let best: 'peek' | 'half' | 'full' = 'peek', bestD = Infinity
+    for (const d of detents) {
+      const dd = Math.abs(offsetFor(d) - off)
+      if (dd < bestD) { bestD = dd; best = d }
+    }
+    setSheetPos(best)
   }
 
   return (
-    <aside ref={asideRef} className={`panel ${sheetOpen ? '' : 'collapsed'}`}>
+    <aside ref={asideRef} className={`panel pos-${sheetPos}`}>
       <button
         className="sheet-handle"
         onPointerDown={onHandleDown}
@@ -360,8 +386,8 @@ export function RightPanel() {
         onPointerCancel={onHandleUp}
       >
         <span className="grip" />
-        <span>{sheetOpen ? 'Hide controls' : 'Controls & analysis'}</span>
-        {sheetOpen ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        <span>{sheetPos === 'peek' ? 'Controls & analysis' : 'Hide controls'}</span>
+        {sheetPos === 'peek' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
       {/* -------- Plan -------- */}
       <section className="card">

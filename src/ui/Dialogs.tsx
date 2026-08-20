@@ -149,6 +149,34 @@ export function MarkerDialog() {
   )
 }
 
+const SHORTCUTS: [string, string][] = [
+  ['V', 'Select · pan'], ['T', 'Trace outline'], ['P', 'Mark rooms & doors'],
+  ['C', 'Set scale'], ['N', 'Align north'], ['M', 'Pin centre'],
+  ['F', 'Fit view'], ['Enter', 'Close outline'], ['Esc / Backspace', 'Undo last point · dismiss'],
+  ['Ctrl+Z / Ctrl+Y', 'Undo · redo'], ['Double-click edge', 'Insert point'], ['Right-click point', 'Delete point'],
+  ['?', 'This help'],
+]
+
+export function ShortcutsDialog() {
+  const open = useStore((s) => s.shortcutsOpen)
+  const setOpen = useStore((s) => s.setShortcutsOpen)
+  if (!open) return null
+  return (
+    <Dialog title="Keyboard shortcuts" onClose={() => setOpen(false)} width={380}>
+      <div className="shortcut-list">
+        {SHORTCUTS.map(([keys, what]) => (
+          <div key={keys} className="shortcut-row">
+            <span className="shortcut-keys">{keys.split(' / ').map((k2, i) => (
+              <span key={k2}>{i > 0 && ' / '}<kbd>{k2}</kbd></span>
+            ))}</span>
+            <span className="lbl">{what}</span>
+          </div>
+        ))}
+      </div>
+    </Dialog>
+  )
+}
+
 export function DwgDialog() {
   const open = useStore((s) => s.dwgNotice)
   const setOpen = useStore((s) => s.setDwgNotice)

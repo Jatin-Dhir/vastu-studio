@@ -29,7 +29,7 @@ export interface VastuStore {
   calA: Pt | null
   calB: Pt | null
   northA: Pt | null
-  sheetOpen: boolean
+  sheetPos: 'peek' | 'half' | 'full'
   calDialogOpen: boolean
   angleSnap: boolean
   showEdgeLabels: boolean
@@ -42,6 +42,8 @@ export interface VastuStore {
   report: ReportMeta
   reportOpen: boolean
   projectsOpen: boolean
+  shortcutsOpen: boolean
+  setShortcutsOpen: (open: boolean) => void
   currentProjectId: string | null
   projectName: string
   setProjectMeta: (meta: { id: string | null; name?: string }) => void
@@ -76,7 +78,7 @@ export interface VastuStore {
   setCompass: (c: Partial<CompassState>) => void
   setCal: (a: Pt | null, b: Pt | null) => void
   setNorthA: (p: Pt | null) => void
-  setSheetOpen: (open: boolean) => void
+  setSheetPos: (pos: 'peek' | 'half' | 'full') => void
   setCalDialogOpen: (open: boolean) => void
   setAngleSnap: (on: boolean) => void
   setShowEdgeLabels: (on: boolean) => void
@@ -145,7 +147,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     calA: null,
     calB: null,
     northA: null,
-    sheetOpen: typeof window === 'undefined' || window.innerWidth > 760,
+    sheetPos: (typeof window === 'undefined' || window.innerWidth > 760 ? 'full' : 'peek') as 'peek' | 'half' | 'full',
     calDialogOpen: false,
     angleSnap: true,
     showEdgeLabels: true,
@@ -158,6 +160,8 @@ export const useStore = create<VastuStore>()((set, get) => {
     report: { client: '', address: '', practitioner: '', notes: '' },
     reportOpen: false,
     projectsOpen: false,
+    shortcutsOpen: false,
+    setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
     currentProjectId: null,
     projectName: 'Untitled plan',
     setProjectMeta: (meta) =>
@@ -271,7 +275,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     setCompass: (c) => set((s) => ({ compass: { ...s.compass, ...c } })),
     setCal: (calA, calB) => set({ calA, calB }),
     setNorthA: (northA) => set({ northA }),
-    setSheetOpen: (sheetOpen) => set({ sheetOpen }),
+    setSheetPos: (sheetPos) => set({ sheetPos }),
     setCalDialogOpen: (calDialogOpen) => set({ calDialogOpen }),
     setAngleSnap: (angleSnap) => set({ angleSnap }),
     setShowEdgeLabels: (showEdgeLabels) => set({ showEdgeLabels }),
@@ -321,7 +325,8 @@ export const useStore = create<VastuStore>()((set, get) => {
 
     toast: (msg, kind = 'info', actionLabel, onAction) => {
       const id = toastSeq++
-      set((s) => ({ toasts: [...s.toasts.slice(-3), { id, msg, kind, actionLabel, onAction }] }))
+      // identical repeats replace instead of stacking
+      set((s) => ({ toasts: [...s.toasts.filter((t) => t.msg !== msg).slice(-3), { id, msg, kind, actionLabel, onAction }] }))
       window.setTimeout(() => get().dismissToast(id), actionLabel ? 9000 : 4200)
     },
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),

@@ -7,7 +7,7 @@ import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
-import { CalibrateDialog, DwgDialog, MarkerDialog } from './ui/Dialogs'
+import { CalibrateDialog, DwgDialog, MarkerDialog, ShortcutsDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RotateChip, SelectionChips } from './ui/CanvasOverlays'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
@@ -108,6 +108,7 @@ export default function App() {
         case 'n': case 'N': s.setTool('north'); break
         case 'p': case 'P': s.setTool('marker'); break
         case 'f': case 'F': requestFit(); break
+        case '?': s.setShortcutsOpen(true); break
         case 'Enter': if (!s.closed && s.pts.length >= 3) s.closePolygon(); break
         case 'Backspace': case 'Delete':
           if (s.tool === 'trace' && !s.closed && s.pts.length > 0) { e.preventDefault(); s.popPoint() }
@@ -225,6 +226,7 @@ export default function App() {
       <Toasts />
       <CalibrateDialog />
       <MarkerDialog />
+      <ShortcutsDialog />
       <DwgDialog />
       {mapOpen && <MapModal />}
       {projectsOpen && <ProjectsModal />}
