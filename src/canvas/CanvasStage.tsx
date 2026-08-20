@@ -11,7 +11,7 @@ const CLOSE_PX = COARSE ? 20 : 13
 const HIT_PX = COARSE ? 18 : 12
 const pushHistory = () =>
   useStore.setState((s) => ({
-    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges }].slice(-100),
+    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges, markers: s.markers }].slice(-100),
     redoStack: [],
   }))
 
@@ -35,8 +35,9 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker'
   idx: number
+  markerId: string | null
   startX: number
   startY: number
   lastX: number
@@ -47,7 +48,7 @@ interface DragState {
 }
 
 /** What the magnifier loupe is following, if anything. */
-interface LoupeState { mode: 'vertex' | 'center' | 'calA' | 'calB' | 'bulge'; idx: number }
+interface LoupeState { mode: 'vertex' | 'center' | 'calA' | 'calB' | 'bulge' | 'marker'; idx: number; markerId?: string | null }
 
 export function CanvasStage() {
   const svgRef = useRef<SVGSVGElement>(null)
@@ -71,11 +72,13 @@ export function CanvasStage() {
   const selectedVertex = useStore((s) => s.selectedVertex)
   const selectedEdge = useStore((s) => s.selectedEdge)
   const highlightZone = useStore((s) => s.highlightZone)
+  const markers = useStore((s) => s.markers)
+  const selectedMarker = useStore((s) => s.selectedMarker)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
   const [editDragging, setEditDragging] = useState(false)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
 
@@ -238,23 +241,25 @@ export function CanvasStage() {
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-role]')
+    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-role]')
     const vidx = target?.getAttribute('data-vidx')
     const bidx = target?.getAttribute('data-bidx')
+    const mkid = target?.getAttribute('data-mkid')
     const role = target?.getAttribute('data-role')
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY
     d.lastX = e.clientX; d.lastY = e.clientY
-    d.moved = false; d.pushed = false
+    d.moved = false; d.pushed = false; d.markerId = null
     d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true) }
+    else if (mkid != null) { d.mode = 'marker'; d.markerId = mkid }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
     else { d.mode = 'maybe-pan' }
     if (e.pointerType !== 'mouse' &&
-      (d.mode === 'vertex' || d.mode === 'center' || d.mode === 'calA' || d.mode === 'calB' || d.mode === 'bulge')) {
-      setLoupe({ mode: d.mode, idx: d.idx })
+      (d.mode === 'vertex' || d.mode === 'center' || d.mode === 'calA' || d.mode === 'calB' || d.mode === 'bulge' || d.mode === 'marker')) {
+      setLoupe({ mode: d.mode, idx: d.idx, markerId: d.markerId })
     }
   }
 
@@ -325,6 +330,11 @@ export function CanvasStage() {
       s.setCenterOverride(world)
       return
     }
+    if (d.mode === 'marker' && d.moved && d.markerId && !s.locked) {
+      if (!d.pushed) { pushHistory(); d.pushed = true }
+      s.moveMarker(d.markerId, world)
+      return
+    }
     if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
       if (d.mode === 'calA') s.setCal(world, s.calB)
       else s.setCal(s.calA, world)
@@ -388,13 +398,21 @@ export function CanvasStage() {
       if (s.tool === 'select' && !s.locked) s.setSelection({ edge: d.idx, vertex: null })
       return
     }
+    if (mode === 'marker') {
+      if (d.markerId) s.setSelectedMarker(s.selectedMarker === d.markerId ? null : d.markerId)
+      return
+    }
     // a tap only ever places/dispatches from a plain press on empty canvas —
     // never from handle presses or the tail end of a pinch (mode 'idle')
     if (mode !== 'maybe-pan') return
-    if (s.tool === 'select') { s.setSelection({ vertex: null, edge: null }); return }
+    if (s.tool === 'select') { s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); return }
     if (s.locked) return
 
     switch (s.tool) {
+      case 'marker': {
+        s.addMarker(world)
+        break
+      }
       case 'trace': {
         if (s.closed) {
           // tapping an edge of the closed outline inserts a point exactly there
@@ -427,11 +445,9 @@ export function CanvasStage() {
         break
       }
       case 'calibrate': {
+        // instructions live in the persistent tool hint now
         if (!s.calA || (s.calA && s.calB)) s.setCal(world, null)
-        else {
-          s.setCal(s.calA, world)
-          s.toast('Drag the pins to fine-tune, then tap “Enter length”', 'info')
-        }
+        else s.setCal(s.calA, world)
         break
       }
       case 'center': {
@@ -442,7 +458,6 @@ export function CanvasStage() {
       case 'north': {
         if (!s.northA) {
           s.setNorthA(world)
-          s.toast('Now tap the TIP of the north arrow', 'info')
         } else if (dist(s.northA, world) > 3 / k) {
           const deg = Math.round(angleOf(s.northA, world) * 2) / 2
           s.setNorth(deg, 'plan')
@@ -517,7 +532,7 @@ export function CanvasStage() {
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
           northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
-          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} idPrefix="live"
+          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} idPrefix="live"
         />
 
         {/* live trace segment */}
@@ -639,6 +654,18 @@ export function CanvasStage() {
           )
         })}
 
+        {/* marker hit handles + selection ring */}
+        {!locked && markers.map((m) => (
+          <g key={m.id}>
+            {selectedMarker === m.id && (
+              <circle cx={m.p.x} cy={m.p.y} r={13 / k} fill="none" stroke={GOLD}
+                strokeWidth={1.6 / k} opacity={0.9} />
+            )}
+            <circle data-mkid={m.id} cx={m.p.x} cy={m.p.y} r={(COARSE ? 20 : 13) / k}
+              fill="rgba(0,0,0,0)" style={{ cursor: 'grab' }} />
+          </g>
+        ))}
+
         {/* center drag handle — ONLY in the Pin-centre tool, so panning and
             curve-handle drags near the middle can never pin it by accident */}
         {tool === 'center' && center && pts.length >= 3 && (
@@ -655,6 +682,9 @@ export function CanvasStage() {
         else if (loupe.mode === 'center') wp = s.centerOverride ?? center
         else if (loupe.mode === 'calA') wp = s.calA
         else if (loupe.mode === 'calB') wp = s.calB
+        else if (loupe.mode === 'marker') {
+          wp = s.markers.find((m) => m.id === loupe.markerId)?.p ?? null
+        }
         else {
           const p1 = s.pts[loupe.idx], p2 = s.pts[(loupe.idx + 1) % s.pts.length]
           wp = p1 && p2 ? edgePoint(p1, p2, s.bulges[loupe.idx] ?? 0, 0.5) : null

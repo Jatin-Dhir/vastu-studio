@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Lock, LockOpen, Navigation, Plus, RotateCcw, Spline, Trash2, X } from 'lucide-react'
+import { Check, Lock, LockOpen, Navigation, Pencil, Plus, RotateCcw, Spline, Trash2, X } from 'lucide-react'
 import { useStore } from '../store'
-import { edgePoint } from '../geometry'
+import { centroid, edgePoint, sampledPolygon } from '../geometry'
+import { placementOf } from '../analysis'
 import { NorthDial } from './NorthDial'
-import { COMPASS_META } from '../vastu'
-import type { CompassId } from '../types'
+import { COMPASS_META, MARKER_KINDS } from '../vastu'
+import type { CompassId, MarkerKind } from '../types'
 
 const PILLS: { id: CompassId; label: string }[] = [
   { id: 'zones16', label: '16' },
@@ -14,10 +15,59 @@ const PILLS: { id: CompassId; label: string }[] = [
   { id: 'dial', label: 'Dial' },
 ]
 
+/** Persistent what-do-I-do-now pill — instructions no longer vanish with a toast. */
+function ToolHint() {
+  const tool = useStore((s) => s.tool)
+  const calA = useStore((s) => s.calA)
+  const calB = useStore((s) => s.calB)
+  const northA = useStore((s) => s.northA)
+  const pts = useStore((s) => s.pts.length)
+  const closed = useStore((s) => s.closed)
+
+  let text: string | null = null
+  if (tool === 'calibrate') {
+    text = !calA ? 'Scale — tap the FIRST end of a length you know'
+      : !calB ? 'Now tap the OTHER end of that length'
+        : 'Drag the pins to fine-tune, then tap “Enter length”'
+  } else if (tool === 'trace') {
+    text = closed
+      ? 'Outline is closed — tap on an edge to add a point there'
+      : pts === 0 ? 'Trace — tap the first corner of the plot'
+        : pts < 3 ? `Tap the next corner · ${pts} placed`
+          : `Tap corners, then the ✓ to close · ${pts} placed`
+  } else if (tool === 'center') {
+    text = 'Tap or drag to pin the centre — reset in the panel'
+  } else if (tool === 'north') {
+    text = !northA ? 'Tap the TAIL of the plan’s north arrow' : 'Now tap the TIP of the arrow'
+  } else if (tool === 'marker') {
+    text = 'Pick a type, then tap the plan to mark it'
+  }
+  if (!text) return null
+  return <div className="tool-hint">{text}</div>
+}
+
+/** Marker type palette shown while the marker tool is armed. */
+function MarkerKindRow() {
+  const markerKind = useStore((s) => s.markerKind)
+  const setMarkerKind = useStore((s) => s.setMarkerKind)
+  return (
+    <div className="quickbar-row kinds">
+      {MARKER_KINDS.map((m) => (
+        <button key={m.kind} className={`qpill kind ${markerKind === m.kind ? 'on' : ''}`}
+          onClick={() => setMarkerKind(m.kind as MarkerKind)}>
+          <span className="kind-dot" style={{ background: m.color }} />
+          {m.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 /** Floating compass switcher + degree pill + lock, top-centre of the canvas. */
 export function QuickBar() {
   const closed = useStore((s) => s.closed)
   const hasBg = useStore((s) => s.bg.kind !== 'none')
+  const tool = useStore((s) => s.tool)
   const compassId = useStore((s) => s.compass.id)
   const customUrl = useStore((s) => s.compass.customUrl)
   const setCompass = useStore((s) => s.setCompass)
@@ -38,12 +88,14 @@ export function QuickBar() {
     return () => window.removeEventListener('pointerdown', onDown)
   }, [degOpen])
 
-  if (!closed || !hasBg) return null
+  const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker'
+  if (!hasBg || (!closed && !armed)) return null
 
   const pills = customUrl ? [...PILLS, { id: 'custom' as CompassId, label: 'Own' }] : PILLS
 
   return (
     <div className="quickbar" ref={popRef}>
+      {closed && (
       <div className="quickbar-row">
         {pills.map((p) => (
           <button
@@ -65,8 +117,12 @@ export function QuickBar() {
           {locked ? <Lock size={13} /> : <LockOpen size={13} />}
         </button>
       </div>
+      )}
 
-      {degOpen && (
+      {tool === 'marker' && !locked && <MarkerKindRow />}
+      <ToolHint />
+
+      {degOpen && closed && (
         <div className="deg-pop">
           <NorthDial size={96} />
           <div className="deg-steppers">
@@ -142,6 +198,58 @@ export function CloseChip() {
     <button className="close-chip" onClick={() => useStore.getState().closePolygon()}>
       <Check size={15} /> Close outline · {n} points
     </button>
+  )
+}
+
+/** Contextual actions for a tapped marker — with its computed zone & pada. */
+export function MarkerChips() {
+  const selectedMarker = useStore((s) => s.selectedMarker)
+  const markers = useStore((s) => s.markers)
+  const pts = useStore((s) => s.pts)
+  const bulges = useStore((s) => s.bulges)
+  const closed = useStore((s) => s.closed)
+  const centerOverride = useStore((s) => s.centerOverride)
+  const northDeg = useStore((s) => s.northDeg)
+  const view = useStore((s) => s.view)
+  const locked = useStore((s) => s.locked)
+  const editing = useStore((s) => s.markerEditing)
+
+  const m = markers.find((x) => x.id === selectedMarker)
+  if (!m || editing) return null
+
+  const st = useStore.getState()
+  let place: string | null = null
+  if (closed && pts.length >= 3) {
+    const c = centerOverride ?? centroid(sampledPolygon(pts, bulges, true))
+    const pl = placementOf(m.p, c, northDeg)
+    place = m.kind === 'entrance'
+      ? `${pl.zone.key} · ${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
+      : `${pl.zone.key} — ${pl.zone.name}`
+  }
+
+  const rad = (view.rot * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const sx = view.tx + view.k * (m.p.x * cos - m.p.y * sin)
+  const sy = view.ty + view.k * (m.p.x * sin + m.p.y * cos)
+
+  return (
+    <div className="sel-chips" style={{
+      left: Math.max(8, Math.min(sx - 60, (window.innerWidth || 800) - 250)),
+      top: Math.max(60, sy - 58),
+    }}>
+      {place && <span className="chip place">{place}</span>}
+      {!locked && (
+        <>
+          <button className="chip" onClick={() => st.setMarkerEditing(true)}>
+            <Pencil size={12} />
+          </button>
+          <button className="chip danger" onClick={() => { st.deleteMarker(m.id) }}>
+            <Trash2 size={12} />
+          </button>
+        </>
+      )}
+      <button className="chip" onClick={() => st.setSelectedMarker(null)}><X size={12} /></button>
+    </div>
   )
 }
 

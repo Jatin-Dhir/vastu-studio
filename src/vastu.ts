@@ -90,6 +90,31 @@ export function mandalaCellName(row: number, col: number): string | null {
   return null
 }
 
+/** Marker palette — what practitioners pin on a plan. */
+export const MARKER_KINDS: { kind: string; name: string; color: string; glyph: string }[] = [
+  { kind: 'entrance', name: 'Entrance', color: '#F26B57', glyph: 'E' },
+  { kind: 'kitchen', name: 'Kitchen', color: '#E58255', glyph: 'K' },
+  { kind: 'toilet', name: 'Toilet', color: '#7C8EA6', glyph: 'T' },
+  { kind: 'bed', name: 'Bed', color: '#A9A6CB', glyph: 'B' },
+  { kind: 'pooja', name: 'Pooja', color: '#D9B45B', glyph: 'P' },
+  { kind: 'water', name: 'Water', color: '#6FC7CE', glyph: 'W' },
+  { kind: 'custom', name: 'Custom', color: '#63B56F', glyph: '•' },
+]
+
+export const markerKindMeta = (kind: string) =>
+  MARKER_KINDS.find((m) => m.kind === kind) ?? MARKER_KINDS[MARKER_KINDS.length - 1]
+
+/** Which of the 16 zones a bearing (deg from centre, north-relative already removed) falls in. */
+export function zoneIndexOf(bearingFromNorth: number): number {
+  return Math.round((((bearingFromNorth % 360) + 360) % 360) / 22.5) % 16
+}
+
+/** Which of the 32 entrance padas a bearing falls in (N1 starts at 315°). */
+export function padaIndexOf(bearingFromNorth: number): number {
+  const rel = (((bearingFromNorth - GATE_START_DEG) % 360) + 360) % 360
+  return Math.min(31, Math.floor(rel / 11.25))
+}
+
 export const COMPASS_META: { id: string; label: string; sub: string }[] = [
   { id: 'zones16', label: '16 Zones', sub: 'MahaVastu chakra' },
   { id: 'gates32', label: '32 Gates', sub: 'Entrance devtas' },

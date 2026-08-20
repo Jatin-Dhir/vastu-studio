@@ -1,5 +1,6 @@
 import type { ProjectFile } from '../types'
 import { serializeProject, useStore } from '../store'
+import { newProjectId, putProject } from '../db'
 
 export function downloadBlob(blob: Blob, filename: string) {
   const a = document.createElement('a')
@@ -28,21 +29,26 @@ const AUTOSAVE_KEY = 'vastu-studio.autosave.v1'
 
 let warnedQuota = false
 
+/** Autosave into the projects library (IndexedDB — no localStorage size limits). */
 export function autosave() {
-  try {
-    const s = useStore.getState()
-    if (s.bg.kind === 'none' && s.pts.length === 0) return
-    localStorage.setItem(AUTOSAVE_KEY, JSON.stringify(serializeProject(s)))
-  } catch {
-    // quota exceeded — the user must know their work is NOT being kept
+  const s = useStore.getState()
+  if (s.bg.kind === 'none' && s.pts.length === 0) return
+  let id = s.currentProjectId
+  let name = s.projectName
+  if (!id) {
+    id = newProjectId()
+    name = s.bg.name?.replace(/\.[^.]+$/, '') || 'Untitled plan'
+    s.setProjectMeta({ id, name })
+  }
+  putProject({ id, name, updatedAt: Date.now(), data: serializeProject(s) }).catch(() => {
     if (!warnedQuota) {
       warnedQuota = true
       useStore.getState().toast(
-        'Autosave failed — this plan is too large for browser storage. Use Save project (.vastu) to keep your work safe',
+        'Autosave failed — browser storage refused the write. Use Save project (.vastu) to keep your work safe',
         'warn',
       )
     }
-  }
+  })
 }
 
 export function loadAutosave(): ProjectFile | null {

@@ -7,11 +7,14 @@ import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
-import { CalibrateDialog, DwgDialog } from './ui/Dialogs'
+import { CalibrateDialog, DwgDialog, MarkerDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
-import { CloseChip, QuickBar, RotateChip, SelectionChips } from './ui/CanvasOverlays'
+import { CloseChip, MarkerChips, QuickBar, RotateChip, SelectionChips } from './ui/CanvasOverlays'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
+import { getMostRecent, newProjectId, putProject, requestPersistence } from './db'
+import { ProjectsModal } from './ui/ProjectsModal'
+import { ReportView } from './ui/ReportView'
 import { formatLen, formatScale } from './format'
 import type { ProjectFile } from './types'
 
@@ -62,6 +65,8 @@ function StatusChip() {
 export default function App() {
   const hasContent = useStore((s) => s.bg.kind !== 'none' || s.pts.length > 0)
   const mapOpen = useStore((s) => s.mapOpen)
+  const projectsOpen = useStore((s) => s.projectsOpen)
+  const reportOpen = useStore((s) => s.reportOpen)
   const fileRef = useRef<HTMLInputElement>(null)
 
   /* file picker trigger */
@@ -69,8 +74,10 @@ export default function App() {
     const open = () => fileRef.current?.click()
     const reset = () => {
       clearAutosave()
-      useStore.getState().loadProject(EMPTY_PROJECT)
-      useStore.getState().toast('Cleared — start with a fresh import', 'ok')
+      const st = useStore.getState()
+      st.loadProject(EMPTY_PROJECT)
+      st.setProjectMeta({ id: null, name: 'Untitled plan' })
+      st.toast('Cleared — start with a fresh import', 'ok')
     }
     window.addEventListener('vastu:open-file', open)
     window.addEventListener('vastu:reset', reset)
@@ -99,6 +106,7 @@ export default function App() {
         case 't': case 'T': s.setTool('trace'); break
         case 'm': case 'M': s.setTool('center'); break
         case 'n': case 'N': s.setTool('north'); break
+        case 'p': case 'P': s.setTool('marker'); break
         case 'f': case 'F': requestFit(); break
         case 'Enter': if (!s.closed && s.pts.length >= 3) s.closePolygon(); break
         case 'Backspace': case 'Delete':
@@ -106,6 +114,8 @@ export default function App() {
           break
         case 'Escape':
           if (s.calDialogOpen) s.setCalDialogOpen(false)
+          else if (s.markerEditing) s.setMarkerEditing(false)
+          else if (s.selectedMarker) s.setSelectedMarker(null)
           else if (s.selectedVertex != null || s.selectedEdge != null) s.setSelection({ vertex: null, edge: null })
           else if (s.tool === 'calibrate' && s.calA) s.setCal(null, null)
           else if (s.tool === 'trace' && !s.closed && s.pts.length > 0) s.popPoint()
@@ -147,15 +157,32 @@ export default function App() {
     }
   }, [])
 
-  /* autosave + restore */
+  /* autosave + restore: legacy localStorage migrates into the IndexedDB library once */
   useEffect(() => {
-    const saved = loadAutosave()
-    if (saved && (saved.bg.kind !== 'none' || saved.pts.length > 0)) {
-      useStore.getState().loadProject(saved)
+    requestPersistence()
+    const st = useStore.getState()
+    const legacy = loadAutosave()
+    if (legacy && (legacy.bg.kind !== 'none' || legacy.pts.length > 0)) {
+      const id = newProjectId()
+      const name = legacy.bg.name?.replace(/\.[^.]+$/, '') || 'Migrated plan'
+      void putProject({ id, name, updatedAt: Date.now(), data: legacy }).then(() => clearAutosave())
+      st.loadProject(legacy)
+      st.setProjectMeta({ id, name })
       setTimeout(requestFit, 120)
-      useStore.getState().toast('Restored your last session', 'info', 'Start fresh', () => {
-        clearAutosave()
-        useStore.getState().loadProject(EMPTY_PROJECT)
+      st.toast('Restored your last session', 'info', 'Start fresh', () => {
+        window.dispatchEvent(new CustomEvent('vastu:reset'))
+      })
+    } else {
+      void getMostRecent().then((rec) => {
+        if (!rec) return
+        const s2 = useStore.getState()
+        if (s2.bg.kind !== 'none' || s2.pts.length > 0) return // user already started something
+        s2.loadProject(rec.data)
+        s2.setProjectMeta({ id: rec.id, name: rec.name })
+        setTimeout(requestFit, 120)
+        s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
+          window.dispatchEvent(new CustomEvent('vastu:reset'))
+        })
       })
     }
     let timer = 0
@@ -164,7 +191,8 @@ export default function App() {
         s.pts !== prev.pts || s.bulges !== prev.bulges || s.bg !== prev.bg || s.closed !== prev.closed ||
         s.compass !== prev.compass || s.northDeg !== prev.northDeg ||
         s.metersPerPx !== prev.metersPerPx || s.centerOverride !== prev.centerOverride ||
-        s.unit !== prev.unit || s.locked !== prev.locked
+        s.unit !== prev.unit || s.locked !== prev.locked ||
+        s.markers !== prev.markers || s.report !== prev.report
       ) {
         window.clearTimeout(timer)
         timer = window.setTimeout(autosave, 900)
@@ -187,6 +215,7 @@ export default function App() {
         <RotateChip />
         <CloseChip />
         <SelectionChips />
+        <MarkerChips />
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
@@ -195,8 +224,11 @@ export default function App() {
       </div>
       <Toasts />
       <CalibrateDialog />
+      <MarkerDialog />
       <DwgDialog />
       {mapOpen && <MapModal />}
+      {projectsOpen && <ProjectsModal />}
+      {reportOpen && <ReportView />}
       <input
         ref={fileRef}
         type="file"

@@ -1,9 +1,9 @@
 import { Fragment, useMemo } from 'react'
-import type { BgState, CompassState, Pt, Unit } from '../types'
+import type { BgState, CompassState, Marker, Pt, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen } from '../format'
-import { DIRS8, GATES32, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName } from '../vastu'
+import { DIRS8, GATES32, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
 
 export const FONT = "'Inter Variable', Inter, system-ui, sans-serif"
 export const GOLD = '#D9B45B'
@@ -27,6 +27,7 @@ export interface SceneProps {
   /** current view rotation (deg) — used only to keep text upright on screen */
   viewRotDeg?: number
   showEdgeLabels: boolean
+  markers?: Marker[]
   idPrefix: string
 }
 
@@ -238,12 +239,20 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix }: ChakraP
       {compass.labels && ZONES16.map((z, i) => {
         const mid = north + i * 22.5
         const cardinal = i % 4 === 0
+        const diagonal = i % 4 === 2
+        // zoom-aware disclosure: cardinals always (readable floor), the rest earn their place
+        const tierPx = R * 0.042 * k
+        if (!cardinal && !diagonal && tierPx < 7) return null
+        if (!cardinal && diagonal && tierPx < 4.8) return null
+        const size = cardinal
+          ? Math.min(Math.max(R * 0.062, 9.5 / k), R * 0.11)
+          : R * 0.042
         return (
           <RingLabel key={z.key} c={c} deg={mid} r={R * 1.065}
-            size={cardinal ? R * 0.062 : R * 0.042}
+            size={size}
             text={z.key} weight={cardinal ? 800 : 600}
             fill={i === 0 ? '#F26B57' : cardinal ? '#F5EBD3' : '#D8DCE6'}
-            halo={R * 0.012} spacing={R * 0.004} vr={vr} />
+            halo={size * 0.28} spacing={R * 0.004} vr={vr} />
         )
       })}
     </g>
@@ -280,7 +289,7 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
       <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.7 / k} opacity={0.92} />
       <circle cx={c.x} cy={c.y} r={r0} fill="none" stroke={GOLD} strokeWidth={1 / k} opacity={0.55} />
       {compass.degreeRing && <DegreeTicks c={c} R={R * 1.055} north={north} numbers={false} k={k} vr={vr} />}
-      {compass.labels && GATES32.map((g, i) => {
+      {compass.labels && R * 0.033 * k >= 6.2 && GATES32.map((g, i) => {
         const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
         const nameSize = Math.min(R * 0.033, (R * 0.175) / (g.devta.length * 0.58))
         return (
@@ -292,9 +301,19 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
           </Fragment>
         )
       })}
+      {compass.labels && GATES32.length > 0 && R * 0.033 * k < 6.2 && GATES32.map((g, i) => {
+        // too small for names — codes only, on the mid ring, when they can still be read
+        if (R * 0.03 * k < 5) return null
+        const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
+        return (
+          <RingLabel key={g.code} c={c} deg={mid} r={R * 0.9} size={R * 0.03} text={g.code}
+            fill="#D9CCA6" weight={700} halo={R * 0.008} vr={vr} />
+        )
+      })}
       {compass.labels && ['N', 'E', 'S', 'W'].map((t, i) => (
-        <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07} size={R * 0.055}
-          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.012} vr={vr} />
+        <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07}
+          size={Math.min(Math.max(R * 0.055, 10 / k), R * 0.1)}
+          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.014} vr={vr} />
       ))}
     </g>
   )
@@ -326,12 +345,17 @@ function Chakra8({ c, R, north, compass, k, vr }: ChakraProps) {
       {compass.labels && DIRS8.map((d8, i) => (
         <Fragment key={d8.key}>
           <RingLabel c={c} deg={north + i * 45} r={R * 1.08}
-            size={i % 2 === 0 ? R * 0.068 : R * 0.05} text={d8.key} weight={800}
+            size={Math.min(Math.max(i % 2 === 0 ? R * 0.068 : R * 0.05, 9.5 / k), R * 0.11)}
+            text={d8.key} weight={800}
             fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.013} vr={vr} />
-          <RingLabel c={c} deg={north + i * 45} r={R * 0.75} size={R * 0.036}
-            text={d8.sanskrit} fill="#E4D9BC" weight={600} halo={R * 0.009} vr={vr} />
-          <RingLabel c={c} deg={north + i * 45} r={R * 0.68} size={R * 0.03}
-            text={d8.deity} fill="#A9B0BF" weight={500} halo={R * 0.008} vr={vr} />
+          {R * 0.036 * k >= 6.5 && (
+            <>
+              <RingLabel c={c} deg={north + i * 45} r={R * 0.75} size={R * 0.036}
+                text={d8.sanskrit} fill="#E4D9BC" weight={600} halo={R * 0.009} vr={vr} />
+              <RingLabel c={c} deg={north + i * 45} r={R * 0.68} size={R * 0.03}
+                text={d8.deity} fill="#A9B0BF" weight={500} halo={R * 0.008} vr={vr} />
+            </>
+          )}
         </Fragment>
       ))}
     </g>
@@ -372,6 +396,7 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
       }
       if (name && compass.devtas) {
         const size = Math.min(Math.min(cw, ch) * 0.24, (cw * 0.9) / (name.length * 0.56))
+        if (size * k < 5.5) continue
         cells.push(
           <text key={`n${row}-${col}`} x={x + cw / 2} y={y + ch / 2}
             fontSize={size} fontFamily={FONT} fontWeight={600} fill="#EDE4CC"
@@ -462,13 +487,13 @@ function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
       <circle cx={c.x} cy={c.y} r={R * 0.82} fill="none" stroke={GOLD} strokeWidth={0.7 / k} opacity={0.4} />
       {ticks}
       <path d={`M${nTip.x} ${nTip.y} L${nL.x} ${nL.y} L${nR.x} ${nR.y} Z`} fill="#F26B57" />
-      {compass.labels && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
+      {compass.labels && R * 0.045 * k >= 6 && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
         <RingLabel key={d} c={c} deg={north + d} r={R * 1.07} size={R * 0.045}
           text={String(d)} fill="#DFE3EC" weight={600} halo={R * 0.01} vr={vr} />
       ))}
       {compass.labels && DIRS8.map((d8, i) => (
         <RingLabel key={d8.key} c={c} deg={north + i * 45} r={R * 0.73}
-          size={i % 2 === 0 ? R * 0.085 : R * 0.05} text={d8.key} weight={800}
+          size={Math.min(Math.max(i % 2 === 0 ? R * 0.085 : R * 0.05, 9 / k), R * 0.12)} text={d8.key} weight={800}
           fill={i === 0 ? '#F26B57' : '#EFE4C8'} halo={R * 0.014} vr={vr} />
       ))}
     </g>
@@ -484,6 +509,38 @@ function CustomOverlay({ c, R, north, compass }: ChakraProps) {
     <g transform={`rotate(${north + compass.customRotDeg} ${c.x} ${c.y})`}>
       <image href={compass.customUrl} x={c.x - w / 2} y={c.y - h / 2} width={w} height={h}
         preserveAspectRatio="xMidYMid meet" />
+    </g>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Room / object markers                                               */
+/* ------------------------------------------------------------------ */
+
+function MarkersLayer({ markers, k, vr }: { markers: Marker[]; k: number; vr: number }) {
+  if (markers.length === 0) return null
+  return (
+    <g>
+      {markers.map((m) => {
+        const meta = markerKindMeta(m.kind)
+        return (
+          <g key={m.id}>
+            <circle cx={m.p.x} cy={m.p.y} r={10 / k} fill={INKHALO} opacity={0.75} />
+            <circle cx={m.p.x} cy={m.p.y} r={8 / k} fill={meta.color} stroke="#FFFDF4" strokeWidth={1.4 / k} />
+            <text x={m.p.x} y={m.p.y + 0.5 / k} fontSize={9 / k} fontFamily={FONT} fontWeight={800}
+              fill="#14151A" textAnchor="middle" dominantBaseline="central"
+              transform={`rotate(${-vr} ${m.p.x} ${m.p.y})`}>
+              {meta.glyph}
+            </text>
+            <text x={m.p.x} y={m.p.y + 20 / k} fontSize={9.5 / k} fontFamily={FONT} fontWeight={650}
+              fill="#F0EBDD" textAnchor="middle"
+              transform={`rotate(${-vr} ${m.p.x} ${m.p.y + 20 / k})`}
+              {...haloProps(2.8 / k)}>
+              {m.label}
+            </text>
+          </g>
+        )
+      })}
     </g>
   )
 }
@@ -594,6 +651,7 @@ export function Scene(props: SceneProps) {
       })()}
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
+      <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center} R={RS} k={k} brahmasthan={compass.brahmasthan && compass.id !== 'none'}
           closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} />

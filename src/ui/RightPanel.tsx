@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, LocateFixed, Navigation, RotateCcw } from 'lucide-react'
 import { useStore } from '../store'
-import { centroid, perimeter, polygonArea, sampledPolygon, wedgeClip } from '../geometry'
+import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
+import { placementOf, zoneRows } from '../analysis'
+import { markerKindMeta } from '../vastu'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
 import type { CompassId, Pt } from '../types'
@@ -166,16 +168,7 @@ function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg:
   // leaving the panel clears the on-plan highlight
   useEffect(() => () => useStore.getState().setHighlightZone(null), [])
 
-  const rows = useMemo(() => {
-    const total = polygonArea(pts)
-    if (total <= 0) return null
-    return ZONES16.map((z, i) => {
-      const a0 = northDeg - 11.25 + i * 22.5
-      const clipped = wedgeClip(pts, center, a0, a0 + 22.5)
-      const area = polygonArea(clipped)
-      return { ...z, pct: (area / total) * 100, areaPx: area }
-    })
-  }, [pts, center, northDeg])
+  const rows = useMemo(() => zoneRows(pts, center, northDeg), [pts, center, northDeg])
 
   if (!rows) return null
   const maxPct = Math.max(...rows.map((r) => r.pct), 0.001)
@@ -245,6 +238,7 @@ export function RightPanel() {
   const setTool = useStore((s) => s.setTool)
   const angleSnap = useStore((s) => s.angleSnap)
   const setAngleSnap = useStore((s) => s.setAngleSnap)
+  const markers = useStore((s) => s.markers)
   const showEdgeLabels = useStore((s) => s.showEdgeLabels)
   const setShowEdgeLabels = useStore((s) => s.setShowEdgeLabels)
   const customFileRef = useRef<HTMLInputElement>(null)
@@ -535,6 +529,42 @@ export function RightPanel() {
           </span>
         </div>
       </section>
+
+      {/* -------- Markers -------- */}
+      {markers.length > 0 && center && closed && (
+        <section className="card">
+          <header className="card-head"><h2>Rooms & objects</h2></header>
+          {markers.filter((m) => m.kind === 'entrance').map((m) => {
+            const pl = placementOf(m.p, center, northDeg)
+            return (
+              <div key={m.id} className="entrance-card"
+                onClick={() => useStore.getState().setSelectedMarker(m.id)}>
+                <span className="entrance-title">{m.label}</span>
+                <b>{pl.pada.code} · {pl.pada.devta}</b>
+                <span className="lbl dim">{pl.zone.key} zone · {pl.bearing.toFixed(1)}° from centre</span>
+              </div>
+            )
+          })}
+          <div className="marker-list">
+            {markers.filter((m) => m.kind !== 'entrance').map((m) => {
+              const pl = placementOf(m.p, center, northDeg)
+              const meta = markerKindMeta(m.kind)
+              return (
+                <button key={m.id} className="marker-row"
+                  onClick={() => useStore.getState().setSelectedMarker(m.id)}>
+                  <span className="kind-dot" style={{ background: meta.color }} />
+                  <span className="marker-name">{m.label}</span>
+                  <span className="marker-zone" style={{ color: pl.zone.color }}>{pl.zone.key}</span>
+                  <span className="lbl dim">{pl.pada.code}</span>
+                </button>
+              )
+            })}
+          </div>
+          {markers.some((m) => m.note) && (
+            <div className="zone-note">Notes on markers appear in the report.</div>
+          )}
+        </section>
+      )}
 
       {/* -------- Zone balance -------- */}
       {closed && center && pts.length >= 3 && (

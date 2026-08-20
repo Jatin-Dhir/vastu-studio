@@ -100,6 +100,55 @@ export function CalibrateDialog() {
   )
 }
 
+import { MARKER_KINDS } from '../vastu'
+import type { MarkerKind } from '../types'
+
+export function MarkerDialog() {
+  const editing = useStore((s) => s.markerEditing)
+  const selectedMarker = useStore((s) => s.selectedMarker)
+  const markers = useStore((s) => s.markers)
+  const m = markers.find((x) => x.id === selectedMarker)
+  const [label, setLabel] = useState('')
+  const [note, setNote] = useState('')
+  const [kind, setKind] = useState<MarkerKind>('entrance')
+
+  useEffect(() => {
+    if (editing && m) { setLabel(m.label); setNote(m.note ?? ''); setKind(m.kind) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, selectedMarker])
+
+  if (!editing || !m) return null
+  const close = () => useStore.getState().setMarkerEditing(false)
+  const save = () => {
+    useStore.getState().updateMarker(m.id, { label: label.trim() || m.label, note: note.trim() || undefined, kind })
+    close()
+  }
+
+  return (
+    <Dialog title="Edit marker" onClose={close} width={380}>
+      <div className="marker-kind-grid">
+        {MARKER_KINDS.map((k2) => (
+          <button key={k2.kind} className={`chip ${kind === k2.kind ? 'on-gold' : ''}`}
+            onClick={() => setKind(k2.kind as MarkerKind)}>
+            <span className="kind-dot" style={{ background: k2.color }} /> {k2.name}
+          </button>
+        ))}
+      </div>
+      <div className="cal-row">
+        <input type="text" value={label} placeholder="Name (e.g. Main door)"
+          onChange={(e) => setLabel(e.target.value)} />
+        <textarea className="marker-note" value={note} rows={3}
+          placeholder="Notes / remedy (goes into the report)…"
+          onChange={(e) => setNote(e.target.value)} />
+      </div>
+      <div className="dialog-actions">
+        <button className="btn-ghost" onClick={close}>Cancel</button>
+        <button className="btn-primary" onClick={save}>Save</button>
+      </div>
+    </Dialog>
+  )
+}
+
 export function DwgDialog() {
   const open = useStore((s) => s.dwgNotice)
   const setOpen = useStore((s) => s.setDwgNotice)

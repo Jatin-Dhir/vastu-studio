@@ -1,4 +1,4 @@
-import { Check, Download, FolderOpen, Lock, LockOpen, Maximize2, Redo2, Save, Undo2 } from 'lucide-react'
+import { Check, Download, FileText, FolderOpen, Lock, LockOpen, Maximize2, Redo2, Save, Undo2 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { exportPng } from '../export'
@@ -83,12 +83,16 @@ export function TopBar() {
           <Maximize2 size={16} />
         </button>
         <div className="vsep hide-mobile" />
-        <button className="icon-btn hide-mobile" onClick={() => window.dispatchEvent(new CustomEvent('vastu:open-file'))}
-          data-tip="Open file / project">
+        <button className="icon-btn" onClick={() => useStore.getState().setProjectsOpen(true)}
+          data-tip="Projects — open, rename, back up">
           <FolderOpen size={16} />
         </button>
         <button className="icon-btn hide-mobile" onClick={saveProjectFile} data-tip="Save project (.vastu)">
           <Save size={16} />
+        </button>
+        <button className="icon-btn" disabled={!closed} onClick={() => useStore.getState().setReportOpen(true)}
+          data-tip={closed ? 'Client report — print / share' : 'Close the outline to build a report'}>
+          <FileText size={16} />
         </button>
         <button className="btn-primary" onClick={() => void exportPng()}>
           <Download size={15} /> <span className="hide-mobile">Export PNG</span>

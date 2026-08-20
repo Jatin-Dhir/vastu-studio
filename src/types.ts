@@ -1,7 +1,24 @@
 export interface Pt { x: number; y: number }
 
 export type Unit = 'ft' | 'm'
-export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north'
+export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker'
+
+export type MarkerKind = 'entrance' | 'kitchen' | 'toilet' | 'bed' | 'pooja' | 'water' | 'custom'
+
+export interface Marker {
+  id: string
+  kind: MarkerKind
+  label: string
+  p: Pt
+  note?: string
+}
+
+export interface ReportMeta {
+  client: string
+  address: string
+  practitioner: string
+  notes: string
+}
 export type CompassId = 'none' | 'zones16' | 'gates32' | 'chakra8' | 'grid9' | 'dial' | 'custom'
 export type BgKind = 'none' | 'raster' | 'dxf'
 export type ScaleSource = 'manual' | 'dxf' | 'map' | 'demo' | 'pdf' | null
@@ -55,4 +72,6 @@ export interface ProjectFile {
   northSource?: NorthSource
   compass: CompassState
   locked?: boolean
+  markers?: Marker[]
+  report?: ReportMeta
 }
