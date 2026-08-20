@@ -141,6 +141,16 @@ export function loadDemo() {
   s.toast('Sample plan loaded — scale preset. Tap corners to trace the boundary', 'ok')
 }
 
+/** A screenshot from Google/Apple Maps: north is up by convention; the scale bar calibrates it. */
+export async function importMapsScreenshot(file: File) {
+  await importFiles([file])
+  const s = useStore.getState()
+  if (s.bg.kind === 'raster') {
+    s.setNorth(0, 'manual')
+    s.toast('North assumed straight up — now tap BOTH ENDS of the screenshot’s scale bar, then enter its printed distance', 'info')
+  }
+}
+
 export async function importFromUrl(url: string, name: string) {
   const res = await fetch(url)
   if (!res.ok) throw new Error(`Could not fetch ${name}`)

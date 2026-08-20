@@ -5,6 +5,7 @@ import { Camera, Loader2, LocateFixed, Search } from 'lucide-react'
 import { Dialog } from './Dialogs'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
+import { importMapsScreenshot } from '../importFile'
 
 const SAT = {
   url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -23,14 +24,18 @@ const OSM = {
   credit: '© OpenStreetMap contributors',
 }
 
-/** Optional sharper imagery via the user's own free MapTiler key (stored only on this device). */
-const HD = (key: string) => ({
-  url: `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${key}`,
-  tile: (z: number, x: number, y: number) => `https://api.maptiler.com/tiles/satellite-v2/${z}/${x}/${y}.jpg?key=${key}`,
-  credit: '© MapTiler © Maxar',
-})
-const getMtKey = () => { try { return localStorage.getItem('vastu.maptilerKey') ?? '' } catch { return '' } }
-const setMtKey = (k: string) => { try { localStorage.setItem('vastu.maptilerKey', k.trim()) } catch { /* private mode */ } }
+/** Coordinates pasted directly, or inside a Google/Apple Maps link — the precision bridge:
+ *  find the plot in the app you like, copy the link or coordinates, paste here. */
+function parseCoords(text: string): { lat: number; lon: number } | null {
+  const t = text.trim()
+  const m =
+    t.match(/@(-?\d{1,2}(?:\.\d+)?),(-?\d{1,3}(?:\.\d+)?)/) ??
+    t.match(/[?&](?:q|query|ll|center)=(-?\d{1,2}(?:\.\d+)?)(?:%2C|,)\s*(-?\d{1,3}(?:\.\d+)?)/i) ??
+    t.match(/^(-?\d{1,2}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/)
+  if (!m) return null
+  const lat = parseFloat(m[1]), lon = parseFloat(m[2])
+  return Math.abs(lat) <= 90 && Math.abs(lon) <= 180 && (lat !== 0 || lon !== 0) ? { lat, lon } : null
+}
 
 interface Hit { name: string; lat: number; lon: number }
 
@@ -75,13 +80,9 @@ export function MapModal() {
   const layerRef = useRef<L.TileLayer | null>(null)
   const overlayRefs = useRef<L.TileLayer[]>([])
   const markerRef = useRef<L.CircleMarker | null>(null)
-  const [style, setStyle] = useState<'sat' | 'osm' | 'hd'>('sat')
-  const [hdAsk, setHdAsk] = useState(false)
-  const [hdKeyInput, setHdKeyInput] = useState('')
-  const provider = (st = style) =>
-    st === 'hd' && getMtKey() ? { ...HD(getMtKey()), native: 20 }
-      : st === 'osm' ? { ...OSM, native: 19 }
-        : { ...SAT, native: 19 }
+  const [style, setStyle] = useState<'sat' | 'osm'>('sat')
+  const provider = (st = style) => (st === 'osm' ? { ...OSM, native: 19 } : { ...SAT, native: 19 })
+  const shotRef = useRef<HTMLInputElement>(null)
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
   const [noResults, setNoResults] = useState(false)
@@ -138,6 +139,14 @@ export function MapModal() {
     setQ(text)
     setNoResults(false)
     window.clearTimeout(debounceRef.current)
+    // pasted coordinates or a Google/Apple Maps link jump straight there
+    const co = parseCoords(text)
+    if (co) {
+      setHits([])
+      goto({ name: `${co.lat.toFixed(5)}, ${co.lon.toFixed(5)}`, lat: co.lat, lon: co.lon })
+      useStore.getState().toast('Jumped to the pasted location', 'ok')
+      return
+    }
     if (text.trim().length < 3) { setHits([]); return }
     debounceRef.current = window.setTimeout(() => void runSearch(text), 450)
   }
@@ -255,7 +264,7 @@ export function MapModal() {
       <div className="map-search">
         <Search size={15} />
         <input
-          placeholder="Search a place, address or landmark…"
+          placeholder="Search, or paste a Google Maps link / lat, long…"
           value={q}
           onChange={(e) => search(e.target.value)}
           onKeyDown={(e) => {
@@ -290,11 +299,6 @@ export function MapModal() {
         <div className="seg">
           <button className={style === 'sat' ? 'on' : ''} onClick={() => setStyle('sat')}>Satellite</button>
           <button className={style === 'osm' ? 'on' : ''} onClick={() => setStyle('osm')}>Street</button>
-          <button className={style === 'hd' ? 'on' : ''}
-            title="Sharper imagery with your own free MapTiler key"
-            onClick={() => { if (getMtKey()) setStyle('hd'); else setHdAsk(true) }}>
-            HD
-          </button>
         </div>
         <span className="lbl dim">Zoom right into your plot — capture inherits scale & north automatically.</span>
         <button className="btn-primary" onClick={() => void capture()} disabled={capturing}>
@@ -302,20 +306,21 @@ export function MapModal() {
           {capturing ? 'Capturing…' : 'Capture view'}
         </button>
       </div>
-      {hdAsk && (
-        <div className="hd-key-row">
-          <span>Free key from <b>maptiler.com</b> → paste it here (stays on this device):</span>
-          <div className="hd-key-input">
-            <input value={hdKeyInput} placeholder="MapTiler API key"
-              onChange={(e) => setHdKeyInput(e.target.value)} />
-            <button className="btn-ghost" onClick={() => setHdAsk(false)}>Cancel</button>
-            <button className="btn-primary" disabled={hdKeyInput.trim().length < 8}
-              onClick={() => { setMtKey(hdKeyInput); setHdAsk(false); setStyle('hd') }}>
-              Use HD
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="map-alt">
+        Want Google-quality imagery? Screenshot your plot in Google/Apple Maps (keep it north-up,
+        include the scale bar), then
+        <button className="linkish" onClick={() => shotRef.current?.click()}> import the screenshot</button> —
+        you'll calibrate on its scale bar in two taps.
+        <input ref={shotRef} type="file" accept="image/*" hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0]
+            if (f) {
+              setMapOpen(false)
+              void importMapsScreenshot(f)
+            }
+            e.target.value = ''
+          }} />
+      </div>
       <div className="map-credit">{provider().credit} · Search © OpenStreetMap Nominatim</div>
     </Dialog>
   )

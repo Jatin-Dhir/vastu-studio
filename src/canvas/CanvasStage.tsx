@@ -74,6 +74,7 @@ export function CanvasStage() {
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
+  const [editDragging, setEditDragging] = useState(false)
   const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
@@ -246,8 +247,8 @@ export function CanvasStage() {
     d.lastX = e.clientX; d.lastY = e.clientY
     d.moved = false; d.pushed = false
     d.grabbed = toWorld(e.clientX, e.clientY)
-    if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx) }
-    else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx) }
+    if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true) }
+    else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true) }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
     else { d.mode = 'maybe-pan' }
@@ -365,6 +366,7 @@ export function CanvasStage() {
       commitView()
     }
     setLoupe(null)
+    setEditDragging(false)
     const d = drag.current
     const mode = d.mode
     const moved = d.moved
@@ -486,6 +488,11 @@ export function CanvasStage() {
 
   /* ---------- render helpers ---------- */
   const { k, rot } = view
+  // the compass steps aside while the outline itself is being drawn or reshaped
+  const editingOutline = tool === 'trace' || editDragging
+  const sceneCompass = editingOutline && compass.id !== 'none'
+    ? { ...compass, id: 'none' as const }
+    : compass
   const tracing = tool === 'trace' && !closed
   const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < CLOSE_PX / k
   const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
@@ -507,8 +514,8 @@ export function CanvasStage() {
       <g id="world" ref={worldRef}>
         <Scene
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
-          centerOverridden={!!centerOverride} highlightZone={highlightZone}
-          northDeg={northDeg} compass={compass} metersPerPx={metersPerPx} unit={unit}
+          centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
+          northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} idPrefix="live"
         />
 
