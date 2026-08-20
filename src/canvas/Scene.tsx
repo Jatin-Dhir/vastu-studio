@@ -17,6 +17,7 @@ export interface SceneProps {
   closed: boolean
   center: Pt | null
   centerOverridden?: boolean
+  highlightZone?: number | null
   R: number
   northDeg: number
   compass: CompassState
@@ -555,6 +556,19 @@ export function Scene(props: SceneProps) {
         {chakraProps && compass.id === 'grid9' && <Grid9 {...chakraProps} />}
         {chakraProps && compass.id === 'dial' && <Dial {...chakraProps} />}
       </g>
+      {/* tapped zone from the analysis panel, lit on the plan itself */}
+      {typeof props.highlightZone === 'number' && closed && center && R > 0 && (() => {
+        const z = ZONES16[props.highlightZone]
+        if (!z) return null
+        const a0 = northDeg - 11.25 + props.highlightZone * 22.5
+        const d = wedgePath(center, R * 1.6, a0, a0 + 22.5)
+        return (
+          <g clipPath={`url(#${idPrefix}-plotclip)`}>
+            <path d={d} fill={z.color} fillOpacity={0.42} />
+            <path d={d} fill="none" stroke={z.color} strokeWidth={2.5 / k} opacity={0.95} />
+          </g>
+        )
+      })()}
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} />
       {center && pts.length >= 3 && (

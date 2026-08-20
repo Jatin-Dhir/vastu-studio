@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, LocateFixed, Navigation, RotateCcw } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, perimeter, polygonArea, sampledPolygon, wedgeClip } from '../geometry'
@@ -145,6 +145,11 @@ function NorthRow() {
 function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg: number }) {
   const unit = useStore((s) => s.unit)
   const metersPerPx = useStore((s) => s.metersPerPx)
+  const open = useStore((s) => s.highlightZone)
+  const setOpen = useStore((s) => s.setHighlightZone)
+
+  // leaving the panel clears the on-plan highlight
+  useEffect(() => () => useStore.getState().setHighlightZone(null), [])
 
   const rows = useMemo(() => {
     const total = polygonArea(pts)
@@ -160,22 +165,49 @@ function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg:
   if (!rows) return null
   const maxPct = Math.max(...rows.map((r) => r.pct), 0.001)
   const evenX = Math.min(100, (6.25 / maxPct) * 100)
+  const strongest = rows.reduce((a, b) => (b.pct > a.pct ? b : a))
+  const weakest = rows.reduce((a, b) => (b.pct < a.pct ? b : a))
 
   return (
     <div className="zone-chart">
-      {rows.map((r) => (
-        <div key={r.key} className="zone-row"
-          title={`${r.name} — ${r.theme}${metersPerPx ? ` · ${formatArea(r.areaPx * metersPerPx * metersPerPx, unit)}` : ''}`}>
-          <span className="zone-chip" style={{ background: r.color }} />
-          <span className="zone-key">{r.key}</span>
-          <span className="zone-track">
-            <span className="zone-even" style={{ left: `${evenX}%` }} />
-            <span className="zone-bar" style={{ width: `${(r.pct / maxPct) * 100}%`, background: r.color }} />
-          </span>
-          <span className="zone-val">{r.pct.toFixed(1)}%</span>
-        </div>
-      ))}
-      <div className="zone-note">Tick marks the even share (6.25%). Hover a row for its theme.</div>
+      {rows.map((r, i) => {
+        const isOpen = open === i
+        const delta = r.pct - 6.25
+        return (
+          <div key={r.key} className={`zone-row-wrap ${isOpen ? 'open' : ''}`}>
+            <button className="zone-row" onClick={() => setOpen(isOpen ? null : i)}>
+              <span className="zone-chip" style={{ background: r.color }} />
+              <span className="zone-key">{r.key}</span>
+              <span className="zone-track">
+                <span className="zone-even" style={{ left: `${evenX}%` }} />
+                <span className="zone-bar" style={{ width: `${(r.pct / maxPct) * 100}%`, background: r.color }} />
+              </span>
+              <span className="zone-val">{r.pct.toFixed(1)}%</span>
+            </button>
+            {isOpen && (
+              <div className="zone-detail">
+                <div className="zone-detail-head">
+                  <b>{r.name}</b>
+                  <span className={`zone-delta ${delta >= 0 ? 'pos' : 'neg'}`}>
+                    {delta >= 0 ? '+' : ''}{delta.toFixed(1)}% vs even share
+                  </span>
+                </div>
+                <div className="zone-detail-theme">{r.theme}</div>
+                <div className="zone-detail-stats">
+                  {metersPerPx
+                    ? <>Area <b>{formatArea(r.areaPx * metersPerPx * metersPerPx, unit)}</b> · {r.pct.toFixed(2)}% of the plot</>
+                    : <>{r.pct.toFixed(2)}% of the plot — set the scale for real areas</>}
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+      <div className="zone-summary">
+        <span>Strongest <b style={{ color: strongest.color }}>{strongest.key}</b> {strongest.pct.toFixed(1)}%</span>
+        <span>Weakest <b style={{ color: weakest.color }}>{weakest.key}</b> {weakest.pct.toFixed(1)}%</span>
+      </div>
+      <div className="zone-note">Tap a zone to see it highlighted on the plan. Tick = even share (6.25%).</div>
     </div>
   )
 }

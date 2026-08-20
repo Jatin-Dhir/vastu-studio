@@ -145,7 +145,7 @@ export function SelectionChips() {
         <>
           <button className="chip" onClick={() => {
             const p1 = st.pts[selectedEdge], p2 = st.pts[(selectedEdge + 1) % st.pts.length]
-            st.insertPoint(selectedEdge + 1, edgePoint(p1, p2, st.bulges[selectedEdge] ?? 0, 0.5))
+            st.insertPointOnEdge(selectedEdge, edgePoint(p1, p2, st.bulges[selectedEdge] ?? 0, 0.5), 0.5)
             clear()
           }}>
             <Plus size={12} /> Add point

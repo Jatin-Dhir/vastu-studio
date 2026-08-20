@@ -179,6 +179,43 @@ export function outlinePathD(pts: Pt[], bulges: number[], closed: boolean): stri
   return d
 }
 
+/** Nearest point on the (possibly curved) edge p1→p2, with distance and param t (0..1). */
+export function nearestOnEdge(p: Pt, p1: Pt, p2: Pt, b: number): { d: number; point: Pt; t: number } {
+  const arc = arcFromBulge(p1, p2, b)
+  if (!arc) {
+    const dx = p2.x - p1.x, dy = p2.y - p1.y
+    const l2 = dx * dx + dy * dy
+    const t = l2 === 0 ? 0 : Math.max(0, Math.min(1, ((p.x - p1.x) * dx + (p.y - p1.y) * dy) / l2))
+    const point = { x: p1.x + t * dx, y: p1.y + t * dy }
+    return { d: dist(p, point), point, t }
+  }
+  const TWO_PI = Math.PI * 2
+  const ang = Math.atan2(p.y - arc.c.y, p.x - arc.c.x)
+  let delta = ang - arc.a1
+  if (arc.sweep > 0) {
+    delta = ((delta % TWO_PI) + TWO_PI) % TWO_PI
+    if (delta <= arc.sweep) {
+      const point = { x: arc.c.x + arc.R * Math.cos(ang), y: arc.c.y + arc.R * Math.sin(ang) }
+      return { d: Math.abs(dist(p, arc.c) - arc.R), point, t: delta / arc.sweep }
+    }
+  } else {
+    delta = ((delta % TWO_PI) - TWO_PI) % TWO_PI
+    if (delta >= arc.sweep) {
+      const point = { x: arc.c.x + arc.R * Math.cos(ang), y: arc.c.y + arc.R * Math.sin(ang) }
+      return { d: Math.abs(dist(p, arc.c) - arc.R), point, t: delta / arc.sweep }
+    }
+  }
+  const d1 = dist(p, p1), d2 = dist(p, p2)
+  return d1 <= d2 ? { d: d1, point: p1, t: 0 } : { d: d2, point: p2, t: 1 }
+}
+
+/** Split the bulge of an edge at param t into the two sub-edge bulges (arcs stay arcs). */
+export function splitBulge(b: number, t: number): [number, number] {
+  if (Math.abs(b) < 1e-4) return [0, 0]
+  const sweep = 4 * Math.atan(b)
+  return [Math.tan((sweep * t) / 4), Math.tan((sweep * (1 - t)) / 4)]
+}
+
 export function distToSegment(p: Pt, a: Pt, b: Pt): number {
   const dx = b.x - a.x, dy = b.y - a.y
   const l2 = dx * dx + dy * dy

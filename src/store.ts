@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { splitBulge } from './geometry'
 import type { BgState, CompassState, Pt, ProjectFile, ScaleSource, Tool, Unit, ViewState } from './types'
 
 export interface Toast {
@@ -53,7 +54,10 @@ export interface VastuStore {
   deletePoint: (i: number) => void
   popPoint: () => void
   setBulge: (i: number, b: number) => void
+  insertPointOnEdge: (edge: number, p: Pt, t: number) => void
   pushHistory: () => void
+  highlightZone: number | null
+  setHighlightZone: (i: number | null) => void
   closePolygon: () => void
   reopenPolygon: () => void
   clearOutline: () => void
@@ -196,7 +200,19 @@ export const useStore = create<VastuStore>()((set, get) => {
     },
     setBulge: (i, b) =>
       set((s) => ({ bulges: s.bulges.map((q, j) => (j === i ? b : q)) })),
+    insertPointOnEdge: (edge, p, t) => {
+      push()
+      set((s) => {
+        const [b1, b2] = splitBulge(s.bulges[edge] ?? 0, t)
+        const bulges = [...s.bulges]
+        bulges[edge] = b1
+        bulges.splice(edge + 1, 0, b2)
+        return { pts: [...s.pts.slice(0, edge + 1), p, ...s.pts.slice(edge + 1)], bulges }
+      })
+    },
     pushHistory: () => push(),
+    highlightZone: null,
+    setHighlightZone: (highlightZone) => set({ highlightZone }),
     closePolygon: () => {
       const s = get()
       if (s.pts.length < 3 || s.closed) return
@@ -214,7 +230,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       get().toast('Outline closed — centre located', 'ok')
     },
     reopenPolygon: () => { push(); set({ closed: false }) },
-    clearOutline: () => { push(); set({ pts: [], bulges: [], closed: false, centerOverride: null }) },
+    clearOutline: () => { push(); set({ pts: [], bulges: [], closed: false, centerOverride: null, highlightZone: null }) },
     setCenterOverride: (centerOverride) => set({ centerOverride }),
     setNorth: (northDeg) => set({ northDeg: ((northDeg % 360) + 360) % 360 }),
     setCompass: (c) => set((s) => ({ compass: { ...s.compass, ...c } })),

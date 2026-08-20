@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
-import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, polar, sampledPolygon } from '../geometry'
+import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon } from '../geometry'
 import { formatLen } from '../format'
 import type { Pt } from '../types'
 
@@ -17,6 +17,8 @@ const pushHistory = () =>
 
 /** One hint per session when geometry edits happen while the centre is pinned. */
 let warnedPinnedCenter = false
+/** Throttle for the closed-outline tracing hint. */
+let lastClosedHintAt = 0
 
 function snapPoint(prev: Pt, p: Pt): Pt {
   const dx = p.x - prev.x, dy = p.y - prev.y
@@ -63,6 +65,7 @@ export function CanvasStage() {
   const locked = useStore((s) => s.locked)
   const selectedVertex = useStore((s) => s.selectedVertex)
   const selectedEdge = useStore((s) => s.selectedEdge)
+  const highlightZone = useStore((s) => s.highlightZone)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
@@ -294,7 +297,30 @@ export function CanvasStage() {
 
     switch (s.tool) {
       case 'trace': {
-        if (s.closed) break
+        if (s.closed) {
+          // tapping an edge of the closed outline inserts a point exactly there
+          const n = s.pts.length
+          let bi = -1, bt = 0, bp: Pt | null = null
+          let bd = (COARSE ? 22 : 12) / k
+          for (let i = 0; i < n; i++) {
+            const r = nearestOnEdge(world, s.pts[i], s.pts[(i + 1) % n], s.bulges[i] ?? 0)
+            if (r.d < bd) { bd = r.d; bi = i; bt = r.t; bp = r.point }
+          }
+          if (bi >= 0 && bp && bt > 0.02 && bt < 0.98) {
+            s.insertPointOnEdge(bi, bp, bt)
+            s.setSelection({ vertex: bi + 1, edge: null })
+            s.toast('Point added — drag it to shape the wall', 'ok')
+          } else if (Date.now() - lastClosedHintAt > 5000) {
+            lastClosedHintAt = Date.now()
+            s.toast('Outline is closed — tap on an edge to add a point there', 'info', 'Reopen to extend', () => {
+              const s2 = useStore.getState()
+              s2.reopenPolygon()
+              s2.setTool('trace')
+              s2.toast('Outline reopened — new points continue from the last corner. Tap the ✓ to close again', 'info')
+            })
+          }
+          break
+        }
         if (s.pts.length >= 3 && dist(world, s.pts[0]) < CLOSE_PX / k) { s.closePolygon(); break }
         let p = world
         if (s.angleSnap && s.pts.length > 0) p = snapPoint(s.pts[s.pts.length - 1], p)
@@ -384,7 +410,7 @@ export function CanvasStage() {
       <g id="world" transform={`translate(${tx} ${ty}) scale(${k})`}>
         <Scene
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
-          centerOverridden={!!centerOverride}
+          centerOverridden={!!centerOverride} highlightZone={highlightZone}
           northDeg={northDeg} compass={compass} metersPerPx={metersPerPx} unit={unit}
           k={k} showEdgeLabels={showEdgeLabels} idPrefix="live"
         />
