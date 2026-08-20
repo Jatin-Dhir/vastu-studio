@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { splitBulge } from './geometry'
-import type { BgState, CompassState, Pt, ProjectFile, ScaleSource, Tool, Unit, ViewState } from './types'
+import type { BgState, CompassState, NorthSource, Pt, ProjectFile, ScaleSource, Tool, Unit, ViewState } from './types'
 
 export interface Toast {
   id: number
@@ -22,6 +22,7 @@ export interface VastuStore {
   closed: boolean
   centerOverride: Pt | null
   northDeg: number
+  northSource: NorthSource
   compass: CompassState
   tool: Tool
   view: ViewState
@@ -62,7 +63,7 @@ export interface VastuStore {
   reopenPolygon: () => void
   clearOutline: () => void
   setCenterOverride: (p: Pt | null) => void
-  setNorth: (deg: number) => void
+  setNorth: (deg: number, source?: NorthSource) => void
   setCompass: (c: Partial<CompassState>) => void
   setCal: (a: Pt | null, b: Pt | null) => void
   setNorthA: (p: Pt | null) => void
@@ -117,9 +118,10 @@ export const useStore = create<VastuStore>()((set, get) => {
     closed: false,
     centerOverride: null,
     northDeg: 0,
+    northSource: null,
     compass: { ...DEFAULT_COMPASS },
     tool: 'select',
-    view: { tx: 0, ty: 0, k: 1 },
+    view: { tx: 0, ty: 0, k: 1, rot: 0 },
     calA: null,
     calB: null,
     northA: null,
@@ -232,7 +234,8 @@ export const useStore = create<VastuStore>()((set, get) => {
     reopenPolygon: () => { push(); set({ closed: false }) },
     clearOutline: () => { push(); set({ pts: [], bulges: [], closed: false, centerOverride: null, highlightZone: null }) },
     setCenterOverride: (centerOverride) => set({ centerOverride }),
-    setNorth: (northDeg) => set({ northDeg: ((northDeg % 360) + 360) % 360 }),
+    setNorth: (northDeg, source = 'manual') =>
+      set({ northDeg: ((northDeg % 360) + 360) % 360, northSource: source }),
     setCompass: (c) => set((s) => ({ compass: { ...s.compass, ...c } })),
     setCal: (calA, calB) => set({ calA, calB }),
     setNorthA: (northA) => set({ northA }),

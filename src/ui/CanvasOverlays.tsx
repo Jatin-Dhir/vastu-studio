@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Lock, LockOpen, Navigation, Plus, Spline, Trash2, X } from 'lucide-react'
+import { Check, Lock, LockOpen, Navigation, Plus, RotateCcw, Spline, Trash2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { edgePoint } from '../geometry'
 import { NorthDial } from './NorthDial'
@@ -90,6 +90,47 @@ export function QuickBar() {
   )
 }
 
+/** View rotation control — twist with two fingers, or use these buttons. */
+export function RotateChip() {
+  const hasBg = useStore((s) => s.bg.kind !== 'none')
+  const rot = useStore((s) => s.view.rot)
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+    }
+    window.addEventListener('pointerdown', onDown)
+    return () => window.removeEventListener('pointerdown', onDown)
+  }, [open])
+
+  if (!hasBg) return null
+  const send = (detail: { delta?: number; set?: number }) =>
+    window.dispatchEvent(new CustomEvent('vastu:rotate', { detail }))
+  const shown = Math.round((((rot % 360) + 540) % 360 - 180) * 10) / 10
+
+  return (
+    <div className="rotate-chip" ref={ref}>
+      <button className={`qpill ${shown !== 0 ? 'on' : ''}`} onClick={() => setOpen(!open)}
+        title="Rotate the view (or twist with two fingers)">
+        <RotateCcw size={12} /> {shown}°
+      </button>
+      {open && (
+        <div className="rotate-pop">
+          {[-90, -15, 15, 90].map((d) => (
+            <button key={d} className="chip" onClick={() => send({ delta: d })}>
+              {d > 0 ? `+${d}` : d}°
+            </button>
+          ))}
+          <button className="chip" onClick={() => { send({ set: 0 }); setOpen(false) }}>Straighten</button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** One-tap close button while tracing — no need to hit the first point precisely. */
 export function CloseChip() {
   const tool = useStore((s) => s.tool)
@@ -124,8 +165,10 @@ export function SelectionChips() {
   }
   if (!world) return null
 
-  const sx = world.x * view.k + view.tx
-  const sy = world.y * view.k + view.ty
+  const rad = (view.rot * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const sx = view.tx + view.k * (world.x * cos - world.y * sin)
+  const sy = view.ty + view.k * (world.x * sin + world.y * cos)
   const clear = () => st.setSelection({ vertex: null, edge: null })
 
   return (

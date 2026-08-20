@@ -23,6 +23,15 @@ const OSM = {
   credit: '© OpenStreetMap contributors',
 }
 
+/** Optional sharper imagery via the user's own free MapTiler key (stored only on this device). */
+const HD = (key: string) => ({
+  url: `https://api.maptiler.com/tiles/satellite-v2/{z}/{x}/{y}.jpg?key=${key}`,
+  tile: (z: number, x: number, y: number) => `https://api.maptiler.com/tiles/satellite-v2/${z}/${x}/${y}.jpg?key=${key}`,
+  credit: '© MapTiler © Maxar',
+})
+const getMtKey = () => { try { return localStorage.getItem('vastu.maptilerKey') ?? '' } catch { return '' } }
+const setMtKey = (k: string) => { try { localStorage.setItem('vastu.maptilerKey', k.trim()) } catch { /* private mode */ } }
+
 interface Hit { name: string; lat: number; lon: number }
 
 /** Query Nominatim and Photon in parallel and merge — better coverage for partial and local names.
@@ -66,7 +75,13 @@ export function MapModal() {
   const layerRef = useRef<L.TileLayer | null>(null)
   const overlayRefs = useRef<L.TileLayer[]>([])
   const markerRef = useRef<L.CircleMarker | null>(null)
-  const [style, setStyle] = useState<'sat' | 'osm'>('sat')
+  const [style, setStyle] = useState<'sat' | 'osm' | 'hd'>('sat')
+  const [hdAsk, setHdAsk] = useState(false)
+  const [hdKeyInput, setHdKeyInput] = useState('')
+  const provider = (st = style) =>
+    st === 'hd' && getMtKey() ? { ...HD(getMtKey()), native: 20 }
+      : st === 'osm' ? { ...OSM, native: 19 }
+        : { ...SAT, native: 19 }
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Hit[]>([])
   const [noResults, setNoResults] = useState(false)
@@ -94,12 +109,14 @@ export function MapModal() {
     layerRef.current?.remove()
     overlayRefs.current.forEach((l) => l.remove())
     overlayRefs.current = []
-    const cfg = style === 'sat' ? SAT : OSM
-    const opts = { maxZoom: 21, maxNativeZoom: 19, crossOrigin: 'anonymous' as const }
+    const cfg = provider()
+    const opts = { maxZoom: 21, maxNativeZoom: cfg.native, crossOrigin: 'anonymous' as const }
     layerRef.current = L.tileLayer(cfg.url, opts).addTo(map)
-    if (style === 'sat') {
-      overlayRefs.current = SAT_OVERLAYS.map((url) => L.tileLayer(url, opts).addTo(map))
+    if (style !== 'osm') {
+      const ovOpts = { maxZoom: 21, maxNativeZoom: 19, crossOrigin: 'anonymous' as const }
+      overlayRefs.current = SAT_OVERLAYS.map((url) => L.tileLayer(url, ovOpts).addTo(map))
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [style])
 
   const runSearch = async (text: string) => {
@@ -143,10 +160,10 @@ export function MapModal() {
     if (!map || capturing) return
     setCapturing(true)
     try {
-      const cfg = style === 'sat' ? SAT : OSM
+      const cfg = provider()
       const z = Math.round(map.getZoom())
       const b = map.getBounds()
-      let tz = Math.min(19, z + 2)
+      let tz = Math.min(cfg.native, z + 2)
       let nw = map.project(b.getNorthWest(), tz)
       let se = map.project(b.getSouthEast(), tz)
       while (Math.max(se.x - nw.x, se.y - nw.y) > 4200 && tz > z) {
@@ -204,7 +221,7 @@ export function MapModal() {
         },
         metersPerPx, 'map',
       )
-      s.setNorth(0) // satellite/street tiles are true-north-up
+      s.setNorth(0, 'map') // satellite/street tiles are true-north-up
       s.setTool('trace')
       s.setMapOpen(false)
       requestFit()
@@ -273,14 +290,33 @@ export function MapModal() {
         <div className="seg">
           <button className={style === 'sat' ? 'on' : ''} onClick={() => setStyle('sat')}>Satellite</button>
           <button className={style === 'osm' ? 'on' : ''} onClick={() => setStyle('osm')}>Street</button>
+          <button className={style === 'hd' ? 'on' : ''}
+            title="Sharper imagery with your own free MapTiler key"
+            onClick={() => { if (getMtKey()) setStyle('hd'); else setHdAsk(true) }}>
+            HD
+          </button>
         </div>
-        <span className="lbl dim">Zoom right into your plot — the capture inherits real-world scale.</span>
+        <span className="lbl dim">Zoom right into your plot — capture inherits scale & north automatically.</span>
         <button className="btn-primary" onClick={() => void capture()} disabled={capturing}>
           {capturing ? <Loader2 size={15} className="spin" /> : <Camera size={15} />}
           {capturing ? 'Capturing…' : 'Capture view'}
         </button>
       </div>
-      <div className="map-credit">{style === 'sat' ? SAT.credit : OSM.credit} · Search © OpenStreetMap Nominatim</div>
+      {hdAsk && (
+        <div className="hd-key-row">
+          <span>Free key from <b>maptiler.com</b> → paste it here (stays on this device):</span>
+          <div className="hd-key-input">
+            <input value={hdKeyInput} placeholder="MapTiler API key"
+              onChange={(e) => setHdKeyInput(e.target.value)} />
+            <button className="btn-ghost" onClick={() => setHdAsk(false)}>Cancel</button>
+            <button className="btn-primary" disabled={hdKeyInput.trim().length < 8}
+              onClick={() => { setMtKey(hdKeyInput); setHdAsk(false); setStyle('hd') }}>
+              Use HD
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="map-credit">{provider().credit} · Search © OpenStreetMap Nominatim</div>
     </Dialog>
   )
 }

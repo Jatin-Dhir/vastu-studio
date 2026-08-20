@@ -793,6 +793,55 @@ kbd {
 
 .lock-btn.locked { color: #F09A92; background: rgba(226,87,76,0.12); }
 
+.rotate-chip {
+  position: absolute;
+  left: 14px; top: 12px;
+  z-index: 21;
+  display: flex; flex-direction: column; gap: 6px; align-items: flex-start;
+}
+.rotate-chip > .qpill {
+  background: var(--panel);
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  backdrop-filter: blur(14px);
+  box-shadow: var(--shadow);
+  font-variant-numeric: tabular-nums;
+}
+.rotate-pop {
+  display: flex; gap: 5px;
+  padding: 7px;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke-2);
+  border-radius: 11px;
+  box-shadow: var(--shadow);
+  animation: tipIn 0.14s ease;
+}
+
+.rail-btn.danger:hover { background: rgba(226,87,76,0.14); color: #F09A92; }
+
+.hd-key-row {
+  margin-top: 10px;
+  padding: 10px 12px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--stroke-2);
+  border-radius: 10px;
+  font-size: 12px;
+  color: var(--muted);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.hd-key-row b { color: var(--gold-2); }
+.hd-key-input { display: flex; gap: 7px; }
+.hd-key-input input {
+  flex: 1; min-width: 0;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--stroke-2);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--text);
+  font-size: 12.5px;
+  outline: none;
+}
+
 .map-locate {
   position: absolute;
   right: 10px; top: 10px;

@@ -1,4 +1,4 @@
-import { Crosshair, Map as MapIcon, MousePointer2, Navigation, PenLine, Ruler, Upload } from 'lucide-react'
+import { Crosshair, Map as MapIcon, MousePointer2, Navigation, PenLine, Ruler, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
 import type { Tool } from '../types'
 
@@ -35,6 +35,15 @@ export function ToolRail() {
       <button className="rail-btn" data-tip="Import from Maps"
         onClick={() => setMapOpen(true)}>
         <MapIcon size={17} />
+      </button>
+      <div className="hsep" />
+      <button className="rail-btn danger" data-tip="Start fresh — clears plan, outline & scale"
+        onClick={() => {
+          useStore.getState().toast('Clear the plan, outline and scale?', 'warn', 'Clear everything', () => {
+            window.dispatchEvent(new CustomEvent('vastu:reset'))
+          })
+        }}>
+        <Trash2 size={17} />
       </button>
     </div>
   )

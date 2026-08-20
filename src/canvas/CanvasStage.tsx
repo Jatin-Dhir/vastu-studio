@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon } from '../geometry'
 import { formatLen } from '../format'
-import type { Pt } from '../types'
+import type { Pt, ViewState } from '../types'
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
 const CLOSE_PX = COARSE ? 20 : 13
@@ -19,6 +19,8 @@ const pushHistory = () =>
 let warnedPinnedCenter = false
 /** Throttle for the closed-outline tracing hint. */
 let lastClosedHintAt = 0
+
+const norm180 = (a: number) => ((a % 360) + 540) % 360 - 180
 
 function snapPoint(prev: Pt, p: Pt): Pt {
   const dx = p.x - prev.x, dy = p.y - prev.y
@@ -37,6 +39,8 @@ interface DragState {
   idx: number
   startX: number
   startY: number
+  lastX: number
+  lastY: number
   moved: boolean
   pushed: boolean
   grabbed: Pt | null
@@ -47,6 +51,7 @@ interface LoupeState { mode: 'vertex' | 'center' | 'calA' | 'calB' | 'bulge'; id
 
 export function CanvasStage() {
   const svgRef = useRef<SVGSVGElement>(null)
+  const worldRef = useRef<SVGGElement>(null)
   const bg = useStore((s) => s.bg)
   const pts = useStore((s) => s.pts)
   const bulges = useStore((s) => s.bulges)
@@ -69,9 +74,31 @@ export function CanvasStage() {
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, moved: false, pushed: false, grabbed: null })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
-  const lastPinch = useRef<{ d: number; mx: number; my: number } | null>(null)
+  const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
+
+  /* ---------- gesture-speed view: DOM transform now, store commit at rest ---------- */
+  const viewRef = useRef<ViewState>(useStore.getState().view)
+  const commitTimer = useRef(0)
+
+  const applyDom = () => {
+    const v = viewRef.current
+    worldRef.current?.setAttribute('transform', `translate(${v.tx} ${v.ty}) scale(${v.k}) rotate(${v.rot})`)
+  }
+  const setViewLive = (v: ViewState) => { viewRef.current = v; applyDom() }
+  const commitView = () => {
+    window.clearTimeout(commitTimer.current)
+    useStore.getState().setView(viewRef.current)
+  }
+  const commitViewDebounced = (ms = 150) => {
+    window.clearTimeout(commitTimer.current)
+    commitTimer.current = window.setTimeout(commitView, ms)
+  }
+
+  // external view changes (fit, project load) flow into the ref; every render re-asserts the DOM transform
+  useEffect(() => { viewRef.current = view }, [view])
+  useLayoutEffect(() => { applyDom() })
 
   const dxf = useMemo<DxfImport | null>(() => {
     if (bg.kind !== 'dxf' || !bg.dxfText) return null
@@ -90,8 +117,31 @@ export function CanvasStage() {
 
   const toWorld = (clientX: number, clientY: number): Pt => {
     const rect = svgRef.current!.getBoundingClientRect()
-    const { tx, ty, k } = useStore.getState().view
-    return { x: (clientX - rect.left - tx) / k, y: (clientY - rect.top - ty) / k }
+    const { tx, ty, k, rot } = viewRef.current
+    const qx = (clientX - rect.left - tx) / k
+    const qy = (clientY - rect.top - ty) / k
+    const rad = (-rot * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    return { x: qx * cos - qy * sin, y: qx * sin + qy * cos }
+  }
+
+  /** Rotate the view by dDeg around a screen point (defaults to the viewport centre). */
+  const rotateViewAbout = (dDeg: number, m?: { x: number; y: number }) => {
+    const svg = svgRef.current
+    if (!svg) return
+    const rect = svg.getBoundingClientRect()
+    const mx = m?.x ?? rect.width / 2
+    const my = m?.y ?? rect.height / 2
+    const v = viewRef.current
+    const rad = (dDeg * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const dx = v.tx - mx, dy = v.ty - my
+    setViewLive({
+      tx: mx + dx * cos - dy * sin,
+      ty: my + dx * sin + dy * cos,
+      k: v.k,
+      rot: v.rot + dDeg,
+    })
   }
 
   /* ---------- fit view ---------- */
@@ -112,17 +162,39 @@ export function CanvasStage() {
     const padB = mobile ? 150 : 28
     const availW = Math.max(120, rect.width - padL - padR)
     const availH = Math.max(120, rect.height - padT - padB)
-    const w = b.maxX - b.minX, h = b.maxY - b.minY
-    const k = Math.min(availW / w, availH / h) * 0.95
-    const tx = padL + (availW - w * k) / 2 - b.minX * k
-    const ty = padT + (availH - h * k) / 2 - b.minY * k
-    useStore.getState().setView({ tx, ty, k })
+    // fit the ROTATED footprint of the content
+    const rot = viewRef.current.rot
+    const rad = (rot * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    const corners = [
+      { x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY },
+      { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY },
+    ].map((p) => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos }))
+    const rminX = Math.min(...corners.map((p) => p.x)), rmaxX = Math.max(...corners.map((p) => p.x))
+    const rminY = Math.min(...corners.map((p) => p.y)), rmaxY = Math.max(...corners.map((p) => p.y))
+    const rw = rmaxX - rminX, rh = rmaxY - rminY
+    const k = Math.min(availW / rw, availH / rh) * 0.95
+    const tx = padL + (availW - rw * k) / 2 - rminX * k
+    const ty = padT + (availH - rh * k) / 2 - rminY * k
+    setViewLive({ tx, ty, k, rot })
+    commitView()
   }
 
   useEffect(() => {
     const onFit = () => fitView()
+    const onRotate = (e: Event) => {
+      const detail = (e as CustomEvent).detail ?? {}
+      if (typeof detail.set === 'number') rotateViewAbout(norm180(detail.set - viewRef.current.rot))
+      else if (typeof detail.delta === 'number') rotateViewAbout(detail.delta)
+      commitView()
+    }
     window.addEventListener('vastu:fit', onFit)
-    return () => window.removeEventListener('vastu:fit', onFit)
+    window.addEventListener('vastu:rotate', onRotate)
+    return () => {
+      window.removeEventListener('vastu:fit', onFit)
+      window.removeEventListener('vastu:rotate', onRotate)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {
@@ -136,16 +208,22 @@ export function CanvasStage() {
     if (!svg) return
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const s = useStore.getState()
-      const { tx, ty, k } = s.view
+      const v = viewRef.current
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left, my = e.clientY - rect.top
       const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.006 : 0.0016))
-      const nk = Math.min(60, Math.max(0.02, k * factor))
-      s.setView({ tx: mx - ((mx - tx) * nk) / k, ty: my - ((my - ty) * nk) / k, k: nk })
+      const nk = Math.min(60, Math.max(0.02, v.k * factor))
+      setViewLive({
+        tx: mx - ((mx - v.tx) * nk) / v.k,
+        ty: my - ((my - v.ty) * nk) / v.k,
+        k: nk,
+        rot: v.rot,
+      })
+      commitViewDebounced()
     }
     svg.addEventListener('wheel', onWheel, { passive: false })
     return () => svg.removeEventListener('wheel', onWheel)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   /* ---------- pointer handlers ---------- */
@@ -164,7 +242,9 @@ export function CanvasStage() {
     const bidx = target?.getAttribute('data-bidx')
     const role = target?.getAttribute('data-role')
     const d = drag.current
-    d.startX = e.clientX; d.startY = e.clientY; d.moved = false; d.pushed = false
+    d.startX = e.clientX; d.startY = e.clientY
+    d.lastX = e.clientX; d.lastY = e.clientY
+    d.moved = false; d.pushed = false
     d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx) }
@@ -182,38 +262,48 @@ export function CanvasStage() {
     if (pointers.current.has(e.pointerId)) {
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     }
-    // pinch
+    // pinch: zoom + pan + (after intent) twist-to-rotate — all direct to the DOM
     if (pointers.current.size === 2) {
       const [p1, p2] = [...pointers.current.values()]
       const dpx = Math.hypot(p2.x - p1.x, p2.y - p1.y)
+      const angNow = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI
       const rect = svgRef.current!.getBoundingClientRect()
       const mx = (p1.x + p2.x) / 2 - rect.left
       const my = (p1.y + p2.y) / 2 - rect.top
       const lp = lastPinch.current
       if (lp) {
-        const { tx, ty, k } = s.view
-        const nk = Math.min(60, Math.max(0.02, (k * dpx) / lp.d))
-        let ntx = mx - ((mx - tx) * nk) / k
-        let nty = my - ((my - ty) * nk) / k
+        const v = viewRef.current
+        const nk = Math.min(60, Math.max(0.02, (v.k * dpx) / lp.d))
+        let ntx = mx - ((mx - v.tx) * nk) / v.k
+        let nty = my - ((my - v.ty) * nk) / v.k
         ntx += mx - lp.mx; nty += my - lp.my
-        s.setView({ tx: ntx, ty: nty, k: nk })
+        setViewLive({ tx: ntx, ty: nty, k: nk, rot: v.rot })
+        const dAng = norm180(angNow - lp.ang)
+        lp.twist += dAng
+        if (!lp.rotating && Math.abs(lp.twist) > 8) lp.rotating = true
+        if (lp.rotating && dAng !== 0) rotateViewAbout(dAng, { x: mx, y: my })
+        lp.d = dpx; lp.mx = mx; lp.my = my; lp.ang = angNow
+      } else {
+        lastPinch.current = { d: dpx, mx, my, ang: angNow, twist: 0, rotating: false }
       }
-      lastPinch.current = { d: dpx, mx, my }
       return
     }
     const d = drag.current
     const world = toWorld(e.clientX, e.clientY)
-    setCursor(world)
+    const needCursor = s.tool === 'calibrate' || s.tool === 'north' || (s.tool === 'trace' && !s.closed)
+    if (needCursor) setCursor(world)
     if (d.mode === 'idle') return
     const movedPx = Math.hypot(e.clientX - d.startX, e.clientY - d.startY)
     if (movedPx > 4) d.moved = true
 
     if (d.mode === 'maybe-pan' && d.moved) d.mode = 'pan'
     if (d.mode === 'pan') {
-      const { tx, ty, k } = s.view
-      s.setView({ tx: tx + e.movementX, ty: ty + e.movementY, k })
+      const v = viewRef.current
+      setViewLive({ tx: v.tx + (e.clientX - d.lastX), ty: v.ty + (e.clientY - d.lastY), k: v.k, rot: v.rot })
+      d.lastX = e.clientX; d.lastY = e.clientY
       return
     }
+    d.lastX = e.clientX; d.lastY = e.clientY
     if (d.mode === 'vertex' && d.moved) {
       if (!d.pushed) {
         pushHistory(); d.pushed = true
@@ -259,7 +349,7 @@ export function CanvasStage() {
         let b = bulgeFromMid(p1, p2, world)
         const chord = dist(p1, p2)
         // snap back to straight when the sagitta is a few screen px
-        if (Math.abs((b * chord) / 2) < 5 / s.view.k) b = 0
+        if (Math.abs((b * chord) / 2) < 5 / viewRef.current.k) b = 0
         s.setBulge(d.idx, b)
       }
     }
@@ -267,18 +357,25 @@ export function CanvasStage() {
 
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     pointers.current.delete(e.pointerId)
-    if (pointers.current.size < 2) lastPinch.current = null
+    if (pointers.current.size < 2 && lastPinch.current) {
+      // pinch ended: settle a near-level tilt back to 0, then commit
+      lastPinch.current = null
+      const r = norm180(viewRef.current.rot)
+      if (r !== 0 && Math.abs(r) < 3) rotateViewAbout(-r)
+      commitView()
+    }
     setLoupe(null)
     const d = drag.current
     const mode = d.mode
     const moved = d.moved
     d.mode = 'idle'
+    if (mode === 'pan') commitView()
     if (e.button === 2 || moved) return
     if (pointers.current.size > 0) return
 
     const s = useStore.getState()
     const world = toWorld(e.clientX, e.clientY)
-    const k = s.view.k
+    const k = viewRef.current.k
 
     if (mode === 'vertex') {
       if (s.tool === 'trace' && !s.closed && d.idx === 0 && s.pts.length >= 3) s.closePolygon()
@@ -346,7 +443,7 @@ export function CanvasStage() {
           s.toast('Now tap the TIP of the north arrow', 'info')
         } else if (dist(s.northA, world) > 3 / k) {
           const deg = Math.round(angleOf(s.northA, world) * 2) / 2
-          s.setNorth(deg)
+          s.setNorth(deg, 'plan')
           s.setNorthA(null)
           s.setTool('select')
           s.toast(`North aligned to the plan — ${deg}°`, 'ok')
@@ -362,9 +459,9 @@ export function CanvasStage() {
 
   const onDblClick = (e: React.MouseEvent<SVGSVGElement>) => {
     const s = useStore.getState()
-    if (s.tool !== 'select' || s.pts.length < 2) return
+    if (s.locked || s.tool !== 'select' || s.pts.length < 2) return
     const world = toWorld(e.clientX, e.clientY)
-    const k = s.view.k
+    const k = viewRef.current.k
     const n = s.pts.length
     const count = s.closed ? n : n - 1
     let best = -1, bestD = 9 / k
@@ -388,7 +485,7 @@ export function CanvasStage() {
   }
 
   /* ---------- render helpers ---------- */
-  const { tx, ty, k } = view
+  const { k, rot } = view
   const tracing = tool === 'trace' && !closed
   const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < CLOSE_PX / k
   const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
@@ -407,12 +504,12 @@ export function CanvasStage() {
       onDoubleClick={onDblClick}
       onContextMenu={onContextMenu}
     >
-      <g id="world" transform={`translate(${tx} ${ty}) scale(${k})`}>
+      <g id="world" ref={worldRef}>
         <Scene
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
           centerOverridden={!!centerOverride} highlightZone={highlightZone}
           northDeg={northDeg} compass={compass} metersPerPx={metersPerPx} unit={unit}
-          k={k} showEdgeLabels={showEdgeLabels} idPrefix="live"
+          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} idPrefix="live"
         />
 
         {/* live trace segment */}
@@ -423,6 +520,7 @@ export function CanvasStage() {
             {metersPerPx && (
               <text x={liveTo.x + 14 / k} y={liveTo.y - 12 / k} fontSize={11.5 / k}
                 fontFamily={FONT} fontWeight={600} fill="#F3E9CF"
+                transform={`rotate(${-rot} ${liveTo.x} ${liveTo.y})`}
                 stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                 {formatLen(dist(pts[pts.length - 1], liveTo) * metersPerPx, unit)}
               </text>
@@ -462,6 +560,7 @@ export function CanvasStage() {
                   )}
                   <text x={mid.x} y={mid.y - 14 / k} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
                     fill="#BFEDF2" textAnchor="middle"
+                    transform={`rotate(${-rot} ${mid.x} ${mid.y})`}
                     stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                     {metersPerPx ? formatLen(L * metersPerPx, unit) : `${L.toFixed(0)} px`}
                   </text>
@@ -486,7 +585,8 @@ export function CanvasStage() {
                   stroke="#F26B57" strokeWidth={2.4 / k} fill="none" strokeLinecap="round" />
                 <circle cx={northA.x} cy={northA.y} r={4 / k} fill="#F26B57" stroke="#FFF" strokeWidth={1.2 / k} />
                 <text x={tip.x + 16 / k} y={tip.y - 10 / k} fontSize={12 / k} fontWeight={700}
-                  fill="#FFD9D2" stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
+                  fill="#FFD9D2" transform={`rotate(${-rot} ${tip.x} ${tip.y})`}
+                  stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                   {deg.toFixed(1)}°
                 </text>
               </g>
@@ -552,27 +652,30 @@ export function CanvasStage() {
           wp = p1 && p2 ? edgePoint(p1, p2, s.bulges[loupe.idx] ?? 0, 0.5) : null
         }
         if (!wp) return null
-        const sx = wp.x * k + tx
-        const sy = wp.y * k + ty
-        const R = 62, MAG = 2.4, M = 16
+        const v = viewRef.current
+        const rad = (v.rot * Math.PI) / 180
+        const cosR = Math.cos(rad), sinR = Math.sin(rad)
+        const sx = v.tx + v.k * (wp.x * cosR - wp.y * sinR)
+        const sy = v.ty + v.k * (wp.x * sinR + wp.y * cosR)
+        const R2 = 62, MAG = 2.4, M = 16
         const svgW = svgRef.current?.clientWidth ?? 400
-        const nearLeft = sx < R * 2 + M * 2 && sy < R * 2 + M * 2
-        const cx = nearLeft ? svgW - R - M : R + M
-        const cy = R + M
+        const nearLeft = sx < R2 * 2 + M * 2 && sy < R2 * 2 + M * 2
+        const cx = nearLeft ? svgW - R2 - M : R2 + M
+        const cy = R2 + M
         return (
           <g pointerEvents="none">
             <defs>
-              <clipPath id="loupe-clip"><circle cx={cx} cy={cy} r={R} /></clipPath>
+              <clipPath id="loupe-clip"><circle cx={cx} cy={cy} r={R2} /></clipPath>
             </defs>
-            <circle cx={cx + 2} cy={cy + 4} r={R + 3} fill="rgba(0,0,0,0.45)" />
-            <circle cx={cx} cy={cy} r={R + 2.5} fill="#0B0C10" />
+            <circle cx={cx + 2} cy={cy + 4} r={R2 + 3} fill="rgba(0,0,0,0.45)" />
+            <circle cx={cx} cy={cy} r={R2 + 2.5} fill="#0B0C10" />
             <g clipPath="url(#loupe-clip)">
-              <rect x={cx - R} y={cy - R} width={R * 2} height={R * 2} fill="#101318" />
+              <rect x={cx - R2} y={cy - R2} width={R2 * 2} height={R2 * 2} fill="#101318" />
               <use href="#world" transform={`translate(${cx - MAG * sx} ${cy - MAG * sy}) scale(${MAG})`} />
             </g>
             <line x1={cx - 11} y1={cy} x2={cx + 11} y2={cy} stroke="#F26B57" strokeWidth={1.4} />
             <line x1={cx} y1={cy - 11} x2={cx} y2={cy + 11} stroke="#F26B57" strokeWidth={1.4} />
-            <circle cx={cx} cy={cy} r={R + 2.5} fill="none" stroke={GOLD} strokeWidth={2} />
+            <circle cx={cx} cy={cy} r={R2 + 2.5} fill="none" stroke={GOLD} strokeWidth={2} />
           </g>
         )
       })()}

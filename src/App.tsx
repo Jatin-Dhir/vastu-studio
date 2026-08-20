@@ -9,7 +9,7 @@ import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
-import { CloseChip, QuickBar, SelectionChips } from './ui/CanvasOverlays'
+import { CloseChip, QuickBar, RotateChip, SelectionChips } from './ui/CanvasOverlays'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { formatLen, formatScale } from './format'
@@ -67,8 +67,17 @@ export default function App() {
   /* file picker trigger */
   useEffect(() => {
     const open = () => fileRef.current?.click()
+    const reset = () => {
+      clearAutosave()
+      useStore.getState().loadProject(EMPTY_PROJECT)
+      useStore.getState().toast('Cleared — start with a fresh import', 'ok')
+    }
     window.addEventListener('vastu:open-file', open)
-    return () => window.removeEventListener('vastu:open-file', open)
+    window.addEventListener('vastu:reset', reset)
+    return () => {
+      window.removeEventListener('vastu:open-file', open)
+      window.removeEventListener('vastu:reset', reset)
+    }
   }, [])
 
   /* keyboard */
@@ -175,6 +184,7 @@ export default function App() {
       <div className="stage-wrap">
         <CanvasStage />
         <QuickBar />
+        <RotateChip />
         <CloseChip />
         <SelectionChips />
         {hasContent && <RightPanel />}

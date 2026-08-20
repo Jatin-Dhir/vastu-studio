@@ -24,6 +24,8 @@ export interface SceneProps {
   metersPerPx: number | null
   unit: Unit
   k: number
+  /** current view rotation (deg) — used only to keep text upright on screen */
+  viewRotDeg?: number
   showEdgeLabels: boolean
   idPrefix: string
 }
@@ -37,10 +39,10 @@ const haloProps = (w: number) => ({
 
 export function RingLabel(props: {
   c: Pt; deg: number; r: number; size: number; text: string
-  fill?: string; weight?: number; opacity?: number; halo?: number; spacing?: number
+  fill?: string; weight?: number; opacity?: number; halo?: number; spacing?: number; vr?: number
 }) {
-  const { c, deg, r, size, text, fill = '#EDEFF4', weight = 600, opacity = 1, halo = 0, spacing } = props
-  const norm = ((deg % 360) + 360) % 360
+  const { c, deg, r, size, text, fill = '#EDEFF4', weight = 600, opacity = 1, halo = 0, spacing, vr = 0 } = props
+  const norm = (((deg + vr) % 360) + 360) % 360
   const flip = norm > 90 && norm < 270
   const p = polar(c, deg, r)
   const rot = flip ? deg + 180 : deg
@@ -118,9 +120,9 @@ function Background({ bg, dxf, k }: { bg: BgState; dxf: DxfImport | null; k: num
 
 function Outline(props: {
   pts: Pt[]; bulges: number[]; closed: boolean; k: number; metersPerPx: number | null; unit: Unit
-  showEdgeLabels: boolean; center: Pt | null
+  showEdgeLabels: boolean; center: Pt | null; vr?: number
 }) {
-  const { pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center } = props
+  const { pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center, vr = 0 } = props
   if (pts.length === 0) return null
   const d = outlinePathD(pts, bulges, closed)
   const n = pts.length
@@ -144,7 +146,8 @@ function Outline(props: {
         const chordL = Math.hypot(b.x - a.x, b.y - a.y) || 1
         const mid = edgePoint(a, b, bu, 0.5) // tangent at the arc midpoint is parallel to the chord
         let rot = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
-        if (rot > 90 || rot < -90) rot += 180
+        const screenRot = ((rot + vr) % 360 + 360) % 360
+        if (screenRot > 90 && screenRot < 270) rot += 180
         let nx = (b.y - a.y) / chordL, ny = -(b.x - a.x) / chordL
         if (center) {
           const toC = { x: center.x - mid.x, y: center.y - mid.y }
@@ -169,11 +172,11 @@ function Outline(props: {
 /* ------------------------------------------------------------------ */
 
 interface ChakraProps {
-  c: Pt; R: number; north: number; compass: CompassState; k: number
+  c: Pt; R: number; north: number; compass: CompassState; k: number; vr: number
   pts: Pt[]; closed: boolean; idPrefix: string
 }
 
-function DegreeTicks({ c, R, north, numbers, k }: { c: Pt; R: number; north: number; numbers: boolean; k: number }) {
+function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number }) {
   const ticks = []
   for (let d = 0; d < 360; d += 5) {
     const major = d % 30 === 0
@@ -192,13 +195,13 @@ function DegreeTicks({ c, R, north, numbers, k }: { c: Pt; R: number; north: num
       {ticks}
       {numbers && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
         <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={R * 0.033}
-          text={String(d)} fill="#CBD2DF" weight={500} opacity={0.85} />
+          text={String(d)} fill="#CBD2DF" weight={500} opacity={0.85} vr={vr} />
       ))}
     </g>
   )
 }
 
-function Zones16({ c, R, north, compass, k, pts, closed, idPrefix }: ChakraProps) {
+function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix }: ChakraProps) {
   const clip = compass.clip && closed && pts.length >= 3
   const clipId = `${idPrefix}-plotclip`
   const fills = (
@@ -223,7 +226,7 @@ function Zones16({ c, R, north, compass, k, pts, closed, idPrefix }: ChakraProps
       })}
       <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.6 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={R * 1.001} fill="none" stroke="#FFF6DF" strokeWidth={0.5 / k} opacity={0.4} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} />}
+      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} vr={vr} />}
       {compass.labels && ZONES16.map((z, i) => {
         const mid = north + i * 22.5
         const cardinal = i % 4 === 0
@@ -232,14 +235,14 @@ function Zones16({ c, R, north, compass, k, pts, closed, idPrefix }: ChakraProps
             size={cardinal ? R * 0.062 : R * 0.042}
             text={z.key} weight={cardinal ? 800 : 600}
             fill={i === 0 ? '#F26B57' : cardinal ? '#F5EBD3' : '#D8DCE6'}
-            halo={R * 0.012} spacing={R * 0.004} />
+            halo={R * 0.012} spacing={R * 0.004} vr={vr} />
         )
       })}
     </g>
   )
 }
 
-function Gates32({ c, R, north, compass, k }: ChakraProps) {
+function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
   const r0 = R * 0.8
   return (
     <g>
@@ -268,28 +271,28 @@ function Gates32({ c, R, north, compass, k }: ChakraProps) {
       })}
       <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.7 / k} opacity={0.92} />
       <circle cx={c.x} cy={c.y} r={r0} fill="none" stroke={GOLD} strokeWidth={1 / k} opacity={0.55} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R * 1.055} north={north} numbers={false} k={k} />}
+      {compass.degreeRing && <DegreeTicks c={c} R={R * 1.055} north={north} numbers={false} k={k} vr={vr} />}
       {compass.labels && GATES32.map((g, i) => {
         const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
         const nameSize = Math.min(R * 0.033, (R * 0.175) / (g.devta.length * 0.58))
         return (
           <Fragment key={g.code}>
             <RingLabel c={c} deg={mid} r={R * 0.935} size={nameSize} text={g.devta}
-              fill="#EFE7D2" weight={600} halo={R * 0.01} />
+              fill="#EFE7D2" weight={600} halo={R * 0.01} vr={vr} />
             <RingLabel c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
-              fill="#B8A26B" weight={700} spacing={R * 0.002} />
+              fill="#B8A26B" weight={700} spacing={R * 0.002} vr={vr} />
           </Fragment>
         )
       })}
       {compass.labels && ['N', 'E', 'S', 'W'].map((t, i) => (
         <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07} size={R * 0.055}
-          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.012} />
+          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.012} vr={vr} />
       ))}
     </g>
   )
 }
 
-function Chakra8({ c, R, north, compass, k }: ChakraProps) {
+function Chakra8({ c, R, north, compass, k, vr }: ChakraProps) {
   return (
     <g>
       {DIRS8.map((_, i) => {
@@ -311,16 +314,16 @@ function Chakra8({ c, R, north, compass, k }: ChakraProps) {
       })}
       <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.6 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={R * 0.62} fill="none" stroke={GOLD} strokeWidth={0.8 / k} opacity={0.4} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} />}
+      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} vr={vr} />}
       {compass.labels && DIRS8.map((d8, i) => (
         <Fragment key={d8.key}>
           <RingLabel c={c} deg={north + i * 45} r={R * 1.08}
             size={i % 2 === 0 ? R * 0.068 : R * 0.05} text={d8.key} weight={800}
-            fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.013} />
+            fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.013} vr={vr} />
           <RingLabel c={c} deg={north + i * 45} r={R * 0.75} size={R * 0.036}
-            text={d8.sanskrit} fill="#E4D9BC" weight={600} halo={R * 0.009} />
+            text={d8.sanskrit} fill="#E4D9BC" weight={600} halo={R * 0.009} vr={vr} />
           <RingLabel c={c} deg={north + i * 45} r={R * 0.68} size={R * 0.03}
-            text={d8.deity} fill="#A9B0BF" weight={500} halo={R * 0.008} />
+            text={d8.deity} fill="#A9B0BF" weight={500} halo={R * 0.008} vr={vr} />
         </Fragment>
       ))}
     </g>
@@ -426,7 +429,7 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
   )
 }
 
-function Dial({ c, R, north, compass, k }: ChakraProps) {
+function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
   const ticks = []
   for (let d = 0; d < 360; d += 2) {
     const major = d % 30 === 0
@@ -449,12 +452,12 @@ function Dial({ c, R, north, compass, k }: ChakraProps) {
       <path d={`M${nTip.x} ${nTip.y} L${nL.x} ${nL.y} L${nR.x} ${nR.y} Z`} fill="#F26B57" />
       {compass.labels && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
         <RingLabel key={d} c={c} deg={north + d} r={R * 1.07} size={R * 0.045}
-          text={String(d)} fill="#DFE3EC" weight={600} halo={R * 0.01} />
+          text={String(d)} fill="#DFE3EC" weight={600} halo={R * 0.01} vr={vr} />
       ))}
       {compass.labels && DIRS8.map((d8, i) => (
         <RingLabel key={d8.key} c={c} deg={north + i * 45} r={R * 0.73}
           size={i % 2 === 0 ? R * 0.085 : R * 0.05} text={d8.key} weight={800}
-          fill={i === 0 ? '#F26B57' : '#EFE4C8'} halo={R * 0.014} />
+          fill={i === 0 ? '#F26B57' : '#EFE4C8'} halo={R * 0.014} vr={vr} />
       ))}
     </g>
   )
@@ -479,9 +482,9 @@ function CustomOverlay({ c, R, north, compass }: ChakraProps) {
 
 function CenterMarker(props: {
   c: Pt; R: number; k: number; brahmasthan: boolean; closed: boolean
-  areaText: string | null; overridden: boolean
+  areaText: string | null; overridden: boolean; vr?: number
 }) {
-  const { c, R, k, brahmasthan, closed, areaText, overridden } = props
+  const { c, R, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
   return (
     <g>
       {closed && brahmasthan && R > 0 && (
@@ -490,6 +493,7 @@ function CenterMarker(props: {
             stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${6 / k}`} opacity={0.9} />
           <text x={c.x} y={c.y - R * 0.24 - 9 / k} fontSize={10.5 / k} fontFamily={FONT}
             fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
+            transform={`rotate(${-vr} ${c.x} ${c.y - R * 0.24 - 9 / k})`}
             {...haloProps(2.8 / k)}>
             Brahmasthan
           </text>
@@ -503,13 +507,15 @@ function CenterMarker(props: {
         stroke="#FFFDF4" strokeWidth={1.4 / k} />
       {overridden && (
         <text x={c.x} y={c.y + 16 / k} fontSize={9.5 / k} fontFamily={FONT} fontWeight={700}
-          fill="#F2A65A" textAnchor="middle" {...haloProps(2.6 / k)}>
+          fill="#F2A65A" textAnchor="middle" transform={`rotate(${-vr} ${c.x} ${c.y + 16 / k})`}
+          {...haloProps(2.6 / k)}>
           centre pinned
         </text>
       )}
       {areaText && (
         <text x={c.x} y={c.y + 30 / k} fontSize={12.5 / k} fontFamily={FONT} fontWeight={700}
-          fill="#F3E9CF" textAnchor="middle" {...haloProps(3.4 / k)}>
+          fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-vr} ${c.x} ${c.y + 30 / k})`}
+          {...haloProps(3.4 / k)}>
           {areaText}
         </text>
       )}
@@ -523,6 +529,7 @@ function CenterMarker(props: {
 
 export function Scene(props: SceneProps) {
   const { bg, dxf, pts, bulges, closed, center, R, northDeg, compass, metersPerPx, unit, k, showEdgeLabels, idPrefix } = props
+  const vr = props.viewRotDeg ?? 0
 
   const RS = R * (compass.scalePct / 100)
   const showCompass = compass.id !== 'none' && closed && center && RS > 0
@@ -535,7 +542,7 @@ export function Scene(props: SceneProps) {
   }, [sampled, pts.length, closed, metersPerPx, unit])
 
   const chakraProps: ChakraProps | null = showCompass && center
-    ? { c: center, R: RS, north: northDeg, compass, k, pts: sampled, closed, idPrefix }
+    ? { c: center, R: RS, north: northDeg, compass, k, vr, pts: sampled, closed, idPrefix }
     : null
 
   return (
@@ -570,10 +577,10 @@ export function Scene(props: SceneProps) {
         )
       })()}
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
-        showEdgeLabels={showEdgeLabels} center={center} />
+        showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center} R={RS} k={k} brahmasthan={compass.brahmasthan && compass.id !== 'none'}
-          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} />
+          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} />
       )}
     </g>
   )

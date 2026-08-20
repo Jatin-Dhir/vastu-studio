@@ -35,7 +35,9 @@ export interface CompassState {
   customRotDeg: number
 }
 
-export interface ViewState { tx: number; ty: number; k: number }
+export interface ViewState { tx: number; ty: number; k: number; rot: number }
+
+export type NorthSource = 'map' | 'plan' | 'manual' | null
 
 export interface ProjectFile {
   app: 'vastu-studio'

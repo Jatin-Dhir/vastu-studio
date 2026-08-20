@@ -112,6 +112,21 @@ function preview(id: string) {
   }
 }
 
+function NorthSourceLine() {
+  const src = useStore((s) => s.northSource)
+  const deg = useStore((s) => s.northDeg)
+  const label =
+    src === 'map' ? 'true north from map — automatic'
+      : src === 'plan' ? 'aligned to the plan’s arrow'
+        : src === 'manual' ? 'set manually' : 'assumed straight up'
+  return (
+    <div className="row-between">
+      <span className="lbl">North {deg}°</span>
+      <span className="badge">{label}</span>
+    </div>
+  )
+}
+
 /* ---------- north row ---------- */
 
 function NorthRow() {
@@ -483,6 +498,7 @@ export function RightPanel() {
 
         <div className="subhead">Orientation</div>
         <NorthRow />
+        <NorthSourceLine />
         <button className="btn-ghost wide" onClick={() => {
           setTool('north')
           useStore.getState().toast('Tap the TAIL of the plan’s north arrow, then its TIP', 'info')
