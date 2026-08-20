@@ -9,6 +9,7 @@ import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
+import { CloseChip, QuickBar, SelectionChips } from './ui/CanvasOverlays'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { formatLen, formatScale } from './format'
@@ -96,6 +97,7 @@ export default function App() {
           break
         case 'Escape':
           if (s.calDialogOpen) s.setCalDialogOpen(false)
+          else if (s.selectedVertex != null || s.selectedEdge != null) s.setSelection({ vertex: null, edge: null })
           else if (s.tool === 'calibrate' && s.calA) s.setCal(null, null)
           else if (s.tool === 'trace' && !s.closed && s.pts.length > 0) s.popPoint()
           break
@@ -172,6 +174,9 @@ export default function App() {
       <TopBar />
       <div className="stage-wrap">
         <CanvasStage />
+        <QuickBar />
+        <CloseChip />
+        <SelectionChips />
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}

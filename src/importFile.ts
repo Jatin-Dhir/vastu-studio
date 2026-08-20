@@ -1,11 +1,11 @@
 import { useStore } from './store'
 import { importRaster } from './importers/raster'
-import { openPdf, renderPdfPage } from './importers/pdf'
+import { detectPdfScaleRatio, openPdf, renderPdfPage } from './importers/pdf'
 import { importDxf } from './importers/dxf'
 import { generateDemoPlan } from './importers/demo'
 import { parseProject } from './importers/project'
 import { requestFit } from './canvas/fit'
-import { formatScale } from './format'
+import { formatLen, formatScale } from './format'
 
 function freshBgDefaults() {
   return { opacity: 1, grayscale: false, invert: false }
@@ -35,7 +35,7 @@ export async function importFiles(files: FileList | File[] | Blob[], nameHint?: 
       s.setBusy('Rendering PDF…')
       const data = await file.arrayBuffer()
       const pages = await openPdf(data)
-      const { dataUrl, w, h } = await renderPdfPage(1)
+      const { dataUrl, w, h, pxPerPt } = await renderPdfPage(1)
       s.replaceBg(
         { kind: 'raster', name, dataUrl, w, h, ...freshBgDefaults(), pdfPages: pages, pdfPage: 1 },
         null, null,
@@ -43,6 +43,22 @@ export async function importFiles(files: FileList | File[] | Blob[], nameHint?: 
       requestFit()
       s.toast(pages > 1 ? `PDF imported — page 1 of ${pages} (switch in Background panel)` : 'PDF imported', 'ok')
       afterImportGuide()
+      // the drawing often states its own scale — offer it, never apply silently
+      const ratio = await detectPdfScaleRatio(1)
+      if (ratio) {
+        const mpp = (ratio * 0.0254) / 72 / pxPerPt
+        const st = useStore.getState()
+        st.toast(
+          `Drawing states 1 : ${ratio} — that makes it ${formatLen(w * mpp, st.unit)} wide`,
+          'info', 'Apply scale',
+          () => {
+            const s2 = useStore.getState()
+            s2.setMetersPerPx(mpp, 'pdf')
+            s2.toast(`Scale set from the printed 1 : ${ratio}`, 'ok')
+            if (s2.pts.length === 0) s2.setTool('trace')
+          },
+        )
+      }
       return
     }
     if (ext === 'dxf') {
@@ -61,6 +77,31 @@ export async function importFiles(files: FileList | File[] | Blob[], nameHint?: 
         'ok',
       )
       afterImportGuide()
+      if (!dxf.metersPerPx) {
+        // no $INSUNITS — offer the most plausible unit, sized so the user can sanity-check
+        const extU = dxf.unitsMaxDim
+        let unitM = 0, unitName = ''
+        if (extU >= 3000 && extU <= 400000) { unitM = 0.001; unitName = 'millimetres' }
+        else if (extU >= 300) { unitM = 0.01; unitName = 'centimetres' }
+        else if (extU >= 3) { unitM = 1; unitName = 'metres' }
+        if (unitM > 0) {
+          const mpp = (unitM * extU) / Math.max(dxf.w, dxf.h)
+          const widthM = dxf.w * mpp
+          if (widthM >= 3 && widthM <= 1000) {
+            const st = useStore.getState()
+            st.toast(
+              `No units in the DXF — read as ${unitName} it is ${formatLen(widthM, st.unit)} wide`,
+              'info', 'Apply scale',
+              () => {
+                const s2 = useStore.getState()
+                s2.setMetersPerPx(mpp, 'dxf')
+                s2.toast('Scale applied — recalibrate any time if it looks off', 'ok')
+                if (s2.pts.length === 0) s2.setTool('trace')
+              },
+            )
+          }
+        }
+      }
       return
     }
     if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(ext)) {

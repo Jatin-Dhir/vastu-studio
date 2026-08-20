@@ -31,6 +31,9 @@ export interface VastuStore {
   calDialogOpen: boolean
   angleSnap: boolean
   showEdgeLabels: boolean
+  locked: boolean
+  selectedVertex: number | null
+  selectedEdge: number | null
   mapOpen: boolean
   dwgNotice: boolean
   busy: string | null
@@ -50,6 +53,7 @@ export interface VastuStore {
   deletePoint: (i: number) => void
   popPoint: () => void
   setBulge: (i: number, b: number) => void
+  pushHistory: () => void
   closePolygon: () => void
   reopenPolygon: () => void
   clearOutline: () => void
@@ -62,6 +66,8 @@ export interface VastuStore {
   setCalDialogOpen: (open: boolean) => void
   setAngleSnap: (on: boolean) => void
   setShowEdgeLabels: (on: boolean) => void
+  setLocked: (on: boolean) => void
+  setSelection: (sel: { vertex?: number | null; edge?: number | null }) => void
   setMapOpen: (open: boolean) => void
   setDwgNotice: (open: boolean) => void
   setBusy: (msg: string | null) => void
@@ -117,6 +123,9 @@ export const useStore = create<VastuStore>()((set, get) => {
     calDialogOpen: false,
     angleSnap: true,
     showEdgeLabels: true,
+    locked: false,
+    selectedVertex: null,
+    selectedEdge: null,
     mapOpen: false,
     dwgNotice: false,
     busy: null,
@@ -141,12 +150,19 @@ export const useStore = create<VastuStore>()((set, get) => {
       }))
     },
     // entering a pick-two-points tool always starts a fresh pair
-    setTool: (tool) =>
+    setTool: (tool) => {
+      if (get().locked && tool !== 'select') {
+        get().toast('Plan is locked — tap the padlock to edit', 'warn')
+        return
+      }
       set({
         tool,
         ...(tool !== 'calibrate' ? { calA: null, calB: null } : {}),
         northA: null,
-      }),
+        selectedVertex: null,
+        selectedEdge: null,
+      })
+    },
     setView: (view) => set({ view }),
     setUnit: (unit) => set({ unit }),
     setMetersPerPx: (metersPerPx, scaleSource) => set({ metersPerPx, scaleSource }),
@@ -180,6 +196,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     },
     setBulge: (i, b) =>
       set((s) => ({ bulges: s.bulges.map((q, j) => (j === i ? b : q)) })),
+    pushHistory: () => push(),
     closePolygon: () => {
       const s = get()
       if (s.pts.length < 3 || s.closed) return
@@ -207,6 +224,15 @@ export const useStore = create<VastuStore>()((set, get) => {
     setCalDialogOpen: (calDialogOpen) => set({ calDialogOpen }),
     setAngleSnap: (angleSnap) => set({ angleSnap }),
     setShowEdgeLabels: (showEdgeLabels) => set({ showEdgeLabels }),
+    setLocked: (locked) => {
+      set({ locked, selectedVertex: null, selectedEdge: null, ...(locked ? { tool: 'select' as const, calA: null, calB: null, northA: null } : {}) })
+      get().toast(locked ? 'Plan locked — analysis only. Nothing can shift by accident.' : 'Plan unlocked — editing enabled', locked ? 'ok' : 'info')
+    },
+    setSelection: (sel) =>
+      set((s) => ({
+        selectedVertex: sel.vertex !== undefined ? sel.vertex : s.selectedVertex,
+        selectedEdge: sel.edge !== undefined ? sel.edge : s.selectedEdge,
+      })),
     setMapOpen: (mapOpen) => set({ mapOpen }),
     setDwgNotice: (dwgNotice) => set({ dwgNotice }),
     setBusy: (busy) => set({ busy }),
@@ -256,6 +282,9 @@ export const useStore = create<VastuStore>()((set, get) => {
         centerOverride: p.centerOverride,
         northDeg: p.northDeg,
         compass: { ...DEFAULT_COMPASS, ...p.compass },
+        locked: p.locked ?? false,
+        selectedVertex: null,
+        selectedEdge: null,
         undoStack: [],
         redoStack: [],
         calA: null,
@@ -278,5 +307,6 @@ export function serializeProject(s: VastuStore): ProjectFile {
     centerOverride: s.centerOverride,
     northDeg: s.northDeg,
     compass: s.compass,
+    locked: s.locked,
   }
 }

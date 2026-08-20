@@ -7,6 +7,8 @@ export interface DxfImport {
   w: number
   h: number
   metersPerPx: number | null
+  /** Largest extent of the drawing in its own (possibly unitless) drawing units. */
+  unitsMaxDim: number
 }
 
 interface XY { x: number; y: number }
@@ -284,5 +286,5 @@ export function importDxf(text: string): DxfImport {
   const unitM = UNIT_METERS[insunits]
   const metersPerPx = unitM ? unitM / s : null
 
-  return { paths, texts, w, h, metersPerPx }
+  return { paths, texts, w, h, metersPerPx, unitsMaxDim: Math.max(maxX - minX, maxY - minY) }
 }

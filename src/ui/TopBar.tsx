@@ -1,4 +1,4 @@
-import { Check, Download, FolderOpen, Maximize2, Redo2, Save, Undo2 } from 'lucide-react'
+import { Check, Download, FolderOpen, Lock, LockOpen, Maximize2, Redo2, Save, Undo2 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { exportPng } from '../export'
@@ -18,6 +18,8 @@ export function TopBar() {
   const undo = useStore((s) => s.undo)
   const redo = useStore((s) => s.redo)
   const setTool = useStore((s) => s.setTool)
+  const locked = useStore((s) => s.locked)
+  const setLocked = useStore((s) => s.setLocked)
 
   const done = [bg.kind !== 'none', metersPerPx != null, closed, closed && compassId !== 'none']
   const active = done.findIndex((d) => !d)
@@ -63,6 +65,10 @@ export function TopBar() {
       </button>
 
       <div className="topbar-right">
+        <button className={`icon-btn lock-btn ${locked ? 'locked' : ''}`} onClick={() => setLocked(!locked)}
+          data-tip={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}>
+          {locked ? <Lock size={15} /> : <LockOpen size={15} />}
+        </button>
         <div className="seg">
           <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>
           <button className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>m</button>

@@ -35,8 +35,8 @@ ops.push('1 0 0 1 545 250 Tm (BED ROOM) Tj')
 ops.push('1 0 0 1 120 420 Tm (VERANDAH) Tj')
 ops.push('1 0 0 1 300 420 Tm (BATH) Tj')
 ops.push('ET')
-// title
-ops.push('BT /F1 10 Tf 0.5 0.55 0.63 rg 1 0 0 1 90 70 Tm (SAMPLE RESIDENCE - GROUND FLOOR - Plot 61 ft x 42 ft) Tj ET')
+// title — the stated 1:100 makes the 610pt plan width a real 21.5 m
+ops.push('BT /F1 10 Tf 0.5 0.55 0.63 rg 1 0 0 1 90 70 Tm (SAMPLE RESIDENCE - GROUND FLOOR - SCALE 1 : 100 - Plot 21.5 m x 14.8 m) Tj ET')
 
 const stream = ops.join('\n')
 

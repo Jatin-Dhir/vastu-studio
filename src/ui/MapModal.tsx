@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
-import { Camera, Loader2, Search } from 'lucide-react'
+import { Camera, Loader2, LocateFixed, Search } from 'lucide-react'
 import { Dialog } from './Dialogs'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
@@ -216,8 +216,25 @@ export function MapModal() {
     }
   }
 
+  const locateMe = () => {
+    if (!navigator.geolocation) { useStore.getState().toast('Location is not available in this browser', 'warn'); return }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        const map = mapRef.current
+        if (!map) return
+        map.setView([pos.coords.latitude, pos.coords.longitude], 18)
+        markerRef.current?.remove()
+        markerRef.current = L.circleMarker([pos.coords.latitude, pos.coords.longitude], {
+          radius: 7, color: '#6FC7CE', weight: 3, fillColor: '#6FC7CE', fillOpacity: 0.4,
+        }).addTo(map)
+      },
+      () => useStore.getState().toast('Could not get your location — allow location access and retry', 'warn'),
+      { enableHighAccuracy: true, timeout: 12000 },
+    )
+  }
+
   return (
-    <Dialog title="Import from Maps" onClose={() => setMapOpen(false)} width={780}>
+    <Dialog title="Import from Maps" onClose={() => setMapOpen(false)} width={780} className="map-dialog">
       <div className="map-search">
         <Search size={15} />
         <input
@@ -244,6 +261,9 @@ export function MapModal() {
 
       <div className="map-holder">
         <div ref={mapDiv} className="map-container" />
+        <button className="map-locate" onClick={locateMe} title="Go to my location">
+          <LocateFixed size={17} />
+        </button>
         <div className="map-cross" aria-hidden>
           <span /><span />
         </div>

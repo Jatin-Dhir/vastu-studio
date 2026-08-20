@@ -60,6 +60,9 @@ export function CanvasStage() {
   const calB = useStore((s) => s.calB)
   const northA = useStore((s) => s.northA)
   const showEdgeLabels = useStore((s) => s.showEdgeLabels)
+  const locked = useStore((s) => s.locked)
+  const selectedVertex = useStore((s) => s.selectedVertex)
+  const selectedEdge = useStore((s) => s.selectedEdge)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
@@ -276,11 +279,18 @@ export function CanvasStage() {
 
     if (mode === 'vertex') {
       if (s.tool === 'trace' && !s.closed && d.idx === 0 && s.pts.length >= 3) s.closePolygon()
+      else if (s.tool === 'select' && !s.locked) s.setSelection({ vertex: d.idx, edge: null })
+      return
+    }
+    if (mode === 'bulge') {
+      if (s.tool === 'select' && !s.locked) s.setSelection({ edge: d.idx, vertex: null })
       return
     }
     // a tap only ever places/dispatches from a plain press on empty canvas —
     // never from handle presses or the tail end of a pinch (mode 'idle')
     if (mode !== 'maybe-pan') return
+    if (s.tool === 'select') { s.setSelection({ vertex: null, edge: null }); return }
+    if (s.locked) return
 
     switch (s.tool) {
       case 'trace': {
@@ -341,16 +351,21 @@ export function CanvasStage() {
 
   const onContextMenu = (e: React.MouseEvent<SVGSVGElement>) => {
     e.preventDefault()
+    const s = useStore.getState()
+    if (s.locked) return
     const target = (e.target as Element).closest('[data-vidx]')
     const vidx = target?.getAttribute('data-vidx')
-    if (vidx != null) useStore.getState().deletePoint(Number(vidx))
+    if (vidx != null) {
+      s.deletePoint(Number(vidx))
+      s.setSelection({ vertex: null, edge: null })
+    }
   }
 
   /* ---------- render helpers ---------- */
   const { tx, ty, k } = view
   const tracing = tool === 'trace' && !closed
   const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < CLOSE_PX / k
-  const showHandles = (tool === 'trace' || tool === 'select') && pts.length > 0
+  const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
   const liveTo = tracing && cursor && pts.length > 0
     ? (useStore.getState().angleSnap ? snapPoint(pts[pts.length - 1], cursor) : cursor)
     : null
@@ -454,13 +469,15 @@ export function CanvasStage() {
         )}
 
         {/* curve (bulge) handles — drag an edge midpoint to bow the wall */}
-        {tool === 'select' && pts.length >= 2 && (closed ? pts : pts.slice(0, -1)).map((p, i) => {
+        {tool === 'select' && !locked && pts.length >= 2 && (closed ? pts : pts.slice(0, -1)).map((p, i) => {
           const p2 = pts[(i + 1) % pts.length]
           const m = edgePoint(p, p2, bulges[i] ?? 0, 0.5)
-          const size = (COARSE ? 6.5 : 5) / k
+          const sel = selectedEdge === i
+          const size = ((COARSE ? 6.5 : 5) + (sel ? 1.5 : 0)) / k
           return (
             <g key={`b${i}`} data-bidx={i} style={{ cursor: 'grab' }}>
               <circle cx={m.x} cy={m.y} r={(COARSE ? 17 : 10) / k} fill="rgba(0,0,0,0)" data-bidx={i} />
+              {sel && <circle cx={m.x} cy={m.y} r={12 / k} fill="none" stroke={GOLD} strokeWidth={1.3 / k} opacity={0.8} />}
               <rect x={m.x - size} y={m.y - size} width={size * 2} height={size * 2}
                 transform={`rotate(45 ${m.x} ${m.y})`}
                 fill={Math.abs(bulges[i] ?? 0) > 1e-4 ? GOLD : '#151820'}
@@ -473,10 +490,11 @@ export function CanvasStage() {
         {showHandles && pts.map((p, i) => {
           const isFirst = i === 0
           const highlight = isFirst && nearFirst
+          const sel = selectedVertex === i
           return (
             <g key={i} data-vidx={i} style={{ cursor: 'grab' }}>
               <circle cx={p.x} cy={p.y} r={HIT_PX / k} fill="rgba(0,0,0,0)" data-vidx={i} />
-              {highlight && (
+              {(highlight || sel) && (
                 <circle cx={p.x} cy={p.y} r={11 / k} fill="none" stroke={GOLD}
                   strokeWidth={1.5 / k} opacity={0.85} />
               )}

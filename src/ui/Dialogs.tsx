@@ -4,7 +4,7 @@ import { useStore } from '../store'
 import { dist } from '../geometry'
 import { M_PER_FT, formatScale } from '../format'
 
-export function Dialog(props: { title: string; onClose: () => void; children: React.ReactNode; width?: number }) {
+export function Dialog(props: { title: string; onClose: () => void; children: React.ReactNode; width?: number; className?: string }) {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose() }
     window.addEventListener('keydown', onKey)
@@ -13,7 +13,7 @@ export function Dialog(props: { title: string; onClose: () => void; children: Re
   }, [])
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) props.onClose() }}>
-      <div className="dialog" style={props.width ? { width: props.width, maxWidth: 'calc(100vw - 20px)' } : undefined}>
+      <div className={`dialog ${props.className ?? ''}`} style={props.width ? { width: props.width, maxWidth: 'calc(100vw - 20px)' } : undefined}>
         <div className="dialog-head">
           <h3>{props.title}</h3>
           <button className="icon-btn" onClick={props.onClose}><X size={15} /></button>

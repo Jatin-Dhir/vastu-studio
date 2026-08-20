@@ -129,6 +129,8 @@ function Outline(props: {
   return (
     <g>
       {closed && <path d={d} fill={GOLD} fillOpacity={0.055} stroke="none" />}
+      <path d={d} fill="none" stroke={GOLD} strokeWidth={8 / k} opacity={0.14}
+        strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke="rgba(20,16,4,0.55)" strokeWidth={3.6 / k}
         strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke={GOLD} strokeWidth={2.2 / k}
