@@ -2,6 +2,7 @@ import { Fragment, useMemo } from 'react'
 import type { BgState, CompassState, Marker, Pt, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
+import { brahmasthanRadius } from '../analysis'
 import { formatArea, formatLen } from '../format'
 import { DIRS8, GATES32, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
 
@@ -550,19 +551,19 @@ function MarkersLayer({ markers, k, vr }: { markers: Marker[]; k: number; vr: nu
 /* ------------------------------------------------------------------ */
 
 function CenterMarker(props: {
-  c: Pt; R: number; k: number; brahmasthan: boolean; closed: boolean
+  c: Pt; brahmaR: number; k: number; brahmasthan: boolean; closed: boolean
   areaText: string | null; overridden: boolean; vr?: number
 }) {
-  const { c, R, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
+  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
   return (
     <g>
-      {closed && brahmasthan && R > 0 && (
+      {closed && brahmasthan && brahmaR > 0 && (
         <g>
-          <circle cx={c.x} cy={c.y} r={R * 0.24} fill={GOLD} fillOpacity={0.06}
+          <circle cx={c.x} cy={c.y} r={brahmaR} fill={GOLD} fillOpacity={0.06}
             stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${6 / k}`} opacity={0.9} />
-          <text x={c.x} y={c.y - R * 0.24 - 9 / k} fontSize={10.5 / k} fontFamily={FONT}
+          <text x={c.x} y={c.y - brahmaR - 9 / k} fontSize={10.5 / k} fontFamily={FONT}
             fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
-            transform={`rotate(${-vr} ${c.x} ${c.y - R * 0.24 - 9 / k})`}
+            transform={`rotate(${-vr} ${c.x} ${c.y - brahmaR - 9 / k})`}
             {...haloProps(2.8 / k)}>
             Brahmasthan
           </text>
@@ -653,7 +654,9 @@ export function Scene(props: SceneProps) {
         showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} />
       {center && pts.length >= 3 && (
-        <CenterMarker c={center} R={RS} k={k} brahmasthan={compass.brahmasthan && compass.id !== 'none'}
+        <CenterMarker c={center}
+          brahmaR={brahmasthanRadius(sampled, center, northDeg) * ((compass.brahmaPct ?? 100) / 100)}
+          k={k} brahmasthan={compass.brahmasthan}
           closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} />
       )}
     </g>

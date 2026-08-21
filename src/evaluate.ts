@@ -1,4 +1,4 @@
-import { placementOf, zoneRows } from './analysis'
+import { brahmasthanRadius, placementOf, zoneRows } from './analysis'
 import { dist } from './geometry'
 import { GATE_QUALITY, PLACEMENT_RULES, ZONE_SHAPE_NOTES, ZONES16, markerKindMeta } from './vastu'
 import type { Marker, Pt } from './types'
@@ -28,9 +28,10 @@ export function evaluateVastu(args: {
   center: Pt
   northDeg: number
   markers: Marker[]
-  R: number
+  /** manual Brahmasthan size in % of the drawing-derived radius (default 100) */
+  brahmaPct?: number
 }): Evaluation {
-  const { sampled, center, northDeg, markers, R } = args
+  const { sampled, center, northDeg, markers } = args
   const findings: Finding[] = []
 
   /* entrances against the gates */
@@ -76,8 +77,8 @@ export function evaluateVastu(args: {
     }
   }
 
-  /* Brahmasthan occupancy — the centre must stay light and open */
-  const bR = R * 0.24
+  /* Brahmasthan occupancy — sized from the drawing itself, never the compass */
+  const bR = brahmasthanRadius(sampled, center, northDeg) * ((args.brahmaPct ?? 100) / 100)
   for (const m of markers) {
     if (dist(m.p, center) < bR) {
       const heavy = m.kind === 'toilet' || m.kind === 'kitchen' || m.kind === 'water'

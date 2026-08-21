@@ -46,6 +46,8 @@ export interface CompassState {
   labels: boolean
   degreeRing: boolean
   brahmasthan: boolean
+  /** manual Brahmasthan size, % of the drawing-derived radius (100 = follow the drawing) */
+  brahmaPct: number
   devtas: boolean
   customUrl?: string
   customAspect?: number

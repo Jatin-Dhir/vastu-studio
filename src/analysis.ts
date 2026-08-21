@@ -19,6 +19,24 @@ export function zoneRows(sampled: Pt[], center: Pt, northDeg: number): ZoneRow[]
   })
 }
 
+/** The plot's own Brahmasthan radius — the inscribed circle of the central ninth of the
+ *  north-oriented bounding box. A property of the DRAWING; the compass never affects it. */
+export function brahmasthanRadius(sampled: Pt[], center: Pt, northDeg: number): number {
+  if (sampled.length < 3) return 0
+  const rad = (-northDeg * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of sampled) {
+    const x = center.x + (p.x - center.x) * cos - (p.y - center.y) * sin
+    const y = center.y + (p.x - center.x) * sin + (p.y - center.y) * cos
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  return Math.min(maxX - minX, maxY - minY) / 6
+}
+
 export interface Placement {
   bearing: number
   zoneIdx: number

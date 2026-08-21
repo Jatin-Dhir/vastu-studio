@@ -114,6 +114,7 @@ export const DEFAULT_COMPASS: CompassState = {
   labels: true,
   degreeRing: true,
   brahmasthan: true,
+  brahmaPct: 100,
   devtas: true,
   customRotDeg: 0,
 }

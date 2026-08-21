@@ -562,6 +562,11 @@ export function RightPanel() {
                 <Toggle label="Devta names" on={compass.devtas} onChange={(v) => setCompass({ devtas: v })} />
               )}
             </div>
+            {compass.brahmasthan && (
+              <Slider label="Brahmasthan size" value={compass.brahmaPct} min={50} max={200}
+                fmt={(v) => (v === 100 ? 'from drawing' : `${Math.round(v)}%`)}
+                onChange={(v) => setCompass({ brahmaPct: v })} />
+            )}
             {compass.id === 'custom' && (
               <>
                 <Slider label="Image rotation" value={compass.customRotDeg} min={-180} max={180}
@@ -641,8 +646,7 @@ export function RightPanel() {
 
       {/* -------- Vastu analysis -------- */}
       {closed && center && pts.length >= 3 && (() => {
-        const R = Math.sqrt(sampled.reduce((m, p) => Math.max(m, (p.x - center.x) ** 2 + (p.y - center.y) ** 2), 0)) * 1.03
-        const ev = evaluateVastu({ sampled, center, northDeg, markers, R })
+        const ev = evaluateVastu({ sampled, center, northDeg, markers, brahmaPct: compass.brahmaPct })
         return (
           <section className="card">
             <header className="card-head">

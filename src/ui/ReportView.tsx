@@ -103,8 +103,7 @@ export function ReportView() {
         </div>
 
         {center && closed && (() => {
-          const R = circumradius(center, sampled) * 1.03
-          const ev = evaluateVastu({ sampled, center, northDeg, markers, R })
+          const ev = evaluateVastu({ sampled, center, northDeg, markers, brahmaPct: useStore.getState().compass.brahmaPct })
           if (ev.findings.length === 0) return null
           return (
             <section>
