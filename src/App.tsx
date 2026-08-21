@@ -194,7 +194,7 @@ export default function App() {
         s.compass !== prev.compass || s.northDeg !== prev.northDeg ||
         s.metersPerPx !== prev.metersPerPx || s.centerOverride !== prev.centerOverride ||
         s.unit !== prev.unit || s.locked !== prev.locked ||
-        s.markers !== prev.markers || s.report !== prev.report
+        s.markers !== prev.markers || s.strokes !== prev.strokes || s.report !== prev.report
       ) {
         window.clearTimeout(timer)
         timer = window.setTimeout(autosave, 900)

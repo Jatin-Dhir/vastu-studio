@@ -161,7 +161,7 @@ export function QuickBar() {
     return () => window.removeEventListener('pointerdown', onDown)
   }, [degOpen])
 
-  const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker'
+  const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw'
   if (!hasBg || (!closed && !armed)) return null
 
   const pills = customUrl ? [...PILLS, { id: 'custom' as CompassId, label: 'Own' }] : PILLS
