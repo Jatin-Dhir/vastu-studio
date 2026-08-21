@@ -3,9 +3,10 @@ import { Printer, Share2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { makePlanPng } from '../export'
 import { placementOf, zoneRows } from '../analysis'
-import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
+import { centroid, circumradius, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
-import { markerKindMeta } from '../vastu'
+import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
+import { evaluateVastu } from '../evaluate'
 
 export function ReportView() {
   const setReportOpen = useStore((s) => s.setReportOpen)
@@ -100,6 +101,28 @@ export function ReportView() {
           {metersPerPx && <span><b>Scale</b> {formatScale(metersPerPx, unit)}</span>}
           <span><b>North</b> {northDeg}° ({northSource === 'map' ? 'auto from map' : northSource === 'plan' ? 'plan arrow' : 'set manually'})</span>
         </div>
+
+        {center && closed && (() => {
+          const R = circumradius(center, sampled) * 1.03
+          const ev = evaluateVastu({ sampled, center, northDeg, markers, R })
+          if (ev.findings.length === 0) return null
+          return (
+            <section>
+              <h2>Vastu findings</h2>
+              <div className="report-findings">
+                {ev.findings.map((f, i) => (
+                  <div key={i} className={`report-finding sev-${f.severity}`}>
+                    <span className="report-finding-mark">
+                      {f.severity === 'good' ? '✓' : f.severity === 'bad' ? '✕' : f.severity === 'warn' ? '!' : 'ℹ'}
+                    </span>
+                    <span><b>{f.title}.</b> {f.detail}.</span>
+                  </div>
+                ))}
+              </div>
+              <div className="report-note">{ANALYSIS_DISCLAIMER}</div>
+            </section>
+          )
+        })()}
 
         {center && entrances.length > 0 && (
           <section>

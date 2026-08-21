@@ -9,13 +9,17 @@ export interface ProjectRecord {
 
 const DB_NAME = 'vastu-studio'
 const STORE = 'projects'
+const PRESETS = 'compassPresets'
 
 function openDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, 1)
+    const req = indexedDB.open(DB_NAME, 2)
     req.onupgradeneeded = () => {
       if (!req.result.objectStoreNames.contains(STORE)) {
         req.result.createObjectStore(STORE, { keyPath: 'id' })
+      }
+      if (!req.result.objectStoreNames.contains(PRESETS)) {
+        req.result.createObjectStore(PRESETS, { keyPath: 'id' })
       }
     }
     req.onsuccess = () => resolve(req.result)
@@ -48,6 +52,34 @@ export const listProjects = () =>
 export const getMostRecent = () =>
   tx<ProjectRecord[]>('readonly', (s) => s.getAll()).then((all) =>
     all.sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null,
+  )
+
+export interface CompassPreset {
+  id: string
+  name: string
+  dataUrl: string
+  aspect: number
+  createdAt: number
+}
+
+function txStore<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return openDb().then(
+    (db) =>
+      new Promise<T>((resolve, reject) => {
+        const t = db.transaction(store, mode)
+        const req = run(t.objectStore(store))
+        req.onsuccess = () => resolve(req.result)
+        req.onerror = () => reject(req.error)
+        t.oncomplete = () => db.close()
+      }),
+  )
+}
+
+export const putPreset = (p: CompassPreset) => txStore(PRESETS, 'readwrite', (s) => s.put(p)).then(() => undefined)
+export const deletePreset = (id: string) => txStore(PRESETS, 'readwrite', (s) => s.delete(id)).then(() => undefined)
+export const listPresets = () =>
+  txStore<CompassPreset[]>(PRESETS, 'readonly', (s) => s.getAll()).then((all) =>
+    all.sort((a, b) => a.createdAt - b.createdAt),
   )
 
 export function newProjectId(): string {

@@ -4,7 +4,7 @@ import { useStore } from '../store'
 import { centroid, edgePoint, sampledPolygon } from '../geometry'
 import { placementOf } from '../analysis'
 import { NorthDial } from './NorthDial'
-import { COMPASS_META, MARKER_KINDS } from '../vastu'
+import { COMPASS_META, GATE_QUALITY, MARKER_KINDS, PLACEMENT_RULES } from '../vastu'
 import type { CompassId, MarkerKind } from '../types'
 
 const PILLS: { id: CompassId; label: string }[] = [
@@ -222,9 +222,20 @@ export function MarkerChips() {
   if (closed && pts.length >= 3) {
     const c = centerOverride ?? centroid(sampledPolygon(pts, bulges, true))
     const pl = placementOf(m.p, c, northDeg)
-    place = m.kind === 'entrance'
-      ? `${pl.zone.key} · ${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
-      : `${pl.zone.key} — ${pl.zone.name}`
+    if (m.kind === 'entrance') {
+      const q = GATE_QUALITY[pl.pada.code]
+      const mark = q?.v === 'good' ? '✓ ' : q?.v === 'caution' ? '! ' : ''
+      place = `${mark}${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
+    } else {
+      const rule = PLACEMENT_RULES[m.kind]
+      const key = pl.zone.key
+      const verdict = !rule ? ''
+        : rule.ideal.includes(key) ? '✓ ideal · '
+          : rule.good.includes(key) ? '✓ good · '
+            : rule.avoid.includes(key) ? '✕ avoid · '
+              : rule.caution.includes(key) ? '! caution · ' : ''
+      place = `${verdict}${key} — ${pl.zone.name}`
+    }
   }
 
   const rad = (view.rot * Math.PI) / 180

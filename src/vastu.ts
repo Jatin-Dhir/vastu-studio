@@ -115,6 +115,102 @@ export function padaIndexOf(bearingFromNorth: number): number {
   return Math.min(31, Math.floor(rel / 11.25))
 }
 
+/* ------------------------------------------------------------------ */
+/* Interpretive layer — classical Vastu / MahaVastu-published rules.   */
+/* Traditions differ; the UI always says which convention is applied.  */
+/* ------------------------------------------------------------------ */
+
+export type Verdict = 'ideal' | 'good' | 'neutral' | 'caution' | 'avoid'
+
+export interface PlacementRule {
+  ideal: string[]
+  good: string[]
+  caution: string[]
+  avoid: string[]
+  why: Partial<Record<Verdict, string>>
+}
+
+/** Zone keys are the 16-zone keys (N, NNE, …). Anything unlisted is neutral. */
+export const PLACEMENT_RULES: Record<string, PlacementRule> = {
+  kitchen: {
+    ideal: ['SE'], good: ['SSE', 'S', 'NW'], caution: ['W', 'E', 'SW'], avoid: ['NE', 'NNE', 'N', 'ENE'],
+    why: {
+      ideal: 'Agni’s own corner — fire belongs here',
+      good: 'workable fire placement',
+      caution: 'not a natural fire zone — watch for imbalance',
+      avoid: 'fire in the water/mind corner is a serious kitchen dosha',
+    },
+  },
+  toilet: {
+    ideal: ['NW', 'SSW'], good: ['WSW', 'W', 'WNW'], caution: ['S', 'SE', 'E'], avoid: ['NE', 'NNE', 'N', 'SW', 'ENE'],
+    why: {
+      ideal: 'disposal sits naturally in the outgoing zones',
+      good: 'acceptable disposal placement',
+      caution: 'keep it well sealed and ventilated here',
+      avoid: 'a toilet here drains the zone it occupies — classical texts treat this severely',
+    },
+  },
+  bed: {
+    ideal: ['SW'], good: ['S', 'W', 'WSW', 'SSW'], caution: ['SE', 'NW', 'E'], avoid: ['NE', 'NNE'],
+    why: {
+      ideal: 'the stability corner — the classical master-bedroom seat',
+      good: 'restful, grounded placement',
+      caution: 'associated with restlessness or friction for couples',
+      avoid: 'sleeping in the mind corner brings restlessness and over-thinking',
+    },
+  },
+  pooja: {
+    ideal: ['NE'], good: ['NNE', 'E', 'N', 'ENE'], caution: ['W', 'NW'], avoid: ['S', 'SSW', 'SW', 'SE'],
+    why: {
+      ideal: 'Ishanya — the traditional seat of the divine',
+      good: 'sattvic directions, well suited to prayer',
+      caution: 'usable, though not a classical prayer direction',
+      avoid: 'classical texts advise against prayer rooms in the southern belt',
+    },
+  },
+  water: {
+    ideal: ['NE', 'N', 'NNE'], good: ['E', 'ENE'], caution: ['NW', 'W'], avoid: ['SE', 'SSE', 'S', 'SW', 'SSW'],
+    why: {
+      ideal: 'water strengthens the water corner — the classic borewell seat',
+      good: 'supportive water placement',
+      caution: 'water here can unsettle the zone — keep it modest',
+      avoid: 'water clashing with fire/earth zones is a recognised dosha',
+    },
+  },
+}
+
+/** The widely-published quality of the 32 entrance gates (classical texts; MahaVastu-aligned). */
+export const GATE_QUALITY: Record<string, { v: 'good' | 'neutral' | 'caution'; note: string }> = {
+  E3: { v: 'good', note: 'Jayanta — victory and growth' },
+  E4: { v: 'good', note: 'Indra — authority and prosperity' },
+  N3: { v: 'good', note: 'Mukhya — prime gains' },
+  N4: { v: 'good', note: 'Bhallata — abundance' },
+  N5: { v: 'good', note: 'Soma — peace and wealth' },
+  S3: { v: 'good', note: 'Vitatha — material comfort' },
+  S4: { v: 'good', note: 'Grihakshata — household prosperity' },
+  W3: { v: 'good', note: 'Sugriva — gains and recovery' },
+  W4: { v: 'good', note: 'Pushpadanta — prosperity and progeny' },
+  W5: { v: 'good', note: 'Varuna — steady flow of wealth' },
+  N1: { v: 'caution', note: 'Roga — associated with illness' },
+  E1: { v: 'caution', note: 'Shikhi — fire and instability' },
+  S1: { v: 'caution', note: 'Anala — fire risk' },
+  S5: { v: 'caution', note: 'Yama — heaviness and fear' },
+  S8: { v: 'caution', note: 'Mriga — anxieties' },
+  W1: { v: 'caution', note: 'Pitra — burdens' },
+  W8: { v: 'caution', note: 'Papayakshma — losses and ill-health' },
+}
+
+/** Shape findings: what a cut (compressed) or extended zone means, per classical reading. */
+export const ZONE_SHAPE_NOTES: Record<string, { cut?: string; ext?: string; cutSev?: 'warn' | 'bad'; extSev?: 'good' | 'warn' | 'info' }> = {
+  NE: { cut: 'a cut Ishanya is the most serious shape dosha — clarity, fortune and growth suffer', cutSev: 'bad', ext: 'an extended North-East is classically auspicious', extSev: 'good' },
+  SW: { cut: 'a cut Nairritya undermines stability and relationships', cutSev: 'bad', ext: 'an extended South-West adds heaviness — keep it weighted and closed', extSev: 'warn' },
+  SE: { cut: 'a cut Agneya weakens cash flow and energy', cutSev: 'warn', ext: 'an extended South-East overheats — expenses and aggression rise', extSev: 'warn' },
+  NW: { cut: 'a cut Vayavya weakens support and banking', cutSev: 'warn', ext: 'an extended North-West brings restlessness and flux', extSev: 'warn' },
+}
+
+export const ANALYSIS_DISCLAIMER =
+  'Interpretations follow classical Vastu texts and MahaVastu-published conventions. Schools differ — apply your own tradition’s judgement.'
+
 export const COMPASS_META: { id: string; label: string; sub: string }[] = [
   { id: 'zones16', label: '16 Zones', sub: 'MahaVastu chakra' },
   { id: 'gates32', label: '32 Gates', sub: 'Entrance devtas' },

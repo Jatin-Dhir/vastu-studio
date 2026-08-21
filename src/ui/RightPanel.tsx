@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, LocateFixed, Navigation, RotateCcw } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, Navigation, RotateCcw, XCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { placementOf, zoneRows } from '../analysis'
-import { markerKindMeta } from '../vastu'
+import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
+import { evaluateVastu } from '../evaluate'
+import { processCompassImage } from '../imageTools'
+import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
 import type { CompassId, Pt } from '../types'
@@ -297,13 +300,34 @@ export function RightPanel() {
 
   const pickCustom = async (file: File) => {
     try {
-      const dataUrl = await blobToDataUrl(file)
-      const img = await loadImage(dataUrl)
-      setCompass({ id: 'custom', customUrl: dataUrl, customAspect: img.height / img.width })
-      useStore.getState().toast('Custom compass placed on the centre', 'ok')
+      const raw = await blobToDataUrl(file)
+      const processed = await processCompassImage(raw)
+      setCompass({ id: 'custom', customUrl: processed.dataUrl, customAspect: processed.aspect })
+      useStore.getState().toast(
+        processed.removedBg
+          ? 'Background removed & wheel centred — save it as a preset to keep it'
+          : 'Compass placed — save it as a preset to keep it',
+        'ok',
+      )
     } catch {
       useStore.getState().toast('Could not read that image', 'warn')
     }
+  }
+
+  const [presets, setPresets] = useState<CompassPreset[]>([])
+  useEffect(() => { void listPresets().then(setPresets).catch(() => {}) }, [])
+  const saveAsPreset = async () => {
+    const cs = useStore.getState().compass
+    if (!cs.customUrl) return
+    const id = (crypto as any).randomUUID ? crypto.randomUUID() : `cp${Math.floor(performance.now() * 1000)}`
+    await putPreset({ id, name: `My chakra ${presets.length + 1}`, dataUrl: cs.customUrl, aspect: cs.customAspect ?? 1, createdAt: Date.now() })
+    setPresets(await listPresets())
+    useStore.getState().toast('Saved — it now lives in your compass picker on this device', 'ok')
+  }
+  const removePreset = (id: string) => {
+    useStore.getState().toast('Delete this chakra preset?', 'warn', 'Delete', () => {
+      void deletePreset(id).then(async () => setPresets(await listPresets()))
+    })
   }
 
   const scaleBadge =
@@ -495,6 +519,24 @@ export function RightPanel() {
         <input ref={customFileRef} type="file" accept="image/*" hidden
           onChange={(e) => { const f = e.target.files?.[0]; if (f) void pickCustom(f); e.target.value = '' }} />
 
+        {presets.length > 0 && (
+          <>
+            <div className="subhead">My chakras</div>
+            <div className="compass-grid">
+              {presets.map((p) => (
+                <button key={p.id}
+                  className={`compass-card preset ${compass.id === 'custom' && compass.customUrl === p.dataUrl ? 'on' : ''}`}
+                  disabled={!closed}
+                  onClick={() => setCompass({ id: 'custom', customUrl: p.dataUrl, customAspect: p.aspect })}>
+                  <span className="compass-thumb"><img src={p.dataUrl} alt={p.name} /></span>
+                  <span className="compass-label">{p.name}</span>
+                  <span className="preset-del" onClick={(e) => { e.stopPropagation(); removePreset(p.id) }}>×</span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
         {closed && compass.id !== 'none' && (
           <>
             <Slider label="Size" value={compass.scalePct} min={40} max={170}
@@ -524,9 +566,14 @@ export function RightPanel() {
               <>
                 <Slider label="Image rotation" value={compass.customRotDeg} min={-180} max={180}
                   fmt={(v) => `${v}°`} onChange={(v) => setCompass({ customRotDeg: v })} />
-                <button className="btn-ghost wide" onClick={() => customFileRef.current?.click()}>
-                  <ImagePlus size={14} /> Replace compass image
-                </button>
+                <div className="btn-row">
+                  <button className="btn-ghost" onClick={() => customFileRef.current?.click()}>
+                    <ImagePlus size={14} /> Replace
+                  </button>
+                  <button className="btn-ghost" onClick={() => void saveAsPreset()}>
+                    Save as preset
+                  </button>
+                </div>
               </>
             )}
           </>
@@ -591,6 +638,46 @@ export function RightPanel() {
           )}
         </section>
       )}
+
+      {/* -------- Vastu analysis -------- */}
+      {closed && center && pts.length >= 3 && (() => {
+        const R = Math.sqrt(sampled.reduce((m, p) => Math.max(m, (p.x - center.x) ** 2 + (p.y - center.y) ** 2), 0)) * 1.03
+        const ev = evaluateVastu({ sampled, center, northDeg, markers, R })
+        return (
+          <section className="card">
+            <header className="card-head">
+              <h2>Vastu analysis</h2>
+              <span className="file-chip">{ev.favourable} ✓ · {ev.attention} !</span>
+            </header>
+            {ev.findings.length === 0 && (
+              <p className="hint">Nothing to read yet — use the <b>Mark</b> tool to pin the entrance,
+                kitchen, toilets and beds, and the analysis writes itself.</p>
+            )}
+            <div className="finding-list">
+              {ev.findings.map((f, i) => (
+                <button key={i} className={`finding-row sev-${f.severity}`} onClick={() => {
+                  if (f.markerId) useStore.getState().setSelectedMarker(f.markerId)
+                  else if (f.zoneIdx != null) {
+                    useStore.getState().setHighlightZone(f.zoneIdx)
+                    if (window.innerWidth <= 760) useStore.getState().setSheetPos('half')
+                  }
+                }}>
+                  <span className="finding-icon">
+                    {f.severity === 'good' ? <CheckCircle2 size={14} />
+                      : f.severity === 'bad' ? <XCircle size={14} />
+                        : f.severity === 'warn' ? <AlertTriangle size={14} /> : <Info size={14} />}
+                  </span>
+                  <span className="finding-body">
+                    <b>{f.title}</b>
+                    <span>{f.detail}</span>
+                  </span>
+                </button>
+              ))}
+            </div>
+            {ev.findings.length > 0 && <div className="zone-note">{ANALYSIS_DISCLAIMER}</div>}
+          </section>
+        )
+      })()}
 
       {/* -------- Zone balance -------- */}
       {closed && center && pts.length >= 3 && (
