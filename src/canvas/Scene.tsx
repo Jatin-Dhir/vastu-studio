@@ -33,10 +33,20 @@ export interface SceneProps {
   idPrefix: string
 }
 
-export function strokePathD(pts: Pt[]): string {
+export function strokePathD(pts: Pt[], kind: 'pen' | 'line' = 'line'): string {
   if (pts.length === 0) return ''
   let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
-  for (let i = 1; i < pts.length; i++) d += `L${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`
+  if (kind === 'pen' && pts.length > 2) {
+    // quadratics through segment midpoints — the samples steer, the curve stays fluid
+    for (let i = 1; i < pts.length - 1; i++) {
+      const mx = (pts[i].x + pts[i + 1].x) / 2
+      const my = (pts[i].y + pts[i + 1].y) / 2
+      d += `Q${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)} ${mx.toFixed(2)} ${my.toFixed(2)}`
+    }
+    d += `L${pts[pts.length - 1].x.toFixed(2)} ${pts[pts.length - 1].y.toFixed(2)}`
+  } else {
+    for (let i = 1; i < pts.length; i++) d += `L${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`
+  }
   return d
 }
 
@@ -46,7 +56,7 @@ export function StrokesLayer({ strokes }: { strokes: Stroke[] }) {
   return (
     <g>
       {strokes.map((s) => (
-        <path key={s.id} d={strokePathD(s.pts)} fill="none" stroke={s.color}
+        <path key={s.id} d={strokePathD(s.pts, s.kind)} fill="none" stroke={s.color}
           strokeWidth={s.width} strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
       ))}
     </g>

@@ -43,19 +43,19 @@ function ToolHint() {
     text = 'Pick a type, then tap the plan to mark it'
   } else if (tool === 'draw') {
     text = useStore.getState().drawMode === 'line'
-      ? 'Drag to place a straight line — pan with two fingers'
+      ? 'Drag a straight line — ends snap to your outline’s corners & edges'
       : 'Draw freely on the plan — pan with two fingers'
   }
   if (!text) return null
   return <div className="tool-hint">{text}</div>
 }
 
-const DRAW_COLORS = ['#F26B57', '#D9B45B', '#6FC7CE', '#63B56F', '#F2F2F2']
+const DRAW_COLORS = ['#F26B57', '#D9B45B', '#5B8DEF', '#63B56F', '#F2F2F2']
 
 /** Pen/line, colour and width options while the Draw tool is armed. */
 function DrawOptionsRow() {
   const drawMode = useStore((s) => s.drawMode)
-  const drawColor = useStore((s) => s.drawColor)
+  const drawColor = useStore((s) => (s.drawMode === 'line' ? s.lineColor : s.penColor))
   const drawWidth = useStore((s) => s.drawWidth)
   const hasStrokes = useStore((s) => s.strokes.length > 0)
   const st = useStore.getState()

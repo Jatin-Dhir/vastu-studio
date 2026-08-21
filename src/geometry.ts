@@ -225,6 +225,27 @@ export function distToSegment(p: Pt, a: Pt, b: Pt): number {
   return dist(p, { x: a.x + t * dx, y: a.y + t * dy })
 }
 
+/** Ramer–Douglas–Peucker: drop points within eps of the chord (slims freehand ink on commit). */
+export function simplifyPath(pts: Pt[], eps: number): Pt[] {
+  if (pts.length < 3) return pts
+  const keep = new Array<boolean>(pts.length).fill(false)
+  keep[0] = keep[pts.length - 1] = true
+  const stack: Array<[number, number]> = [[0, pts.length - 1]]
+  while (stack.length) {
+    const [a, b] = stack.pop()!
+    let worst = -1, wd = eps
+    for (let i = a + 1; i < b; i++) {
+      const dd = distToSegment(pts[i], pts[a], pts[b])
+      if (dd > wd) { wd = dd; worst = i }
+    }
+    if (worst > 0) {
+      keep[worst] = true
+      stack.push([a, worst], [worst, b])
+    }
+  }
+  return pts.filter((_, i) => keep[i])
+}
+
 export function boundsOf(pts: Pt[]) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const p of pts) {

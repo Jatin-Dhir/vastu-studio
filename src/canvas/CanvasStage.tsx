@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD, strokePathD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
-import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon } from '../geometry'
+import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import type { Pt, ViewState } from '../types'
 
@@ -75,14 +75,15 @@ export function CanvasStage() {
   const markers = useStore((s) => s.markers)
   const selectedMarker = useStore((s) => s.selectedMarker)
   const strokes = useStore((s) => s.strokes)
-  const drawColor = useStore((s) => s.drawColor)
-  const drawWidth = useStore((s) => s.drawWidth)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
   const [editDragging, setEditDragging] = useState(false)
-  const [activeStroke, setActiveStroke] = useState<Pt[] | null>(null)
+  // ink preview is driven imperatively (like the view transform) so drawing never re-renders the scene
   const activeStrokeRef = useRef<Pt[]>([])
+  const activeInkRef = useRef<SVGPathElement>(null)
+  const snapDotsRef = useRef<SVGGElement>(null)
+  const penCursorRef = useRef<Pt | null>(null)
   const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
@@ -133,6 +134,37 @@ export function CanvasStage() {
     const rad = (-rot * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
     return { x: qx * cos - qy * sin, y: qx * sin + qy * cos }
+  }
+
+  /** Snap a world point to the outline's corners (priority) or edges — used by straight-line ink. */
+  const snapToOutline = (p: Pt): { p: Pt; snapped: boolean } => {
+    const s = useStore.getState()
+    const n = s.pts.length
+    if (n === 0) return { p, snapped: false }
+    const k2 = viewRef.current.k
+    let best: Pt | null = null
+    let bd = (COARSE ? 16 : 12) / k2
+    for (const v of s.pts) {
+      const dd = dist(p, v)
+      if (dd < bd) { bd = dd; best = { x: v.x, y: v.y } }
+    }
+    if (best) return { p: best, snapped: true }
+    const m = s.closed ? n : n - 1
+    bd = (COARSE ? 12 : 9) / k2
+    for (let i = 0; i < m; i++) {
+      const r = nearestOnEdge(p, s.pts[i], s.pts[(i + 1) % n], s.bulges[i] ?? 0)
+      if (r.d < bd) { bd = r.d; best = r.point }
+    }
+    return best ? { p: best, snapped: true } : { p, snapped: false }
+  }
+
+  const setSnapDot = (i: 0 | 1, p: Pt | null) => {
+    const c = snapDotsRef.current?.children[i] as SVGCircleElement | undefined
+    if (!c) return
+    if (!p) { c.style.display = 'none'; return }
+    c.style.display = ''
+    c.setAttribute('cx', String(p.x))
+    c.setAttribute('cy', String(p.y))
   }
 
   /** Rotate the view by dDeg around a screen point (defaults to the viewport centre). */
@@ -270,9 +302,31 @@ export function CanvasStage() {
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
     else if (useStore.getState().tool === 'draw' && !useStore.getState().locked && e.button === 0) {
+      const s0 = useStore.getState()
       d.mode = 'drawing'
-      activeStrokeRef.current = [d.grabbed!]
-      setActiveStroke([d.grabbed!])
+      let start = d.grabbed!
+      let startSnapped = false
+      if (s0.drawMode === 'line') {
+        const r = snapToOutline(start)
+        start = r.p; startSnapped = r.snapped
+      }
+      activeStrokeRef.current = [start]
+      penCursorRef.current = start
+      const k0 = viewRef.current.k
+      const ink = activeInkRef.current
+      if (ink) {
+        ink.setAttribute('stroke', s0.drawMode === 'line' ? s0.lineColor : s0.penColor)
+        ink.setAttribute('stroke-width', String((s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k0))
+        ink.setAttribute('d', '')
+      }
+      if (snapDotsRef.current) {
+        for (const c of snapDotsRef.current.children) {
+          c.setAttribute('r', String(6 / k0))
+          c.setAttribute('stroke-width', String(2 / k0))
+        }
+      }
+      setSnapDot(0, startSnapped ? start : null)
+      setSnapDot(1, null)
     }
     else { d.mode = 'maybe-pan' }
     if (e.pointerType !== 'mouse' &&
@@ -355,17 +409,27 @@ export function CanvasStage() {
     }
     if (d.mode === 'drawing') {
       const arr = activeStrokeRef.current
+      const k2 = viewRef.current.k
       if (s.drawMode === 'line') {
-        let p = world
-        if (s.angleSnap && arr.length > 0) p = snapPoint(arr[0], p)
+        const r = snapToOutline(world)
+        let p = r.p
+        if (!r.snapped && s.angleSnap && arr.length > 0) p = snapPoint(arr[0], p)
         activeStrokeRef.current = [arr[0], p]
+        setSnapDot(1, r.snapped ? p : null)
       } else {
-        const last = arr[arr.length - 1]
-        if (!last || dist(last, world) > 1.5 / viewRef.current.k) {
-          activeStrokeRef.current = [...arr, world]
+        // every hardware sample, lightly low-passed — density feeds the quadratic smoothing
+        const ne = e.nativeEvent as PointerEvent
+        const evs = ne.getCoalescedEvents && ne.getCoalescedEvents().length > 0 ? ne.getCoalescedEvents() : [ne]
+        for (const ce of evs) {
+          const raw = toWorld(ce.clientX, ce.clientY)
+          const c0 = penCursorRef.current ?? raw
+          const sm = { x: c0.x + (raw.x - c0.x) * 0.55, y: c0.y + (raw.y - c0.y) * 0.55 }
+          penCursorRef.current = sm
+          if (arr.length === 0 || dist(arr[arr.length - 1], sm) > 1.2 / k2) arr.push(sm)
         }
       }
-      setActiveStroke(activeStrokeRef.current)
+      activeInkRef.current?.setAttribute('d',
+        strokePathD(activeStrokeRef.current, s.drawMode === 'line' ? 'line' : 'pen'))
       return
     }
     if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
@@ -420,7 +484,10 @@ export function CanvasStage() {
       const s0 = useStore.getState()
       const arr = activeStrokeRef.current
       activeStrokeRef.current = []
-      setActiveStroke(null)
+      penCursorRef.current = null
+      activeInkRef.current?.setAttribute('d', '')
+      setSnapDot(0, null)
+      setSnapDot(1, null)
       const k2 = viewRef.current.k
       let total = 0
       for (let i = 1; i < arr.length; i++) total += dist(arr[i - 1], arr[i])
@@ -428,8 +495,8 @@ export function CanvasStage() {
         s0.addStroke({
           id: (crypto as any).randomUUID ? crypto.randomUUID() : `st${Math.floor(performance.now() * 1000)}`,
           kind: s0.drawMode,
-          pts: s0.drawMode === 'line' ? [arr[0], arr[arr.length - 1]] : arr,
-          color: s0.drawColor,
+          pts: s0.drawMode === 'line' ? [arr[0], arr[arr.length - 1]] : simplifyPath(arr, 0.4 / k2),
+          color: s0.drawMode === 'line' ? s0.lineColor : s0.penColor,
           width: (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k2,
         })
       }
@@ -607,16 +674,20 @@ export function CanvasStage() {
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes} idPrefix="live"
         />
 
-        {/* live ink preview */}
-        {activeStroke && activeStroke.length >= 2 && (
-          <path d={strokePathD(activeStroke)} fill="none" stroke={drawColor}
-            strokeWidth={(drawWidth === 1 ? 2 : drawWidth === 3 ? 6 : 3.5) / k}
-            strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+        {/* live ink preview + snap rings — attributes set imperatively so drawing never re-renders */}
+        {tool === 'draw' && (
+          <g>
+            <path ref={activeInkRef} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+            <g ref={snapDotsRef}>
+              <circle style={{ display: 'none' }} fill="none" stroke={GOLD} opacity={0.95} />
+              <circle style={{ display: 'none' }} fill="none" stroke={GOLD} opacity={0.95} />
+            </g>
+          </g>
         )}
 
         {/* stroke hit paths — tap a stroke in Select mode to manage it */}
         {tool === 'select' && !locked && strokes.map((s2) => (
-          <path key={`hit-${s2.id}`} data-strokeid={s2.id} d={strokePathD(s2.pts)} fill="none"
+          <path key={`hit-${s2.id}`} data-strokeid={s2.id} d={strokePathD(s2.pts, s2.kind)} fill="none"
             stroke="rgba(0,0,0,0)" strokeWidth={Math.max(s2.width * 2, (COARSE ? 20 : 12) / k)}
             style={{ cursor: 'pointer' }} />
         ))}

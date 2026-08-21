@@ -42,7 +42,8 @@ export interface VastuStore {
   strokes: Stroke[]
   selectedStroke: string | null
   drawMode: 'pen' | 'line'
-  drawColor: string
+  penColor: string
+  lineColor: string
   drawWidth: number
   addStroke: (s: Stroke) => void
   deleteStroke: (id: string) => void
@@ -173,7 +174,8 @@ export const useStore = create<VastuStore>()((set, get) => {
     strokes: [],
     selectedStroke: null,
     drawMode: 'pen',
-    drawColor: '#F26B57',
+    penColor: '#F26B57',
+    lineColor: '#5B8DEF',
     drawWidth: 2,
     addStroke: (stroke) => { push(); set((s) => ({ strokes: [...s.strokes, stroke] })) },
     deleteStroke: (id) => {
@@ -186,7 +188,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null }) },
     setSelectedStroke: (selectedStroke) => set({ selectedStroke }),
     setDrawMode: (drawMode) => set({ drawMode }),
-    setDrawColor: (drawColor) => set({ drawColor }),
+    setDrawColor: (c) => set((s) => (s.drawMode === 'line' ? { lineColor: c } : { penColor: c })),
     setDrawWidth: (drawWidth) => set({ drawWidth }),
     report: { client: '', address: '', practitioner: '', notes: '' },
     reportOpen: false,
