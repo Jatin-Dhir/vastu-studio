@@ -539,7 +539,7 @@ export function RightPanel() {
 
         {closed && compass.id !== 'none' && (
           <>
-            <Slider label="Size" value={compass.scalePct} min={40} max={170}
+            <Slider label="Size" value={compass.scalePct} min={40} max={400}
               onChange={(v) => setCompass({ scalePct: v })} />
             <Slider label="Opacity" value={compass.opacity * 100} min={15} max={100}
               onChange={(v) => setCompass({ opacity: v / 100 })} />
