@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Lock, LockOpen, Navigation, Pencil, Plus, RotateCcw, Spline, Trash2, X } from 'lucide-react'
+import { Check, Lock, LockOpen, Navigation, Pencil, Plus, RotateCcw, Slash, Spline, Trash2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, edgePoint, sampledPolygon } from '../geometry'
 import { placementOf } from '../analysis'
@@ -41,9 +41,82 @@ function ToolHint() {
     text = !northA ? 'Tap the TAIL of the plan’s north arrow' : 'Now tap the TIP of the arrow'
   } else if (tool === 'marker') {
     text = 'Pick a type, then tap the plan to mark it'
+  } else if (tool === 'draw') {
+    text = useStore.getState().drawMode === 'line'
+      ? 'Drag to place a straight line — pan with two fingers'
+      : 'Draw freely on the plan — pan with two fingers'
   }
   if (!text) return null
   return <div className="tool-hint">{text}</div>
+}
+
+const DRAW_COLORS = ['#F26B57', '#D9B45B', '#6FC7CE', '#63B56F', '#F2F2F2']
+
+/** Pen/line, colour and width options while the Draw tool is armed. */
+function DrawOptionsRow() {
+  const drawMode = useStore((s) => s.drawMode)
+  const drawColor = useStore((s) => s.drawColor)
+  const drawWidth = useStore((s) => s.drawWidth)
+  const hasStrokes = useStore((s) => s.strokes.length > 0)
+  const st = useStore.getState()
+  return (
+    <div className="quickbar-row kinds">
+      <button className={`qpill ${drawMode === 'pen' ? 'on' : ''}`} onClick={() => st.setDrawMode('pen')}>
+        <Pencil size={12} /> Pen
+      </button>
+      <button className={`qpill ${drawMode === 'line' ? 'on' : ''}`} onClick={() => st.setDrawMode('line')}>
+        <Slash size={12} /> Line
+      </button>
+      <span className="qsep" />
+      {DRAW_COLORS.map((c) => (
+        <button key={c} className={`draw-swatch ${drawColor === c ? 'on' : ''}`}
+          style={{ background: c }} onClick={() => st.setDrawColor(c)} />
+      ))}
+      <span className="qsep" />
+      {[1, 2, 3].map((w) => (
+        <button key={w} className={`draw-width ${drawWidth === w ? 'on' : ''}`} onClick={() => st.setDrawWidth(w)}>
+          <span style={{ height: w === 1 ? 2 : w === 2 ? 3.5 : 6 }} />
+        </button>
+      ))}
+      {hasStrokes && (
+        <>
+          <span className="qsep" />
+          <button className="qpill" onClick={() => {
+            st.toast('Remove all drawings from the plan?', 'warn', 'Clear all', () => useStore.getState().clearStrokes())
+          }}>
+            <Trash2 size={12} />
+          </button>
+        </>
+      )}
+    </div>
+  )
+}
+
+/** Delete chip for a tapped ink stroke. */
+export function StrokeChips() {
+  const selectedStroke = useStore((s) => s.selectedStroke)
+  const strokes = useStore((s) => s.strokes)
+  const view = useStore((s) => s.view)
+  const locked = useStore((s) => s.locked)
+  const s2 = strokes.find((x) => x.id === selectedStroke)
+  if (!s2 || locked) return null
+  const mid = s2.pts[Math.floor(s2.pts.length / 2)]
+  const rad = (view.rot * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const sx = view.tx + view.k * (mid.x * cos - mid.y * sin)
+  const sy = view.ty + view.k * (mid.x * sin + mid.y * cos)
+  const st = useStore.getState()
+  return (
+    <div className="sel-chips" style={{
+      left: Math.max(8, Math.min(sx - 40, (window.innerWidth || 800) - 160)),
+      top: Math.max(60, sy - 52),
+    }}>
+      <button className="chip danger" onClick={() => st.deleteStroke(s2.id)}>
+        <Trash2 size={12} /> Delete
+      </button>
+      <button className="chip" onClick={() => st.setSelectedStroke(null)}><X size={12} /></button>
+    </div>
+  )
 }
 
 /** Marker type palette shown while the marker tool is armed. */
@@ -120,6 +193,7 @@ export function QuickBar() {
       )}
 
       {tool === 'marker' && !locked && <MarkerKindRow />}
+      {tool === 'draw' && !locked && <DrawOptionsRow />}
       <ToolHint />
 
       {degOpen && closed && (

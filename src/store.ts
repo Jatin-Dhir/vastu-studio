@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { splitBulge } from './geometry'
-import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, ScaleSource, Tool, Unit, ViewState } from './types'
+import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, ScaleSource, Stroke, Tool, Unit, ViewState } from './types'
 
 export interface Toast {
   id: number
@@ -10,7 +10,7 @@ export interface Toast {
   onAction?: () => void
 }
 
-interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[] }
+interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[] }
 
 export interface VastuStore {
   bg: BgState
@@ -39,6 +39,18 @@ export interface VastuStore {
   markers: Marker[]
   selectedMarker: string | null
   markerKind: MarkerKind
+  strokes: Stroke[]
+  selectedStroke: string | null
+  drawMode: 'pen' | 'line'
+  drawColor: string
+  drawWidth: number
+  addStroke: (s: Stroke) => void
+  deleteStroke: (id: string) => void
+  clearStrokes: () => void
+  setSelectedStroke: (id: string | null) => void
+  setDrawMode: (m: 'pen' | 'line') => void
+  setDrawColor: (c: string) => void
+  setDrawWidth: (w: number) => void
   report: ReportMeta
   reportOpen: boolean
   projectsOpen: boolean
@@ -125,8 +137,8 @@ let toastSeq = 1
 
 export const useStore = create<VastuStore>()((set, get) => {
   const push = () => {
-    const { pts, closed, bulges, markers, undoStack } = get()
-    const stack = [...undoStack, { pts, closed, bulges, markers }]
+    const { pts, closed, bulges, markers, strokes, undoStack } = get()
+    const stack = [...undoStack, { pts, closed, bulges, markers, strokes }]
     if (stack.length > 100) stack.shift()
     set({ undoStack: stack, redoStack: [] })
   }
@@ -158,6 +170,24 @@ export const useStore = create<VastuStore>()((set, get) => {
     markers: [],
     selectedMarker: null,
     markerKind: 'entrance',
+    strokes: [],
+    selectedStroke: null,
+    drawMode: 'pen',
+    drawColor: '#F26B57',
+    drawWidth: 2,
+    addStroke: (stroke) => { push(); set((s) => ({ strokes: [...s.strokes, stroke] })) },
+    deleteStroke: (id) => {
+      push()
+      set((s) => ({
+        strokes: s.strokes.filter((x) => x.id !== id),
+        selectedStroke: s.selectedStroke === id ? null : s.selectedStroke,
+      }))
+    },
+    clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null }) },
+    setSelectedStroke: (selectedStroke) => set({ selectedStroke }),
+    setDrawMode: (drawMode) => set({ drawMode }),
+    setDrawColor: (drawColor) => set({ drawColor }),
+    setDrawWidth: (drawWidth) => set({ drawWidth }),
     report: { client: '', address: '', practitioner: '', notes: '' },
     reportOpen: false,
     projectsOpen: false,
@@ -188,6 +218,8 @@ export const useStore = create<VastuStore>()((set, get) => {
         centerOverride: null,
         markers: [],
         selectedMarker: null,
+        strokes: [],
+        selectedStroke: null,
         calA: null,
         calB: null,
       }))
@@ -333,7 +365,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
     undo: () => {
-      const { undoStack, pts, closed, bulges, markers } = get()
+      const { undoStack, pts, closed, bulges, markers, strokes } = get()
       if (undoStack.length === 0) return
       const prev = undoStack[undoStack.length - 1]
       set((s) => ({
@@ -341,13 +373,15 @@ export const useStore = create<VastuStore>()((set, get) => {
         closed: prev.closed,
         bulges: prev.bulges,
         markers: prev.markers,
+        strokes: prev.strokes ?? s.strokes,
         selectedMarker: null,
+        selectedStroke: null,
         undoStack: s.undoStack.slice(0, -1),
-        redoStack: [...s.redoStack, { pts, closed, bulges, markers }],
+        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes }],
       }))
     },
     redo: () => {
-      const { redoStack, pts, closed, bulges, markers } = get()
+      const { redoStack, pts, closed, bulges, markers, strokes } = get()
       if (redoStack.length === 0) return
       const next = redoStack[redoStack.length - 1]
       set((s) => ({
@@ -355,9 +389,11 @@ export const useStore = create<VastuStore>()((set, get) => {
         closed: next.closed,
         bulges: next.bulges,
         markers: next.markers,
+        strokes: next.strokes ?? s.strokes,
         selectedMarker: null,
+        selectedStroke: null,
         redoStack: s.redoStack.slice(0, -1),
-        undoStack: [...s.undoStack, { pts, closed, bulges, markers }],
+        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes }],
       }))
     },
 
@@ -377,6 +413,8 @@ export const useStore = create<VastuStore>()((set, get) => {
         locked: p.locked ?? false,
         markers: p.markers ?? [],
         selectedMarker: null,
+        strokes: p.strokes ?? [],
+        selectedStroke: null,
         report: { client: '', address: '', practitioner: '', notes: '', ...p.report },
         selectedVertex: null,
         selectedEdge: null,
@@ -405,6 +443,7 @@ export function serializeProject(s: VastuStore): ProjectFile {
     compass: s.compass,
     locked: s.locked,
     markers: s.markers,
+    strokes: s.strokes,
     report: s.report,
   }
 }

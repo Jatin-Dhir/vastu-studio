@@ -1,7 +1,17 @@
 export interface Pt { x: number; y: number }
 
 export type Unit = 'ft' | 'm'
-export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker'
+export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker' | 'draw'
+
+/** Freehand annotation ink — lives ON the plan, never part of the outline. */
+export interface Stroke {
+  id: string
+  kind: 'pen' | 'line'
+  pts: Pt[]
+  color: string
+  /** world px, fixed at draw time so ink zooms with the plan */
+  width: number
+}
 
 export type MarkerKind = 'entrance' | 'kitchen' | 'toilet' | 'bed' | 'pooja' | 'water' | 'custom'
 
@@ -75,5 +85,6 @@ export interface ProjectFile {
   compass: CompassState
   locked?: boolean
   markers?: Marker[]
+  strokes?: Stroke[]
   report?: ReportMeta
 }

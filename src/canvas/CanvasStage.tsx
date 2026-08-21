@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
-import { Scene, FONT, GOLD } from './Scene'
+import { Scene, FONT, GOLD, strokePathD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon } from '../geometry'
 import { formatLen } from '../format'
@@ -11,7 +11,7 @@ const CLOSE_PX = COARSE ? 20 : 13
 const HIT_PX = COARSE ? 18 : 12
 const pushHistory = () =>
   useStore.setState((s) => ({
-    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges, markers: s.markers }].slice(-100),
+    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges, markers: s.markers, strokes: s.strokes }].slice(-100),
     redoStack: [],
   }))
 
@@ -35,7 +35,7 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing'
   idx: number
   markerId: string | null
   startX: number
@@ -74,10 +74,15 @@ export function CanvasStage() {
   const highlightZone = useStore((s) => s.highlightZone)
   const markers = useStore((s) => s.markers)
   const selectedMarker = useStore((s) => s.selectedMarker)
+  const strokes = useStore((s) => s.strokes)
+  const drawColor = useStore((s) => s.drawColor)
+  const drawWidth = useStore((s) => s.drawWidth)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
   const [editDragging, setEditDragging] = useState(false)
+  const [activeStroke, setActiveStroke] = useState<Pt[] | null>(null)
+  const activeStrokeRef = useRef<Pt[]>([])
   const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
@@ -242,10 +247,11 @@ export function CanvasStage() {
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-role]')
+    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-role]')
     const vidx = target?.getAttribute('data-vidx')
     const bidx = target?.getAttribute('data-bidx')
     const mkid = target?.getAttribute('data-mkid')
+    const strokeId = target?.getAttribute('data-strokeid')
     const role = target?.getAttribute('data-role')
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY
@@ -255,8 +261,19 @@ export function CanvasStage() {
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true) }
     else if (mkid != null) { d.mode = 'marker'; d.markerId = mkid }
+    else if (strokeId != null) {
+      useStore.getState().setSelectedStroke(
+        useStore.getState().selectedStroke === strokeId ? null : strokeId)
+      d.mode = 'idle'
+      return
+    }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
+    else if (useStore.getState().tool === 'draw' && !useStore.getState().locked && e.button === 0) {
+      d.mode = 'drawing'
+      activeStrokeRef.current = [d.grabbed!]
+      setActiveStroke([d.grabbed!])
+    }
     else { d.mode = 'maybe-pan' }
     if (e.pointerType !== 'mouse' &&
       (d.mode === 'vertex' || d.mode === 'center' || d.mode === 'calA' || d.mode === 'calB' || d.mode === 'bulge' || d.mode === 'marker')) {
@@ -336,6 +353,21 @@ export function CanvasStage() {
       s.moveMarker(d.markerId, world)
       return
     }
+    if (d.mode === 'drawing') {
+      const arr = activeStrokeRef.current
+      if (s.drawMode === 'line') {
+        let p = world
+        if (s.angleSnap && arr.length > 0) p = snapPoint(arr[0], p)
+        activeStrokeRef.current = [arr[0], p]
+      } else {
+        const last = arr[arr.length - 1]
+        if (!last || dist(last, world) > 1.5 / viewRef.current.k) {
+          activeStrokeRef.current = [...arr, world]
+        }
+      }
+      setActiveStroke(activeStrokeRef.current)
+      return
+    }
     if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
       if (d.mode === 'calA') s.setCal(world, s.calB)
       else s.setCal(s.calA, world)
@@ -383,6 +415,26 @@ export function CanvasStage() {
     const moved = d.moved
     d.mode = 'idle'
     if (mode === 'pan') commitView()
+    // ink commits on release — drawing IS a drag, so this must precede the moved guard
+    if (mode === 'drawing') {
+      const s0 = useStore.getState()
+      const arr = activeStrokeRef.current
+      activeStrokeRef.current = []
+      setActiveStroke(null)
+      const k2 = viewRef.current.k
+      let total = 0
+      for (let i = 1; i < arr.length; i++) total += dist(arr[i - 1], arr[i])
+      if (arr.length >= 2 && total > 4 / k2) {
+        s0.addStroke({
+          id: (crypto as any).randomUUID ? crypto.randomUUID() : `st${Math.floor(performance.now() * 1000)}`,
+          kind: s0.drawMode,
+          pts: s0.drawMode === 'line' ? [arr[0], arr[arr.length - 1]] : arr,
+          color: s0.drawColor,
+          width: (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k2,
+        })
+      }
+      return
+    }
     if (e.button === 2 || moved) return
     if (pointers.current.size > 0) return
 
@@ -423,7 +475,7 @@ export function CanvasStage() {
         }
         lastTap.current = { t: now, x: e.clientX, y: e.clientY }
       }
-      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); return
+      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); s.setSelectedStroke(null); return
     }
     if (s.locked) return
 
@@ -552,8 +604,22 @@ export function CanvasStage() {
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
           northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
-          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} idPrefix="live"
+          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes} idPrefix="live"
         />
+
+        {/* live ink preview */}
+        {activeStroke && activeStroke.length >= 2 && (
+          <path d={strokePathD(activeStroke)} fill="none" stroke={drawColor}
+            strokeWidth={(drawWidth === 1 ? 2 : drawWidth === 3 ? 6 : 3.5) / k}
+            strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+        )}
+
+        {/* stroke hit paths — tap a stroke in Select mode to manage it */}
+        {tool === 'select' && !locked && strokes.map((s2) => (
+          <path key={`hit-${s2.id}`} data-strokeid={s2.id} d={strokePathD(s2.pts)} fill="none"
+            stroke="rgba(0,0,0,0)" strokeWidth={Math.max(s2.width * 2, (COARSE ? 20 : 12) / k)}
+            style={{ cursor: 'pointer' }} />
+        ))}
 
         {/* live trace segment */}
         {liveTo && (

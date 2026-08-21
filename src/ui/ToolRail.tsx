@@ -1,4 +1,4 @@
-import { Crosshair, Map as MapIcon, MapPin, MousePointer2, Navigation, PenLine, Ruler, Trash2, Upload } from 'lucide-react'
+import { Crosshair, Map as MapIcon, MapPin, MousePointer2, Navigation, Pencil, PenLine, Ruler, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
 import type { Tool } from '../types'
 
@@ -6,6 +6,7 @@ const TOOLS: { id: Tool; icon: typeof MousePointer2; label: string; short: strin
   { id: 'select', icon: MousePointer2, label: 'Select · Pan', short: 'Select', kbd: 'V' },
   { id: 'trace', icon: PenLine, label: 'Trace outline', short: 'Trace', kbd: 'T' },
   { id: 'marker', icon: MapPin, label: 'Mark rooms, doors & objects', short: 'Mark', kbd: 'P' },
+  { id: 'draw', icon: Pencil, label: 'Draw on the plan — pen & straight lines', short: 'Draw', kbd: 'D' },
   { id: 'calibrate', icon: Ruler, label: 'Set scale', short: 'Scale', kbd: 'C' },
   { id: 'north', icon: Navigation, label: 'Align north — tap the plan arrow, tail then tip', short: 'North', kbd: 'N' },
   { id: 'center', icon: Crosshair, label: 'Pin centre', short: 'Centre', kbd: 'M' },

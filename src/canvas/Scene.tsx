@@ -1,5 +1,5 @@
 import { Fragment, useMemo } from 'react'
-import type { BgState, CompassState, Marker, Pt, Unit } from '../types'
+import type { BgState, CompassState, Marker, Pt, Stroke, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { brahmasthanRadius } from '../analysis'
@@ -29,7 +29,28 @@ export interface SceneProps {
   viewRotDeg?: number
   showEdgeLabels: boolean
   markers?: Marker[]
+  strokes?: Stroke[]
   idPrefix: string
+}
+
+export function strokePathD(pts: Pt[]): string {
+  if (pts.length === 0) return ''
+  let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
+  for (let i = 1; i < pts.length; i++) d += `L${pts[i].x.toFixed(2)} ${pts[i].y.toFixed(2)}`
+  return d
+}
+
+/** User ink — annotations drawn on the plan, independent of the outline. */
+export function StrokesLayer({ strokes }: { strokes: Stroke[] }) {
+  if (strokes.length === 0) return null
+  return (
+    <g>
+      {strokes.map((s) => (
+        <path key={s.id} d={strokePathD(s.pts)} fill="none" stroke={s.color}
+          strokeWidth={s.width} strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+      ))}
+    </g>
+  )
 }
 
 const haloProps = (w: number) => ({
@@ -652,6 +673,7 @@ export function Scene(props: SceneProps) {
       })()}
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
+      <StrokesLayer strokes={props.strokes ?? []} />
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}

@@ -9,7 +9,7 @@ import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog, MarkerDialog, ShortcutsDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
-import { CloseChip, MarkerChips, QuickBar, RotateChip, SelectionChips } from './ui/CanvasOverlays'
+import { CloseChip, MarkerChips, QuickBar, RotateChip, SelectionChips, StrokeChips } from './ui/CanvasOverlays'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { getMostRecent, newProjectId, putProject, requestPersistence } from './db'
@@ -107,6 +107,7 @@ export default function App() {
         case 'm': case 'M': s.setTool('center'); break
         case 'n': case 'N': s.setTool('north'); break
         case 'p': case 'P': s.setTool('marker'); break
+        case 'd': case 'D': s.setTool('draw'); break
         case 'f': case 'F': requestFit(); break
         case '?': s.setShortcutsOpen(true); break
         case 'Enter': if (!s.closed && s.pts.length >= 3) s.closePolygon(); break
@@ -217,6 +218,7 @@ export default function App() {
         <CloseChip />
         <SelectionChips />
         <MarkerChips />
+        <StrokeChips />
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}

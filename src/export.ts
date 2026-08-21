@@ -67,7 +67,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     centerOverridden: !!s.centerOverride,
     northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
     unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels,
-    markers: s.markers, idPrefix: 'exp',
+    markers: s.markers, strokes: s.strokes, idPrefix: 'exp',
   })
 
   /* title + footer furniture, drawn in world coordinates */

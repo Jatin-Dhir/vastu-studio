@@ -930,6 +930,28 @@ kbd {
 }
 .marker-kind-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
 
+/* draw tool options */
+.draw-swatch {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  flex: 0 0 auto;
+  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,0.35);
+  transition: transform 0.12s ease;
+}
+.draw-swatch.on { border-color: #fff; transform: scale(1.12); }
+.draw-width {
+  width: 30px; height: 26px;
+  display: grid; place-items: center;
+  border-radius: 8px;
+  flex: 0 0 auto;
+}
+.draw-width span { display: block; width: 18px; border-radius: 3px; background: var(--muted); }
+.draw-width.on { background: var(--gold-soft); }
+.draw-width.on span { background: var(--gold-2); }
+
+.stage.tool-draw { cursor: crosshair; }
+
 /* markers card */
 .entrance-card {
   display: flex; flex-direction: column; gap: 2px;
