@@ -74,17 +74,18 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   const title = (s.bg.name?.replace(/\.[^.]+$/, '') || 'Vastu plan')
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
   const t1 = w * 0.024, t2 = w * 0.0145
-  const northLabel =
-    s.northSource === 'map' ? 'north auto (map)'
-      : s.northSource === 'plan' ? 'north from plan arrow'
-        : `north ${s.northDeg}°`
+  const northSourceLabel =
+    s.northSource === 'map' ? 'auto from map'
+      : s.northSource === 'plan' ? 'from plan arrow'
+        : s.northSource === 'manual' ? 'confirmed'
+          : 'assumed'
   const statBits: string[] = []
   if (s.closed && s.pts.length >= 3 && s.metersPerPx) {
     statBits.push(`Area ${formatArea(polygonArea(sampled) * s.metersPerPx ** 2, s.unit)}`)
     statBits.push(`Perimeter ${formatLen(perimeter(sampled, true) * s.metersPerPx, s.unit)}`)
   }
   if (s.metersPerPx) statBits.push(formatScale(s.metersPerPx, s.unit))
-  statBits.push(`North ${s.northDeg}° · ${northLabel}`)
+  statBits.push(`North ${s.northDeg}° (${northSourceLabel})`)
 
   const bar = s.metersPerPx ? pickScaleBar(s.metersPerPx, s.unit, w * 0.24) : null
   const barY = maxY - bandBottom * 0.42
