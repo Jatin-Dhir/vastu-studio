@@ -63,6 +63,15 @@ export interface VastuStore {
   mapOpen: boolean
   dwgNotice: boolean
   busy: string | null
+  /** a scale read from the import itself (printed 1:N, DXF units, map capture) — offered until used or replaced */
+  scaleSuggestion: { metersPerPx: number; label: string } | null
+  setScaleSuggestion: (s: { metersPerPx: number; label: string } | null) => void
+  /** the user chose to work unscaled for now — the guide moves on */
+  scaleSkipped: boolean
+  setScaleSkipped: (on: boolean) => void
+  /** which import produced the current background — steers the calibrate hint */
+  bgHint: 'map-screenshot' | null
+  setBgHint: (h: 'map-screenshot' | null) => void
   toasts: Toast[]
   undoStack: Snapshot[]
   redoStack: Snapshot[]
@@ -202,6 +211,12 @@ export const useStore = create<VastuStore>()((set, get) => {
     mapOpen: false,
     dwgNotice: false,
     busy: null,
+    scaleSuggestion: null,
+    setScaleSuggestion: (scaleSuggestion) => set({ scaleSuggestion }),
+    scaleSkipped: false,
+    setScaleSkipped: (scaleSkipped) => set({ scaleSkipped }),
+    bgHint: null,
+    setBgHint: (bgHint) => set({ bgHint }),
     toasts: [],
     undoStack: [],
     redoStack: [],
@@ -224,6 +239,9 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedStroke: null,
         calA: null,
         calB: null,
+        scaleSuggestion: null,
+        scaleSkipped: false,
+        bgHint: null,
       }))
     },
     // entering a pick-two-points tool always starts a fresh pair
@@ -242,7 +260,8 @@ export const useStore = create<VastuStore>()((set, get) => {
     },
     setView: (view) => set({ view }),
     setUnit: (unit) => set({ unit }),
-    setMetersPerPx: (metersPerPx, scaleSource) => set({ metersPerPx, scaleSource }),
+    setMetersPerPx: (metersPerPx, scaleSource) =>
+      set({ metersPerPx, scaleSource, ...(metersPerPx != null ? { scaleSuggestion: null } : {}) }),
 
     addPoint: (p) => { push(); set((s) => ({ pts: [...s.pts, p], bulges: [...s.bulges, 0] })) },
     movePoint: (i, p) =>

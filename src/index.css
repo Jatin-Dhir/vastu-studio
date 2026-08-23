@@ -36,6 +36,12 @@ body {
 button { font-family: var(--font); color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
 button:disabled { opacity: 0.38; cursor: default; }
 input, select { font-family: var(--font); }
+/* iOS/Android emulate sticky :hover + a synthesized-click delay on tap — this
+   removes both without touching the stage's own touch-action: none for gestures */
+button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-handle {
+  touch-action: manipulation;
+}
+.show-mobile { display: none; }
 
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
@@ -91,6 +97,10 @@ input, select { font-family: var(--font); }
 .step.active .step-num { background: var(--gold); color: #1a1503; }
 .step.done { color: var(--muted); }
 .step.done .step-num { background: var(--gold-soft); color: var(--gold); }
+.step.skipped { color: var(--dim); }
+.step.skipped .step-num { background: rgba(255,255,255,0.06); }
+.step:disabled { opacity: 0.4; cursor: default; }
+.step:disabled:hover { background: none; color: var(--dim); }
 
 .topbar-right { margin-left: auto; display: flex; align-items: center; gap: 7px; }
 .vsep { width: 1px; height: 22px; background: var(--stroke); margin: 0 4px; }
@@ -195,29 +205,31 @@ input, select { font-family: var(--font); }
 .rail-btn.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px rgba(217,180,91,0.35); }
 .hsep { height: 1px; background: var(--stroke); margin: 3px 4px; }
 
-/* tooltips */
+/* tooltips — hover-capable pointers only; touch has no hover and would stick until the next tap */
 [data-tip] { position: relative; }
-[data-tip]:hover::after {
-  content: attr(data-tip);
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 50%;
-  transform: translateX(-50%);
-  white-space: pre;
-  background: #1d2029;
-  border: 1px solid var(--stroke-2);
-  color: var(--text);
-  font-size: 11.5px; font-weight: 550;
-  padding: 5px 9px;
-  border-radius: 8px;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
-  z-index: 100;
-  pointer-events: none;
-  animation: tipIn 0.12s ease;
-}
-.rail-btn[data-tip]:hover::after {
-  top: 50%; left: calc(100% + 10px);
-  transform: translateY(-50%);
+@media (hover: hover) and (pointer: fine) {
+  [data-tip]:hover::after {
+    content: attr(data-tip);
+    position: absolute;
+    top: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    white-space: pre;
+    background: #1d2029;
+    border: 1px solid var(--stroke-2);
+    color: var(--text);
+    font-size: 11.5px; font-weight: 550;
+    padding: 5px 9px;
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+    z-index: 100;
+    pointer-events: none;
+    animation: tipIn 0.12s ease;
+  }
+  .rail-btn[data-tip]:hover::after {
+    top: 50%; left: calc(100% + 10px);
+    transform: translateY(-50%);
+  }
 }
 @keyframes tipIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -595,6 +607,11 @@ kbd {
   .zone-row { height: 34px; }
   .zone-track { height: 8px; }
   .toggle { padding: 8px 11px 8px 7px; }
+  .qpill { min-width: 42px; min-height: 40px; justify-content: center; }
+  .draw-swatch { width: 30px; height: 30px; }
+  .draw-width { width: 40px; height: 34px; }
+  .preset-del { width: 32px; height: 32px; font-size: 17px; }
+  .marker-row { padding: 10px 8px; }
   /* tactile press feedback — buttons visibly respond to the thumb */
   .chip:active, .qpill:active, .rail-btn:active, .btn-ghost:active, .compass-card:active,
   .icon-btn:active, .btn-primary:active, .zone-row:active, .marker-row:active {
@@ -894,6 +911,127 @@ kbd {
 }
 .map-locate:hover { background: #262a36; }
 
+/* ————— guide card — the one place that always says what's next ————— */
+.guide-card {
+  position: absolute;
+  left: 14px; bottom: 14px;
+  width: min(340px, calc(100vw - 28px));
+  z-index: 19;
+  display: flex; flex-direction: column; gap: 9px;
+  padding: 12px 12px 13px;
+  background: var(--panel);
+  border: 1px solid rgba(217,180,91,0.22);
+  border-radius: 14px;
+  backdrop-filter: blur(16px);
+  box-shadow: var(--shadow);
+  animation: cardIn 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
+}
+.guide-rows { display: flex; align-items: center; gap: 3px; }
+.guide-row {
+  display: flex; align-items: center; gap: 5px;
+  padding: 3px 6px 3px 3px;
+  border-radius: 999px;
+  font-size: 10.5px; font-weight: 650;
+  color: var(--dim);
+  transition: color 0.15s ease;
+}
+.guide-dot {
+  width: 15px; height: 15px;
+  display: grid; place-items: center;
+  border-radius: 50%;
+  font-size: 9px; font-weight: 800;
+  background: rgba(255,255,255,0.07);
+  color: var(--muted);
+  flex: 0 0 auto;
+}
+.guide-row.done { color: var(--muted); }
+.guide-row.done .guide-dot { background: var(--gold-soft); color: var(--gold); }
+.guide-row.skipped .guide-dot { background: rgba(255,255,255,0.05); color: var(--dim); }
+.guide-row.now { color: var(--gold-2); }
+.guide-row.now .guide-dot { background: var(--gold); color: #1a1503; }
+.guide-row .guide-name { display: none; }
+.guide-close { margin-left: auto; color: var(--dim); padding: 4px; flex: 0 0 auto; }
+.guide-close:hover { color: var(--text); }
+.guide-hint { margin: 0; font-size: 12.5px; line-height: 1.5; color: var(--text); }
+.guide-actions { display: flex; flex-wrap: wrap; gap: 7px; }
+.guide-cta {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 8px 13px;
+  border-radius: 10px;
+  background: linear-gradient(180deg, var(--gold-2), #C79A3F);
+  color: #221a04;
+  font-weight: 700; font-size: 12.5px;
+  box-shadow: 0 2px 10px rgba(217,180,91,0.25);
+}
+.guide-cta:hover { filter: brightness(1.06); }
+.guide-alt {
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke-2);
+  color: var(--muted);
+  font-weight: 600; font-size: 12.5px;
+}
+.guide-alt:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+
+@media (min-width: 761px) {
+  .guide-row .guide-name { display: inline; }
+}
+
+/* ————— action sheet — a phone-grade menu of big labelled rows ————— */
+.asheet-scrim {
+  position: fixed; inset: 0;
+  background: rgba(5, 6, 9, 0.55);
+  backdrop-filter: blur(4px);
+  z-index: 82;
+  display: flex; align-items: flex-end; justify-content: center;
+  animation: tipIn 0.15s ease;
+}
+.asheet {
+  width: 100%;
+  max-width: 480px;
+  max-height: min(76vh, 76dvh);
+  overflow-y: auto;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke-2);
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  padding: 14px 10px calc(14px + env(safe-area-inset-bottom));
+  box-shadow: 0 -14px 44px rgba(0,0,0,0.55);
+  animation: dialogIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
+}
+.asheet-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 2px 8px 10px;
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--gold);
+}
+.asheet-row {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  padding: 11px 10px;
+  border-radius: 12px;
+  text-align: left;
+  transition: background 0.12s ease;
+}
+.asheet-row:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+.asheet-row.danger { color: #F09A92; }
+.asheet-ic {
+  width: 34px; height: 34px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.06);
+  color: var(--muted);
+}
+.asheet-row.danger .asheet-ic { background: rgba(226,87,76,0.12); color: #F09A92; }
+.asheet-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.asheet-text b { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.asheet-text small { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (min-width: 761px) {
+  .asheet-scrim { align-items: center; }
+  .asheet { border-radius: 18px; max-height: 80vh; }
+}
+
 /* tool hint pill — the persistent "what do I do now" */
 .tool-hint {
   padding: 8px 16px;
@@ -1001,14 +1139,19 @@ kbd {
 /* chakra presets */
 .compass-card { position: relative; }
 .compass-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.compass-card-wrap { position: relative; }
 .preset-del {
   position: absolute;
-  top: 2px; right: 5px;
+  top: 0; right: 0;
+  width: 22px; height: 22px;
+  display: grid; place-items: center;
   font-size: 14px;
+  line-height: 1;
   color: var(--dim);
-  padding: 2px 4px;
+  background: rgba(10,11,15,0.55);
+  border-radius: 0 var(--radius-s) 0 8px;
 }
-.preset-del:hover { color: #F09A92; }
+.preset-del:hover { color: #F09A92; background: rgba(226,87,76,0.18); }
 
 /* report findings */
 .report-findings { display: flex; flex-direction: column; gap: 6px; }
@@ -1154,14 +1297,20 @@ kbd {
 
 @media (max-width: 760px) {
   .hide-mobile { display: none !important; }
+  .show-mobile { display: grid; }
 
-  .topbar { height: 50px; gap: 5px; padding: 0 8px; }
+  /* ————— top bar: pruned to what fits at real widths, not shrunk ————— */
+  .topbar {
+    height: calc(54px + env(safe-area-inset-top));
+    padding: env(safe-area-inset-top) 10px 0;
+    gap: 6px;
+  }
   .steps { display: none; }
   .step-now {
     display: inline-flex;
     align-items: center;
     gap: 7px;
-    padding: 5px 11px 5px 6px;
+    padding: 8px 12px 8px 7px;
     border-radius: 999px;
     font-size: 12px;
     font-weight: 650;
@@ -1171,52 +1320,41 @@ kbd {
     white-space: nowrap;
   }
   .step-now .step-num { width: 18px; height: 18px; background: var(--gold); color: #1a1503; }
-  .topbar-right { gap: 2px; }
-  .seg button { padding: 4px 8px; }
-  .icon-btn { width: 28px; }
-  .btn-primary { padding: 7px 9px; }
+  .topbar-right { gap: 4px; }
+  .seg button { padding: 8px 12px; }
+  .icon-btn { width: 40px; height: 40px; }
+  .btn-primary { padding: 9px 11px; }
 
-  /* tool rail becomes a bottom-centred horizontal bar */
-  .tool-rail {
-    top: auto;
-    left: 50%;
-    bottom: 72px;
-    transform: translateX(-50%);
-    flex-direction: row;
-    padding: 6px;
-  }
-  .tool-rail .hsep { width: 1px; height: auto; margin: 4px 3px; }
-  .rail-btn { width: 42px; height: 42px; }
-  .rail-btn[data-tip]:hover::after { display: none; }
-
-  /* right panel becomes a bottom sheet */
+  /* ————— right panel becomes a bottom sheet ————— */
   .panel {
     top: auto;
     left: 0; right: 0; bottom: 0;
     width: auto;
     max-height: 72vh;
+    max-height: 72dvh;
     padding: 0 0 calc(10px + env(safe-area-inset-bottom));
     transition: transform 0.3s cubic-bezier(0.3, 0.9, 0.3, 1);
     background: rgba(15, 17, 23, 0.97);
     backdrop-filter: blur(14px);
     border-top: 1px solid rgba(217,180,91,0.28);
     border-radius: 18px 18px 0 0;
-    box-shadow: 0 -14px 44px rgba(0,0,0,0.55);
     touch-action: pan-y; /* content must stay natively scrollable */
     overscroll-behavior: contain;
     will-change: transform;
     z-index: 23; /* the sheet slides OVER the tool bar */
+    box-shadow: 0 -14px 44px rgba(0,0,0,0.55);
   }
   .panel .card {
     margin: 0 10px 11px;
     animation: none;
   }
   .panel.pos-peek {
-    transform: translateY(calc(100% - 54px));
+    transform: translateY(calc(100% - 54px - env(safe-area-inset-bottom)));
     overflow: hidden;
   }
   .panel.pos-half {
     transform: translateY(calc(100% - 42vh));
+    transform: translateY(calc(100% - 42dvh));
   }
   .sheet-handle {
     position: sticky;
@@ -1254,51 +1392,94 @@ kbd {
 
   .status-chip { display: none; }
 
-  /* notifications: pinned to the top, one full-width line each */
+  /* notifications: sit in the clear canvas gap above the dock, never over
+     the quickbar/tool-hint/sheet-peek — and read top-down like a native sheet */
   .toasts {
-    top: 58px;
-    bottom: auto;
-    left: 8px;
-    right: 8px;
+    top: auto;
+    bottom: calc(146px + env(safe-area-inset-bottom));
+    left: 8px; right: 8px;
     transform: none;
     align-items: stretch;
   }
   .toast {
     width: 100%;
     max-width: none;
-    animation: toastInTop 0.22s ease;
+    align-items: flex-start;
   }
   .toast > span {
     flex: 1;
     min-width: 0;
-    white-space: nowrap;
+    white-space: normal;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
     overflow: hidden;
-    text-overflow: ellipsis;
+    line-height: 1.4;
     text-align: left;
   }
+  .toast-action { align-self: center; }
 
-  .cal-bar { bottom: 136px; max-width: calc(100vw - 16px); }
+  .cal-bar {
+    left: 8px; right: 8px;
+    bottom: calc(136px + env(safe-area-inset-bottom));
+    max-width: none;
+    transform: none;
+    white-space: normal;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
   .cal-bar .btn-ghost, .cal-bar .btn-primary { padding: 7px 10px; font-size: 12px; }
 
-  .quickbar { top: 8px; max-width: calc(100vw - 12px); }
-  .quickbar-row { flex-wrap: nowrap; overflow-x: auto; max-width: 100%; scrollbar-width: none; }
-  .quickbar-row::-webkit-scrollbar { display: none; }
+  .quickbar { top: calc(8px + env(safe-area-inset-top)); max-width: calc(100vw - 12px); }
+  .quickbar-row { flex-wrap: nowrap; overflow: visible; max-width: 100%; }
   .qpill { padding: 8px 8px; flex: 0 0 auto; font-size: 11.5px; }
   .qsep { margin: 0 1px; }
-  .close-chip { bottom: 138px; }
+  .qpill-scroll {
+    display: flex; align-items: center; gap: 3px;
+    overflow-x: auto; scrollbar-width: none; min-width: 0;
+  }
+  .qpill-scroll::-webkit-scrollbar { display: none; }
+  /* marker-kind / draw-options rows: short pills, so wrapping costs little height
+     and beats hiding half the choices behind an invisible scroll */
+  .quickbar-row.kinds {
+    flex-wrap: wrap;
+    overflow-x: visible;
+    justify-content: center;
+    max-width: calc(100vw - 16px);
+  }
+
+  .close-chip { bottom: calc(196px + env(safe-area-inset-bottom)); }
 
   /* rotate chip moves to the bottom-left, out of the quick bar's way; popover opens upward */
-  .rotate-chip { top: auto; bottom: 138px; left: 8px; flex-direction: column-reverse; }
+  .rotate-chip { top: auto; bottom: calc(138px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); flex-direction: column-reverse; }
   .rotate-pop { flex-wrap: wrap; max-width: calc(100vw - 20px); }
+
+  /* selection/marker/stroke chips: a centred bar above the dock always fits —
+     point-anchoring a ~300px row inside a 360px screen cannot */
+  .sel-chips {
+    left: 8px !important;
+    right: 8px;
+    top: auto !important;
+    bottom: calc(146px + env(safe-area-inset-bottom));
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .sel-chips .chip { padding: 10px 14px; font-size: 12px; }
 
   /* the tool rail becomes a labeled bottom dock — no more cryptic icon guessing */
   .tool-rail {
-    left: 8px; right: 8px;
+    left: calc(8px + env(safe-area-inset-left));
+    right: calc(8px + env(safe-area-inset-right));
+    bottom: calc(72px + env(safe-area-inset-bottom));
+    top: auto;
     transform: none;
     max-width: none;
+    flex-direction: row;
     justify-content: space-between;
     overflow-x: auto; scrollbar-width: none;
     padding: 5px 4px;
+    /* only visible if it's actually scrolling — a fade beats a hard clip */
+    mask-image: linear-gradient(90deg, transparent, #000 10px, #000 calc(100% - 10px), transparent);
   }
   .tool-rail::-webkit-scrollbar { display: none; }
   .tool-rail .hsep { display: none; }
@@ -1309,10 +1490,15 @@ kbd {
     border-radius: 9px;
     padding: 0 2px;
   }
-  .rail-label { display: block; font-size: 9px; font-weight: 650; letter-spacing: 0.01em; line-height: 1; }
+  .rail-label { display: block; font-size: 10px; font-weight: 650; letter-spacing: 0; line-height: 1; }
 
-  /* notifications sit below the quick bar, never on top of it */
-  .toasts { top: 116px; }
+  /* dialogs: top-align so the keyboard can't occlude the input/actions
+     (iOS doesn't shrink the layout viewport when the keyboard opens) */
+  .dialog-backdrop:not(.map-dialog-backdrop) { place-items: start center; }
+  .dialog:not(.map-dialog) {
+    margin-top: max(8dvh, calc(env(safe-area-inset-top) + 8px));
+    max-height: calc(100dvh - 24px);
+  }
 
   /* full-screen map on phones — finding the plot needs the whole display */
   .map-dialog {
@@ -1339,4 +1525,41 @@ kbd {
   .map-foot .lbl { flex-basis: 100%; order: 3; }
   .compass-grid { grid-template-columns: repeat(3, 1fr); }
   .card { padding: 12px 12px 13px; }
+
+  /* typography floor — legible at arm's length, not a body-wide reflow */
+  .rail-label { font-size: 10px; }
+  .compass-label, .stat span, .zone-note, .zone-key { font-size: 11px; }
+  .badge { font-size: 10.5px; }
+  .qpill { font-size: 12px; }
+
+  /* the guide card: one calm strip above the dock */
+  .guide-card {
+    position: absolute;
+    left: 8px; right: 8px;
+    bottom: calc(128px + env(safe-area-inset-bottom));
+    z-index: 19;
+  }
+}
+
+/* short/landscape phones: height, not width, is the scarce axis — go back to a side rail */
+@media (max-width: 900px) and (max-height: 500px) and (pointer: coarse) {
+  .tool-rail {
+    left: calc(8px + env(safe-area-inset-left)); right: auto;
+    top: 50%; bottom: auto;
+    transform: translateY(-50%);
+    flex-direction: column;
+    width: auto;
+    mask-image: none;
+  }
+  .rail-label { display: none; }
+  .panel {
+    left: auto; right: 0; top: 0; bottom: 0;
+    width: min(320px, 40vw);
+    max-height: none;
+    border-radius: 14px 0 0 14px;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .panel.pos-peek, .panel.pos-half { transform: none; }
+  .empty-wrap { overflow-y: auto; align-items: flex-start; padding: 12px 0; }
+  .guide-card { display: none; }
 }

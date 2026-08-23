@@ -157,18 +157,42 @@ const SHORTCUTS: [string, string][] = [
   ['?', 'This help'],
 ]
 
+const RECAP = [
+  'Import a plan — a PDF, photo, AutoCAD file, or a satellite capture from Maps.',
+  'Set the scale — drag the ruler along a wall you know the length of.',
+  'Trace the boundary — tap each corner, then the tick to close it.',
+  'Confirm north — tap the plan’s north arrow, tail then tip.',
+  'Mark doors and rooms — each one gets an instant zone verdict, then open the report.',
+]
+
+const GESTURES: [string, string][] = [
+  ['Two fingers', 'Pan and pinch-zoom the canvas'],
+  ['Twist with two fingers', 'Rotate the view'],
+  ['Tap ✓', 'Close the outline'],
+  ['Tap a point or edge', 'Select it — chips appear for delete / adjust'],
+  ['Hold the sheet handle', 'Drag the panel between peek, half and full'],
+]
+
 export function ShortcutsDialog() {
   const open = useStore((s) => s.shortcutsOpen)
   const setOpen = useStore((s) => s.setShortcutsOpen)
+  const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
   if (!open) return null
   return (
-    <Dialog title="Keyboard shortcuts" onClose={() => setOpen(false)} width={380}>
+    <Dialog title="Help" onClose={() => setOpen(false)} width={400}>
+      <div className="subhead">How it works</div>
+      <ol className="dialog-list">
+        {RECAP.map((line, i) => <li key={i}>{line}</li>)}
+      </ol>
+      <div className="subhead">{coarse ? 'Gestures' : 'Keyboard shortcuts'}</div>
       <div className="shortcut-list">
-        {SHORTCUTS.map(([keys, what]) => (
+        {(coarse ? GESTURES : SHORTCUTS).map(([keys, what]) => (
           <div key={keys} className="shortcut-row">
-            <span className="shortcut-keys">{keys.split(' / ').map((k2, i) => (
-              <span key={k2}>{i > 0 && ' / '}<kbd>{k2}</kbd></span>
-            ))}</span>
+            <span className="shortcut-keys">
+              {coarse ? keys : keys.split(' / ').map((k2, i) => (
+                <span key={k2}>{i > 0 && ' / '}<kbd>{k2}</kbd></span>
+              ))}
+            </span>
             <span className="lbl">{what}</span>
           </div>
         ))}

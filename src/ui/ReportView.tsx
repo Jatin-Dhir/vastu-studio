@@ -7,6 +7,7 @@ import { centroid, circumradius, perimeter, polygonArea, sampledPolygon } from '
 import { formatArea, formatLen, formatScale } from '../format'
 import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
 import { evaluateVastu } from '../evaluate'
+import './report.css'
 
 export function ReportView() {
   const setReportOpen = useStore((s) => s.setReportOpen)
@@ -45,6 +46,15 @@ export function ReportView() {
   const others = markers.filter((m) => m.kind !== 'entrance')
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
+  const doPrint = () => {
+    try {
+      if (typeof window.print !== 'function') throw new Error('print unavailable')
+      window.print()
+    } catch {
+      useStore.getState().toast('Printing isn’t available here — try Share instead', 'info')
+    }
+  }
+
   const share = async () => {
     if (!imgBlob) return
     const file = new File([imgBlob], `${projectName}-vastu.png`, { type: 'image/png' })
@@ -60,7 +70,11 @@ export function ReportView() {
   return (
     <div className="report-backdrop">
       <div className="report-actions no-print">
-        <button className="btn-primary" onClick={() => window.print()}><Printer size={15} /> Print / Save PDF</button>
+        <button className="btn-primary" onClick={doPrint}>
+          <Printer size={15} />
+          <span className="btn-label-lg">Print / Save PDF</span>
+          <span className="btn-label-sm">Print</span>
+        </button>
         <button className="btn-ghost" onClick={() => void share()}><Share2 size={15} /> Share</button>
         <button className="btn-ghost" onClick={() => setReportOpen(false)}><X size={15} /> Close</button>
       </div>
@@ -142,43 +156,47 @@ export function ReportView() {
         {center && others.length > 0 && (
           <section>
             <h2>Rooms & objects</h2>
-            <table className="report-table">
-              <thead><tr><th>Item</th><th>Type</th><th>Zone</th><th>Pada</th><th>Notes</th></tr></thead>
-              <tbody>
-                {others.map((m) => {
-                  const pl = placementOf(m.p, center, northDeg)
-                  return (
-                    <tr key={m.id}>
-                      <td>{m.label}</td>
-                      <td>{markerKindMeta(m.kind).name}</td>
-                      <td><span className="report-zonechip" style={{ background: pl.zone.color }} />{pl.zone.key} — {pl.zone.name}</td>
-                      <td>{pl.pada.code} {pl.pada.devta}</td>
-                      <td>{m.note ?? ''}</td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+            <div className="report-table-wrap">
+              <table className="report-table">
+                <thead><tr><th>Item</th><th>Type</th><th>Zone</th><th>Pada</th><th>Notes</th></tr></thead>
+                <tbody>
+                  {others.map((m) => {
+                    const pl = placementOf(m.p, center, northDeg)
+                    return (
+                      <tr key={m.id}>
+                        <td>{m.label}</td>
+                        <td>{markerKindMeta(m.kind).name}</td>
+                        <td><span className="report-zonechip" style={{ background: pl.zone.color }} />{pl.zone.key} — {pl.zone.name}</td>
+                        <td>{pl.pada.code} {pl.pada.devta}</td>
+                        <td>{m.note ?? ''}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 
         {rows && (
           <section>
             <h2>Zone balance (16 zones)</h2>
-            <table className="report-table">
-              <thead><tr><th></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}</tr></thead>
-              <tbody>
-                {rows.map((r) => (
-                  <tr key={r.key}>
-                    <td><span className="report-zonechip" style={{ background: r.color }} /></td>
-                    <td><b>{r.key}</b> {r.name}</td>
-                    <td>{r.theme}</td>
-                    <td>{r.pct.toFixed(1)}%</td>
-                    {metersPerPx && <td>{formatArea(r.areaPx * metersPerPx ** 2, unit)}</td>}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <div className="report-table-wrap">
+              <table className="report-table">
+                <thead><tr><th></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}</tr></thead>
+                <tbody>
+                  {rows.map((r) => (
+                    <tr key={r.key}>
+                      <td><span className="report-zonechip" style={{ background: r.color }} /></td>
+                      <td><b>{r.key}</b> {r.name}</td>
+                      <td>{r.theme}</td>
+                      <td>{r.pct.toFixed(1)}%</td>
+                      {metersPerPx && <td>{formatArea(r.areaPx * metersPerPx ** 2, unit)}</td>}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </section>
         )}
 

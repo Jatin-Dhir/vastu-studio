@@ -1,0 +1,131 @@
+/* ————— report — phone layout —————
+ *
+ * All base (non-phone) report styling lives in src/index.css — this file only
+ * ADDS to it. Do not move the base rules here; override them from a
+ * max-width media query instead, so index.css stays the single source of
+ * truth for desktop/print.
+ *
+ * IMPORTANT — the print mechanism (defined in src/index.css, untouched here):
+ *   @media print sets `body * { visibility: hidden }` then makes
+ *   `.report-page, .report-page *` visible again, so only the report prints.
+ *   `.report-backdrop` switches from `position:fixed` to `static` and the
+ *   `.no-print` class (already on the action bar) is force-hidden.
+ * Every phone-layout rule below is scoped to `@media screen and (...)` so it
+ * can never apply during an actual print/PDF pass, regardless of what page
+ * size or viewport width the print engine reports. The couple of rules that
+ * *do* need to run at print time (table-overflow reset, widow/orphan control)
+ * are added in their own `@media print` block at the bottom — purely additive,
+ * nothing here redefines a selector the base print block already sets.
+ */
+
+/* ----- applies at every size ----- */
+
+/* numbers (areas, bearings, percentages, degrees) line up instead of jittering */
+.report-page {
+  font-variant-numeric: tabular-nums;
+}
+
+/* zone/room tables scroll sideways inside their own box — the report page
+   (and print page) never gets a horizontal scrollbar because of a table */
+.report-table-wrap {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* compact print/PDF label, hidden until the phone breakpoint below shows it */
+.report-actions .btn-label-sm { display: none; }
+
+/* ----- phone layout, <=760px (matches the app's existing mobile breakpoint) ----- */
+
+@media screen and (max-width: 760px) {
+  .report-backdrop {
+    padding: 14px 8px calc(84px + env(safe-area-inset-bottom));
+    overflow-x: hidden;
+  }
+
+  .report-page {
+    padding: 20px 16px;
+    border-radius: 10px;
+  }
+
+  /* single-column meta — was a cramped 3-up grid at phone widths */
+  .report-meta {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .report-meta input {
+    font-size: 16px; /* also keeps iOS/Android WebViews from zooming on focus */
+    padding: 9px 10px;
+  }
+
+  .report-head { margin-bottom: 14px; }
+  .report-page h1 { font-size: 22px; }
+  .report-sub { font-size: 12px; }
+  .report-head svg { width: 34px; height: 34px; }
+
+  .report-facts {
+    font-size: 13px;
+    gap: 8px 16px;
+  }
+
+  /* body-copy rows read at 14px+ instead of the desktop 12.5px */
+  .report-finding,
+  .report-entrance {
+    font-size: 14px;
+  }
+  .report-finding-mark { width: 16px; }
+
+  /* tables keep a working column width and scroll inside .report-table-wrap
+     rather than squeezing text unreadably small */
+  .report-table {
+    font-size: 13px;
+    min-width: 480px;
+  }
+
+  .report-notes { font-size: 16px; }
+
+  /* action bar becomes a bottom-fixed dock with real touch targets, mirroring
+     how .panel already turns into a bottom sheet on phones in index.css */
+  .report-actions {
+    top: auto;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    transform: none;
+    width: auto;
+    max-width: none;
+    border: none;
+    border-top: 1px solid var(--stroke-2);
+    border-radius: 0;
+    padding: 8px 10px calc(8px + env(safe-area-inset-bottom));
+    box-shadow: 0 -8px 30px rgba(0,0,0,0.35);
+  }
+  .report-actions .btn-primary,
+  .report-actions .btn-ghost {
+    flex: 1 1 0;
+    min-height: 44px;
+    justify-content: center;
+    font-size: 13px;
+    padding: 0 8px;
+  }
+  .report-actions .btn-label-lg { display: none; }
+  .report-actions .btn-label-sm { display: inline; }
+}
+
+/* ----- print-time safety net, purely additive to index.css's @media print ----- */
+
+@media print {
+  /* never let the phone-only min-width + overflow-x:auto (screen-scoped above,
+     but belt-and-suspenders) clip a table column out of the printed page */
+  .report-table-wrap { overflow: visible; }
+
+  /* keep a section heading from printing alone at the bottom of a page */
+  .report-page h2 { break-after: avoid-page; }
+  /* keep a finding/entrance/table row from splitting across a page break */
+  .report-finding,
+  .report-entrance,
+  .report-table tr {
+    break-inside: avoid;
+  }
+}

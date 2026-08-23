@@ -10,6 +10,7 @@ import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog, MarkerDialog, ShortcutsDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RotateChip, SelectionChips, StrokeChips } from './ui/CanvasOverlays'
+import { GuideCard } from './ui/GuideCard'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { getMostRecent, newProjectId, putProject, requestPersistence } from './db'
@@ -222,6 +223,7 @@ export default function App() {
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
+        <GuideCard />
         <CalibrateBar />
         <StatusChip />
       </div>

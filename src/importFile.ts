@@ -59,6 +59,8 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
       if (ratio) {
         const mpp = (ratio * 0.0254) / 72 / pxPerPt
         const st = useStore.getState()
+        // the offer outlives the toast — the guide and calibrate bar keep it available
+        st.setScaleSuggestion({ metersPerPx: mpp, label: `printed 1 : ${ratio}` })
         st.toast(
           `Drawing states 1 : ${ratio} — that makes it ${formatLen(w * mpp, st.unit)} wide`,
           'info', 'Apply scale',
@@ -100,6 +102,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
           const widthM = dxf.w * mpp
           if (widthM >= 3 && widthM <= 1000) {
             const st = useStore.getState()
+            st.setScaleSuggestion({ metersPerPx: mpp, label: `read as ${unitName}` })
             st.toast(
               `No units in the DXF — read as ${unitName} it is ${formatLen(widthM, st.unit)} wide`,
               'info', 'Apply scale',
@@ -158,6 +161,8 @@ export async function importMapsScreenshot(file: File) {
   const s = useStore.getState()
   if (s.bg.kind === 'raster') {
     s.setNorth(0, 'manual')
+    s.setBgHint('map-screenshot') // the calibrate hint walks the scale-bar steps
+    s.setTool('calibrate')
     s.toast('North assumed straight up — now tap BOTH ENDS of the screenshot’s scale bar, then enter its printed distance', 'info')
   }
 }

@@ -23,12 +23,19 @@ function ToolHint() {
   const northA = useStore((s) => s.northA)
   const pts = useStore((s) => s.pts.length)
   const closed = useStore((s) => s.closed)
+  const bgHint = useStore((s) => s.bgHint)
 
   let text: string | null = null
   if (tool === 'calibrate') {
-    text = !calA ? 'Scale — tap the FIRST end of a length you know'
-      : !calB ? 'Now tap the OTHER end of that length'
-        : 'Drag the pins to fine-tune, then tap “Enter length”'
+    if (bgHint === 'map-screenshot') {
+      text = !calA ? "Tap ONE END of the screenshot's scale bar"
+        : !calB ? 'Now tap the OTHER end of the scale bar'
+          : 'Enter the printed distance — e.g. 20 m'
+    } else {
+      text = !calA ? 'Scale — tap the FIRST end of a length you know (a wall, a printed dimension)'
+        : !calB ? 'Now tap the OTHER end of that length'
+          : 'Drag the pins to fine-tune, then tap “Enter length”'
+    }
   } else if (tool === 'trace') {
     text = closed
       ? 'Outline is closed — tap on an edge to add a point there'
@@ -170,16 +177,18 @@ export function QuickBar() {
     <div className="quickbar" ref={popRef}>
       {closed && (
       <div className="quickbar-row">
-        {pills.map((p) => (
-          <button
-            key={p.id}
-            className={`qpill ${compassId === p.id ? 'on' : ''}`}
-            title={COMPASS_META.find((m) => m.id === p.id)?.label}
-            onClick={() => setCompass({ id: compassId === p.id ? 'none' : p.id })}
-          >
-            {p.label}
-          </button>
-        ))}
+        <div className="qpill-scroll">
+          {pills.map((p) => (
+            <button
+              key={p.id}
+              className={`qpill ${compassId === p.id ? 'on' : ''}`}
+              title={COMPASS_META.find((m) => m.id === p.id)?.label}
+              onClick={() => setCompass({ id: compassId === p.id ? 'none' : p.id })}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
         <span className="qsep" />
         <button className={`qpill deg ${degOpen ? 'on' : ''}`} onClick={() => setDegOpen(!degOpen)}>
           N{northDeg}°
@@ -224,6 +233,9 @@ export function QuickBar() {
 export function RotateChip() {
   const hasBg = useStore((s) => s.bg.kind !== 'none')
   const rot = useStore((s) => s.view.rot)
+  const tool = useStore((s) => s.tool)
+  const calA = useStore((s) => s.calA)
+  const calB = useStore((s) => s.calB)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -236,7 +248,8 @@ export function RotateChip() {
     return () => window.removeEventListener('pointerdown', onDown)
   }, [open])
 
-  if (!hasBg) return null
+  // the cal-bar takes this exact spot on mobile once both pins are down
+  if (!hasBg || (tool === 'calibrate' && calA && calB)) return null
   const send = (detail: { delta?: number; set?: number }) =>
     window.dispatchEvent(new CustomEvent('vastu:rotate', { detail }))
   const shown = Math.round((((rot % 360) + 540) % 360 - 180) * 10) / 10

@@ -9,7 +9,7 @@ import { processCompassImage } from '../imageTools'
 import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
-import type { CompassId, Pt } from '../types'
+import type { CompassId, Pt, Tool } from '../types'
 import { detectPdfScaleRatio, hasPdfOpen, renderPdfPage } from '../importers/pdf'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
@@ -245,6 +245,12 @@ export function RightPanel() {
   const compass = useStore((s) => s.compass)
   const setCompass = useStore((s) => s.setCompass)
   const setTool = useStore((s) => s.setTool)
+  // arming a canvas tool from a sheet button must get the sheet OUT of the way —
+  // otherwise the thing the user is told to tap is hidden behind the sheet
+  const armTool = (t: Tool) => {
+    setTool(t)
+    if (window.innerWidth <= 760) useStore.getState().setSheetPos('peek')
+  }
   const angleSnap = useStore((s) => s.angleSnap)
   const setAngleSnap = useStore((s) => s.setAngleSnap)
   const markers = useStore((s) => s.markers)
@@ -454,7 +460,7 @@ export function RightPanel() {
             {scaleBadge && <em className="badge">{scaleBadge}</em>}
           </span>
         </div>
-        <button className="btn-ghost wide" onClick={() => setTool('calibrate')}>
+        <button className="btn-ghost wide" onClick={() => armTool('calibrate')}>
           {metersPerPx ? 'Recalibrate scale' : 'Set scale — draw a known length'}
         </button>
 
@@ -524,14 +530,17 @@ export function RightPanel() {
             <div className="subhead">My chakras</div>
             <div className="compass-grid">
               {presets.map((p) => (
-                <button key={p.id}
-                  className={`compass-card preset ${compass.id === 'custom' && compass.customUrl === p.dataUrl ? 'on' : ''}`}
-                  disabled={!closed}
-                  onClick={() => setCompass({ id: 'custom', customUrl: p.dataUrl, customAspect: p.aspect })}>
-                  <span className="compass-thumb"><img src={p.dataUrl} alt={p.name} /></span>
-                  <span className="compass-label">{p.name}</span>
-                  <span className="preset-del" onClick={(e) => { e.stopPropagation(); removePreset(p.id) }}>×</span>
-                </button>
+                <div key={p.id} className="compass-card-wrap">
+                  <button
+                    className={`compass-card preset ${compass.id === 'custom' && compass.customUrl === p.dataUrl ? 'on' : ''}`}
+                    disabled={!closed}
+                    onClick={() => setCompass({ id: 'custom', customUrl: p.dataUrl, customAspect: p.aspect })}>
+                    <span className="compass-thumb"><img src={p.dataUrl} alt={p.name} /></span>
+                    <span className="compass-label">{p.name}</span>
+                  </button>
+                  <button className="preset-del" aria-label={`Delete ${p.name}`}
+                    onClick={(e) => { e.stopPropagation(); removePreset(p.id) }}>×</button>
+                </div>
               ))}
             </div>
           </>
@@ -588,7 +597,7 @@ export function RightPanel() {
         <NorthRow />
         <NorthSourceLine />
         <button className="btn-ghost wide" onClick={() => {
-          setTool('north')
+          armTool('north')
           useStore.getState().toast('Tap the TAIL of the plan’s north arrow, then its TIP', 'info')
         }}>
           <Navigation size={14} /> Align north from plan arrow
