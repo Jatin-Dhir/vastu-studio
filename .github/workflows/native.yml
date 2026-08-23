@@ -38,11 +38,13 @@ jobs:
       - run: npm run build
       - run: npx cap sync ios
       - run: node scripts/gen-native-assets.mjs
+      - name: Install pods
+        run: cd ios/App && pod install
       - name: Archive (unsigned)
         run: |
           cd ios/App
           xcodebuild archive \
-            -project App.xcodeproj \
+            -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -archivePath build/App.xcarchive \
