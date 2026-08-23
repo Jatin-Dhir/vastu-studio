@@ -4,6 +4,7 @@ import { Scene, FONT, GOLD, strokePathD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
+import { haptic } from '../native'
 import type { Pt, ViewState } from '../types'
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -79,6 +80,8 @@ export function CanvasStage() {
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
   const [editDragging, setEditDragging] = useState(false)
+  // which vertex/edge is being reshaped — drives the live length callout, independent of the showEdgeLabels setting
+  const [dragIdx, setDragIdx] = useState<{ mode: 'vertex' | 'bulge'; idx: number } | null>(null)
   // ink preview is driven imperatively (like the view transform) so drawing never re-renders the scene
   const activeStrokeRef = useRef<Pt[]>([])
   const activeInkRef = useRef<SVGPathElement>(null)
@@ -290,8 +293,8 @@ export function CanvasStage() {
     d.lastX = e.clientX; d.lastY = e.clientY
     d.moved = false; d.pushed = false; d.markerId = null
     d.grabbed = toWorld(e.clientX, e.clientY)
-    if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true) }
-    else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true) }
+    if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true); setDragIdx({ mode: 'vertex', idx: d.idx }) }
+    else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true); setDragIdx({ mode: 'bulge', idx: d.idx }) }
     else if (mkid != null) { d.mode = 'marker'; d.markerId = mkid }
     else if (strokeId != null) {
       useStore.getState().setSelectedStroke(
@@ -466,14 +469,16 @@ export function CanvasStage() {
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     pointers.current.delete(e.pointerId)
     if (pointers.current.size < 2 && lastPinch.current) {
-      // pinch ended: settle a near-level tilt back to 0, then commit
+      // pinch ended: settle a near-right-angle tilt onto the nearest 90° (not just level)
       lastPinch.current = null
       const r = norm180(viewRef.current.rot)
-      if (r !== 0 && Math.abs(r) < 3) rotateViewAbout(-r)
+      const nearest90 = Math.round(r / 90) * 90
+      if (r !== nearest90 && Math.abs(r - nearest90) < 3) rotateViewAbout(nearest90 - r)
       commitView()
     }
     setLoupe(null)
     setEditDragging(false)
+    setDragIdx(null)
     const d = drag.current
     const mode = d.mode
     const moved = d.moved
@@ -548,6 +553,7 @@ export function CanvasStage() {
 
     switch (s.tool) {
       case 'marker': {
+        haptic('light')
         s.addMarker(world)
         break
       }
@@ -576,9 +582,25 @@ export function CanvasStage() {
           }
           break
         }
-        if (s.pts.length >= 3 && dist(world, s.pts[0]) < CLOSE_PX / k) { s.closePolygon(); break }
+        if (s.pts.length >= 3 && dist(world, s.pts[0]) < CLOSE_PX / k) { haptic('success'); s.closePolygon(); break }
         let p = world
-        if (s.angleSnap && s.pts.length > 0) p = snapPoint(s.pts[s.pts.length - 1], p)
+        // snap a new corner onto an already-placed one, or onto an edge it's crossing —
+        // catches the "close a notch" / "align with the wall I just drew" cases
+        const snap = snapToOutline(world)
+        if (snap.snapped) {
+          p = snap.p
+          haptic('light')
+          if (snapDotsRef.current) {
+            for (const c of snapDotsRef.current.children) {
+              c.setAttribute('r', String(6 / k))
+              c.setAttribute('stroke-width', String(2 / k))
+            }
+          }
+          setSnapDot(0, p)
+          window.setTimeout(() => setSnapDot(0, null), 260)
+        } else if (s.angleSnap && s.pts.length > 0) {
+          p = snapPoint(s.pts[s.pts.length - 1], p)
+        }
         s.addPoint(p)
         break
       }
@@ -597,6 +619,7 @@ export function CanvasStage() {
         if (!s.northA) {
           s.setNorthA(world)
         } else if (dist(s.northA, world) > 3 / k) {
+          haptic('success')
           const deg = Math.round(angleOf(s.northA, world) * 2) / 2
           s.setNorth(deg, 'plan')
           s.setNorthA(null)
@@ -674,10 +697,10 @@ export function CanvasStage() {
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes} idPrefix="live"
         />
 
-        {/* live ink preview + snap rings — attributes set imperatively so drawing never re-renders */}
-        {tool === 'draw' && (
+        {/* live ink preview + snap rings — attributes set imperatively so drawing/tracing never re-renders */}
+        {(tool === 'draw' || tool === 'trace') && (
           <g>
-            <path ref={activeInkRef} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+            {tool === 'draw' && <path ref={activeInkRef} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />}
             <g ref={snapDotsRef}>
               <circle style={{ display: 'none' }} fill="none" stroke={GOLD} opacity={0.95} />
               <circle style={{ display: 'none' }} fill="none" stroke={GOLD} opacity={0.95} />
@@ -707,6 +730,49 @@ export function CanvasStage() {
             )}
           </g>
         )}
+
+        {/* live length callout while reshaping — the number stays visible the whole drag, not just while placing new points */}
+        {dragIdx && metersPerPx && (() => {
+          const n = pts.length
+          if (n < 2) return null
+          const DragLabel = ({ at, text }: { at: Pt; text: string }) => (
+            <text x={at.x} y={at.y} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
+              textAnchor="middle" fill="#F3E9CF"
+              transform={`rotate(${-rot} ${at.x} ${at.y})`}
+              stroke="rgba(9,10,14,0.78)" strokeWidth={3.2 / k} paintOrder="stroke">
+              {text}
+            </text>
+          )
+          if (dragIdx.mode === 'vertex') {
+            const { idx } = dragIdx
+            const prevI = (idx - 1 + n) % n
+            const nextI = (idx + 1) % n
+            const labels: React.ReactElement[] = []
+            if (closed || idx > 0) {
+              const p1 = pts[prevI], p2 = pts[idx]
+              if (p1 && p2) {
+                const mid = edgePoint(p1, p2, bulges[prevI] ?? 0, 0.5)
+                labels.push(<DragLabel key="prev" at={{ x: mid.x, y: mid.y - 14 / k }} text={formatLen(dist(p1, p2) * metersPerPx, unit)} />)
+              }
+            }
+            if (closed || idx < n - 1) {
+              const p1 = pts[idx], p2 = pts[nextI]
+              if (p1 && p2 && nextI !== prevI) {
+                const mid = edgePoint(p1, p2, bulges[idx] ?? 0, 0.5)
+                labels.push(<DragLabel key="next" at={{ x: mid.x, y: mid.y - 14 / k }} text={formatLen(dist(p1, p2) * metersPerPx, unit)} />)
+              }
+            }
+            return <g>{labels}</g>
+          }
+          // bulge mode: the chord is fixed while curving it, so the sagitta (bow depth) is the number that actually moves
+          const { idx } = dragIdx
+          const p1 = pts[idx], p2 = pts[(idx + 1) % n]
+          if (!p1 || !p2) return null
+          const chord = dist(p1, p2)
+          const sagitta = Math.abs(((bulges[idx] ?? 0) * chord) / 2)
+          const mid = edgePoint(p1, p2, bulges[idx] ?? 0, 0.5)
+          return <DragLabel at={{ x: mid.x, y: mid.y - 14 / k }} text={`bow ${formatLen(sagitta * metersPerPx, unit)}`} />
+        })()}
 
         {/* calibration line */}
         {tool === 'calibrate' && calA && (

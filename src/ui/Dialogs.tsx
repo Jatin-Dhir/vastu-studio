@@ -3,6 +3,7 @@ import { X } from 'lucide-react'
 import { useStore } from '../store'
 import { dist } from '../geometry'
 import { M_PER_FT, formatScale } from '../format'
+import { haptic } from '../native'
 
 export function Dialog(props: { title: string; onClose: () => void; children: React.ReactNode; width?: number; className?: string }) {
   useEffect(() => {
@@ -62,6 +63,7 @@ export function CalibrateDialog() {
     if (!isFinite(v) || v <= 0) { s.toast('Enter the real length of the drawn line', 'warn'); return }
     const toM = CAL_UNITS.find((u) => u.id === calUnit)?.toM ?? 1
     const metersPerPx = (v * toM) / px
+    haptic('success')
     s.setMetersPerPx(metersPerPx, 'manual')
     s.setCalDialogOpen(false)
     s.setCal(null, null)

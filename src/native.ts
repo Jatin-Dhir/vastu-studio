@@ -41,6 +41,21 @@ export async function initNative(): Promise<void> {
 }
 
 /**
+ * A felt tick for the moments that matter on a touch CAD tool: a snap
+ * catching, an outline closing, a scale confirmed. Silent no-op on the web.
+ */
+export function haptic(kind: 'light' | 'medium' | 'success' = 'light'): void {
+  if (!isNative()) return
+  void (async () => {
+    try {
+      const { Haptics, ImpactStyle, NotificationType } = await import('@capacitor/haptics')
+      if (kind === 'success') await Haptics.notification({ type: NotificationType.Success })
+      else await Haptics.impact({ style: kind === 'medium' ? ImpactStyle.Medium : ImpactStyle.Light })
+    } catch { /* plugin missing */ }
+  })()
+}
+
+/**
  * On native, blob downloads are dead ends — write to cache and open the share
  * sheet instead (save to Files/Drive/WhatsApp, exactly what practitioners do
  * with client deliverables). Returns false on the web so callers fall back.
