@@ -2,13 +2,26 @@ import { Fragment, useMemo } from 'react'
 import type { BgState, CompassState, Marker, Pt, Stroke, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
-import { brahmasthanRadius } from '../analysis'
+import { brahmasthanRadius, placementOf } from '../analysis'
 import { formatArea, formatLen } from '../format'
-import { DIRS8, GATES32, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
+import { DIRS8, GATES32, GATE_QUALITY, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
 
 export const FONT = "'Inter Variable', Inter, system-ui, sans-serif"
 export const GOLD = '#D9B45B'
 const INKHALO = 'rgba(9,10,14,0.78)'
+/** Muted gold-brown — the design system's secondary-line ink (design language spec). */
+const MUTED = '#8C7642'
+/** Classical gate-quality verdict colours, reused from the app's own palette (ZONES16 E / SE). */
+const GATE_GOOD = '#63B56F'
+const GATE_CAUTION = '#E0684F'
+
+/** Perceived luminance of a hex color (0 = black, 1 = white) — used to balance fill alpha
+ *  across hues so light colours don't glow and dark ones don't sink at one flat opacity. */
+function relLuminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16)
+  const r = ((n >> 16) & 255) / 255, g = ((n >> 8) & 255) / 255, b = (n & 255) / 255
+  return 0.299 * r + 0.587 * g + 0.114 * b
+}
 
 export interface SceneProps {
   bg: BgState
@@ -73,12 +86,15 @@ const haloProps = (w: number) => ({
 export function RingLabel(props: {
   c: Pt; deg: number; r: number; size: number; text: string
   fill?: string; weight?: number; opacity?: number; halo?: number; spacing?: number; vr?: number
+  /** Compass-rose convention: keep the glyph screen-upright instead of tangent to the ring.
+   *  Use for single-letter cardinals (N/E/S/W); leave multi-letter runs tangential. */
+  upright?: boolean
 }) {
-  const { c, deg, r, size, text, fill = '#EDEFF4', weight = 600, opacity = 1, halo = 0, spacing, vr = 0 } = props
+  const { c, deg, r, size, text, fill = '#EDEFF4', weight = 600, opacity = 1, halo = 0, spacing, vr = 0, upright = false } = props
   const norm = (((deg + vr) % 360) + 360) % 360
   const flip = norm > 90 && norm < 270
   const p = polar(c, deg, r)
-  const rot = flip ? deg + 180 : deg
+  const rot = upright ? -vr : (flip ? deg + 180 : deg)
   return (
     <text
       x={p.x} y={p.y}
@@ -104,6 +120,53 @@ function ringSectorPath(c: Pt, r0: number, r1: number, a0: number, a1: number): 
   const q0 = polar(c, a0, r1), q1 = polar(c, a1, r1)
   const p1 = polar(c, a1, r0), p0 = polar(c, a0, r0)
   return `M${q0.x} ${q0.y} A${r1} ${r1} 0 0 1 ${q1.x} ${q1.y} L${p1.x} ${p1.y} A${r0} ${r0} 0 0 0 ${p0.x} ${p0.y} Z`
+}
+
+/** A ring stroke cased in a dark halo, so gold structure survives satellite imagery and white plans,
+ *  not just the dark default ground. Same two-pass technique the tick/label halos already use. */
+function CasedCircle(props: {
+  cx: number; cy: number; r: number; k: number; stroke?: string; width: number
+  opacity?: number; dash?: string
+}) {
+  const { cx, cy, r, k, stroke = GOLD, width, opacity = 0.9, dash } = props
+  return (
+    <>
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={INKHALO}
+        strokeWidth={width + 1.8 / k} opacity={Math.min(0.55, opacity)} strokeDasharray={dash} />
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={stroke}
+        strokeWidth={width} opacity={opacity} strokeDasharray={dash} />
+    </>
+  )
+}
+
+/** Same casing technique as CasedCircle, for straight axis/spoke lines. */
+function CasedLine(props: {
+  x1: number; y1: number; x2: number; y2: number; k: number; stroke?: string; width: number
+  opacity?: number; dash?: string
+}) {
+  const { x1, y1, x2, y2, k, stroke = GOLD, width, opacity = 0.7, dash } = props
+  return (
+    <>
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={INKHALO}
+        strokeWidth={width + 1.8 / k} opacity={Math.min(0.55, opacity + 0.05)} strokeDasharray={dash} />
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke}
+        strokeWidth={width} opacity={opacity} strokeDasharray={dash} />
+    </>
+  )
+}
+
+/** A small cased flag at the ring's north bearing — orientation is readable without opening the degree popover. */
+function NorthNeedle({ c, R, north, k }: { c: Pt; R: number; north: number; k: number }) {
+  const tip = polar(c, north, R + 11 / k)
+  const bL = polar(c, north + 6, R - 1 / k)
+  const bR = polar(c, north - 6, R - 1 / k)
+  const d = `M${tip.x} ${tip.y} L${bL.x} ${bL.y} L${bR.x} ${bR.y} Z`
+  return (
+    <>
+      <path d={d} fill="#F26B57" stroke={INKHALO} strokeWidth={2.6 / k} strokeLinejoin="round" opacity={0.98} />
+      <path d={d} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
+    </>
+  )
 }
 
 
@@ -207,45 +270,64 @@ function Outline(props: {
 interface ChakraProps {
   c: Pt; R: number; north: number; compass: CompassState; k: number; vr: number
   pts: Pt[]; closed: boolean; idPrefix: string
+  /** unscaled, drawing-derived radius — independent of the compass Size slider (scalePct) */
+  baseR: number
 }
 
 function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number }) {
+  const px = R * k
+  // the lattice follows Vastu's own sector geometry (45/22.5/11.25°) instead of a generic
+  // 5/10/30 protractor, and coarsens at low zoom so minor ticks never alias into sub-pixel fuzz
+  const step = px > 900 ? 2.8125 : px > 420 ? 11.25 : px > 200 ? 22.5 : 45
   const ticks = []
-  for (let d = 0; d < 360; d += 5) {
-    const major = d % 30 === 0
-    const med = d % 10 === 0
-    const len = major ? R * 0.045 : med ? R * 0.032 : R * 0.02
+  for (let d = 0; d < 360; d += step) {
+    const onCard = Math.abs(d % 45) < 0.01
+    const onZone = !onCard && Math.abs(d % 22.5) < 0.01
+    const onPada = !onCard && !onZone && Math.abs(d % 11.25) < 0.01
+    const len = onCard ? R * 0.05 : onZone ? R * 0.04 : onPada ? R * 0.03 : R * 0.017
+    const w = onCard ? 1.6 : onZone ? 1.3 : onPada ? 0.95 : 0.6
+    const ink = onCard || onZone ? GOLD : onPada ? '#E8DDBE' : MUTED
+    const op = onCard ? 0.95 : onZone ? 0.85 : onPada ? 0.6 : 0.42
     const a = north + d
-    const p0 = polar(c, a, R - len)
-    const p1 = polar(c, a, R)
+    // small standoff so ticks sit just outside the ring stroke, never over a colored fill inside it
+    const p0 = polar(c, a, R * 1.008)
+    const p1 = polar(c, a, R * 1.008 + len)
     ticks.push(
       <line key={`u${d}`} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
-        stroke={INKHALO} strokeWidth={(major ? 3 : 2) / k} opacity={0.55} />,
+        stroke={INKHALO} strokeWidth={(w + 1.6) / k} opacity={0.5} />,
       <line key={d} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
-        stroke="#E8DDBE" strokeWidth={(major ? 1.4 : 0.8) / k} opacity={major ? 0.85 : 0.55} />,
+        stroke={ink} strokeWidth={w / k} opacity={op} />,
     )
   }
   return (
     <g>
       {ticks}
-      {numbers && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
-        <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={R * 0.033}
-          text={String(d)} fill="#CBD2DF" weight={500} opacity={0.9} halo={R * 0.008} vr={vr} />
+      {numbers && [45, 90, 135, 180, 225, 270, 315].map((d) => (
+        <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={R * 0.032}
+          text={`${d}°`} fill="#CBD2DF" weight={500} opacity={0.9} halo={R * 0.008} vr={vr} />
       ))}
     </g>
   )
 }
 
-function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix }: ChakraProps) {
+function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: ChakraProps) {
   const clip = compass.clip && closed && pts.length >= 3
   const clipId = `${idPrefix}-plotclip`
+  // clipped fills must reach the plot regardless of the Size slider — use the unscaled
+  // radius, not the scaled ring radius, or shrinking the wheel leaves plot corners un-tinted
+  const fillR = clip ? baseR * 1.7 : R
   const fills = (
     <g clipPath={clip ? `url(#${clipId})` : undefined}>
       {ZONES16.map((z, i) => {
         const a0 = north - 11.25 + i * 22.5
+        const lum = relLuminance(z.color)
+        // a flat alpha reads as one muddy band — nudge it so light hues stop glowing and
+        // dark ones stop sinking, without touching the hues (ZONES16 itself is read-only here)
+        const balance = 1.26 - lum * 0.5
+        const op = Math.min(0.85, Math.max(0.05, (compass.fillPct / 100) * balance))
         return (
-          <path key={z.key} d={wedgePath(c, R * (clip ? 1.6 : 1), a0, a0 + 22.5)}
-            fill={z.color} fillOpacity={compass.fillPct / 100} stroke="none" />
+          <path key={z.key} d={wedgePath(c, fillR, a0, a0 + 22.5)}
+            fill={z.color} fillOpacity={op} stroke="none" />
         )
       })}
     </g>
@@ -259,15 +341,16 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix }: ChakraP
         return (
           <Fragment key={i}>
             <line x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-              stroke={INKHALO} strokeWidth={2.2 / k} opacity={0.45} />
+              stroke={INKHALO} strokeWidth={2.4 / k} opacity={0.5} />
             <line x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-              stroke="#EFE3C0" strokeWidth={0.9 / k} opacity={0.6} />
+              stroke="#EFE3C0" strokeWidth={1.1 / k} opacity={0.72} />
           </Fragment>
         )
       })}
-      <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.6 / k} opacity={0.9} />
+      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={R * 1.001} fill="none" stroke="#FFF6DF" strokeWidth={0.5 / k} opacity={0.4} />
       {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} vr={vr} />}
+      <NorthNeedle c={c} R={R} north={north} k={k} />
       {compass.labels && ZONES16.map((z, i) => {
         const mid = north + i * 22.5
         const cardinal = i % 4 === 0
@@ -284,7 +367,7 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix }: ChakraP
             size={size}
             text={z.key} weight={cardinal ? 800 : 600}
             fill={i === 0 ? '#F26B57' : cardinal ? '#F5EBD3' : '#D8DCE6'}
-            halo={size * 0.28} spacing={R * 0.004} vr={vr} />
+            halo={size * 0.28} spacing={R * 0.004} vr={vr} upright={cardinal} />
         )
       })}
     </g>
@@ -297,10 +380,19 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
     <g>
       {GATES32.map((g, i) => {
         const a0 = north + GATE_START_DEG + i * 11.25
+        // the app's best domain data, one lookup away — auspicious/challenging gates now visible
+        const q = GATE_QUALITY[g.code]
+        const qColor = q?.v === 'good' ? GATE_GOOD : q?.v === 'caution' ? GATE_CAUTION : null
         return (
           <Fragment key={g.code}>
             {i % 2 === 0 && (
               <path d={ringSectorPath(c, r0, R, a0, a0 + 11.25)} fill="#FFFFFF" fillOpacity={0.045} />
+            )}
+            {qColor && (
+              <path d={ringSectorPath(c, r0, R, a0, a0 + 11.25)} fill={qColor} fillOpacity={0.15} />
+            )}
+            {qColor && (
+              <path d={ringSectorPath(c, R * 0.978, R, a0, a0 + 11.25)} fill={qColor} fillOpacity={0.88} />
             )}
             <line x1={polar(c, a0, r0).x} y1={polar(c, a0, r0).y}
               x2={polar(c, a0, R).x} y2={polar(c, a0, R).y}
@@ -310,23 +402,26 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
       })}
       {[45, 135, 225, 315].map((d) => {
         const p = polar(c, north + d, R)
-        return <line key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-          stroke={GOLD} strokeWidth={1.2 / k} opacity={0.65} />
+        return <CasedLine key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k} width={1.2 / k} opacity={0.65} />
       })}
       {[0, 90, 180, 270].map((d) => {
         const p = polar(c, north + d, R)
-        return <line key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-          stroke="#F2E6C4" strokeWidth={1.1 / k} opacity={0.5} strokeDasharray={`${8 / k} ${6 / k}`} />
+        return <CasedLine key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
+          stroke="#F2E6C4" width={1.1 / k} opacity={0.5} dash={`${8 / k} ${6 / k}`} />
       })}
-      <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.7 / k} opacity={0.92} />
-      <circle cx={c.x} cy={c.y} r={r0} fill="none" stroke={GOLD} strokeWidth={1 / k} opacity={0.55} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R * 1.055} north={north} numbers={false} k={k} vr={vr} />}
+      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.7 / k} opacity={0.92} />
+      <CasedCircle cx={c.x} cy={c.y} r={r0} k={k} width={1 / k} opacity={0.55} />
+      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
+      <NorthNeedle c={c} R={R} north={north} k={k} />
       {compass.labels && R * 0.033 * k >= 6.2 && GATES32.map((g, i) => {
         const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
-        const nameSize = Math.min(R * 0.033, (R * 0.175) / (g.devta.length * 0.58))
+        // stagger radii even/odd and trim the width budget so neighbouring long names
+        // (Papayakshma, Bhringaraja…) stop nearly touching across the pada boundary
+        const stagger = i % 2 === 0 ? 0.955 : 0.9
+        const nameSize = Math.min(R * 0.033, (R * 0.16) / (g.devta.length * 0.58))
         return (
           <Fragment key={g.code}>
-            <RingLabel c={c} deg={mid} r={R * 0.935} size={nameSize} text={g.devta}
+            <RingLabel c={c} deg={mid} r={R * stagger} size={nameSize} text={g.devta}
               fill="#EFE7D2" weight={600} halo={R * 0.01} vr={vr} />
             <RingLabel c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
               fill="#B8A26B" weight={700} spacing={R * 0.002} vr={vr} />
@@ -345,7 +440,7 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
       {compass.labels && ['N', 'E', 'S', 'W'].map((t, i) => (
         <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07}
           size={Math.min(Math.max(R * 0.055, 10 / k), R * 0.1)}
-          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.014} vr={vr} />
+          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.014} vr={vr} upright />
       ))}
     </g>
   )
@@ -363,23 +458,24 @@ function Chakra8({ c, R, north, compass, k, vr }: ChakraProps) {
       {DIRS8.map((_, i) => {
         const a = north - 22.5 + i * 45
         const p = polar(c, a, R)
-        return <line key={i} x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-          stroke="#EFE3C0" strokeWidth={0.9 / k} opacity={0.5} />
+        return <CasedLine key={i} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
+          stroke="#EFE3C0" width={0.9 / k} opacity={0.5} />
       })}
       {DIRS8.map((_, i) => {
         const p = polar(c, north + i * 45, R * 0.985)
-        return <line key={`ax${i}`} x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-          stroke={GOLD} strokeWidth={i % 2 === 0 ? 1.3 / k : 0.9 / k} opacity={i % 2 === 0 ? 0.75 : 0.55} />
+        return <CasedLine key={`ax${i}`} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
+          width={i % 2 === 0 ? 1.3 / k : 0.9 / k} opacity={i % 2 === 0 ? 0.75 : 0.55} />
       })}
-      <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.6 / k} opacity={0.9} />
-      <circle cx={c.x} cy={c.y} r={R * 0.62} fill="none" stroke={GOLD} strokeWidth={0.8 / k} opacity={0.4} />
+      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
+      <CasedCircle cx={c.x} cy={c.y} r={R * 0.62} k={k} width={0.8 / k} opacity={0.4} />
       {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} vr={vr} />}
+      <NorthNeedle c={c} R={R} north={north} k={k} />
       {compass.labels && DIRS8.map((d8, i) => (
         <Fragment key={d8.key}>
           <RingLabel c={c} deg={north + i * 45} r={R * 1.08}
             size={Math.min(Math.max(i % 2 === 0 ? R * 0.068 : R * 0.05, 9.5 / k), R * 0.11)}
             text={d8.key} weight={800}
-            fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.013} vr={vr} />
+            fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.013} vr={vr} upright={i % 2 === 0} />
           {R * 0.036 * k >= 6.5 && (
             <>
               <RingLabel c={c} deg={north + i * 45} r={R * 0.75} size={R * 0.036}
@@ -394,7 +490,7 @@ function Chakra8({ c, R, north, compass, k, vr }: ChakraProps) {
   )
 }
 
-function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
+function Grid9({ c, north, compass, k, vr, pts, closed }: ChakraProps) {
   const frame = useMemo(() => {
     if (!closed || pts.length < 3) return null
     const rad = (-north * Math.PI) / 180
@@ -412,6 +508,12 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
   if (!frame) return null
   const { minX, minY, maxX, maxY } = frame
   const cw = (maxX - minX) / 9, ch = (maxY - minY) / 9
+  // this whole compass sits inside a `rotate(north)` group (below) so the mandala tracks the
+  // plan's north, but that same rotation would otherwise carry into every label glyph and print
+  // it sideways or upside-down — counter-rotating each text node by -(north+vr) cancels exactly
+  // that (plus the live view rotation), so the grid still turns with north while its type stays
+  // screen-upright, the same result RingLabel's own flip logic gets for the ring compasses.
+  const upr = -(north + vr)
 
   const cells = []
   for (let row = 0; row < 9; row++) {
@@ -429,10 +531,12 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
       if (name && compass.devtas) {
         const size = Math.min(Math.min(cw, ch) * 0.24, (cw * 0.9) / (name.length * 0.56))
         if (size * k < 5.5) continue
+        const tx = x + cw / 2, ty = y + ch / 2
         cells.push(
-          <text key={`n${row}-${col}`} x={x + cw / 2} y={y + ch / 2}
+          <text key={`n${row}-${col}`} x={tx} y={ty}
             fontSize={size} fontFamily={FONT} fontWeight={600} fill="#EDE4CC"
             textAnchor="middle" dominantBaseline="central" opacity={0.92}
+            transform={`rotate(${upr} ${tx} ${ty})`}
             {...haloProps(size * 0.22)}>
             {name}
           </text>,
@@ -445,10 +549,12 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
     const size = big
       ? Math.min(cw, ch) * 0.5
       : Math.min(Math.min(cw, ch) * 0.26, (cw * 1.9) / (text.length * 0.56))
+    const tx = minX + colC * cw, ty = minY + rowC * ch
     return (
-      <text x={minX + colC * cw} y={minY + rowC * ch} fontSize={size} fontFamily={FONT}
+      <text x={tx} y={ty} fontSize={size} fontFamily={FONT}
         fontWeight={big ? 700 : 600} fill={big ? GOLD : '#C9BE9D'}
         textAnchor="middle" dominantBaseline="central" opacity={big ? 0.95 : 0.8}
+        transform={`rotate(${upr} ${tx} ${ty})`}
         {...haloProps(size * 0.2)}>
         {text}
       </text>
@@ -464,8 +570,15 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
       stroke={GOLD} strokeWidth={(strong ? 1.5 : 0.7) / k} opacity={strong ? 0.8 : 0.45} />)
   }
 
+  // north needle above the frame's top edge — no counter-rotation, since its whole job
+  // is to point at north, tracking the frame's own rotation exactly as Dial's needle does
+  const nx = (minX + maxX) / 2
+  const needleD = `M${nx} ${minY - ch * 0.95} L${nx + cw * 0.1} ${minY - ch * 0.58} L${nx - cw * 0.1} ${minY - ch * 0.58} Z`
+
   return (
     <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+      <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
+        fill="none" stroke={INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
         fill="none" stroke={GOLD} strokeWidth={2 / k} opacity={0.9} />
       {cells}
@@ -483,10 +596,13 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
           {innerLabel(MANDALA_INNER.nw, 2, 2)}
         </g>
       )}
+      <path d={needleD} fill="#F26B57" stroke={INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
+      <path d={needleD} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
       {compass.labels && (
-        <text x={(minX + maxX) / 2} y={minY - ch * 0.35} fontSize={Math.min(cw, ch) * 0.42}
+        <text x={nx} y={minY - ch * 0.35} fontSize={Math.min(cw, ch) * 0.42}
           fontFamily={FONT} fontWeight={800} fill="#F26B57" textAnchor="middle"
-          dominantBaseline="central" {...haloProps(Math.min(cw, ch) * 0.09)}>
+          dominantBaseline="central" transform={`rotate(${upr} ${nx} ${minY - ch * 0.35})`}
+          {...haloProps(Math.min(cw, ch) * 0.09)}>
           N
         </text>
       )}
@@ -495,8 +611,12 @@ function Grid9({ c, north, compass, k, pts, closed }: ChakraProps) {
 }
 
 function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
+  const px = R * k
+  // this wheel's whole job is fine degree resolution, so it keeps a finer floor than the
+  // other compasses' LOD — but still coarsens at low zoom instead of rendering 180 ticks as fuzz
+  const step = px > 1400 ? 2 : px > 700 ? 5 : px > 300 ? 10 : 30
   const ticks = []
-  for (let d = 0; d < 360; d += 2) {
+  for (let d = 0; d < 360; d += step) {
     const major = d % 30 === 0
     const med = d % 10 === 0
     const len = major ? R * 0.055 : med ? R * 0.038 : R * 0.02
@@ -515,10 +635,11 @@ function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
   const nR = polar(c, north - 4, R * 0.9)
   return (
     <g>
-      <circle cx={c.x} cy={c.y} r={R} fill="none" stroke={GOLD} strokeWidth={1.8 / k} opacity={0.95} />
-      <circle cx={c.x} cy={c.y} r={R * 0.82} fill="none" stroke={GOLD} strokeWidth={0.7 / k} opacity={0.4} />
+      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.8 / k} opacity={0.95} />
+      <CasedCircle cx={c.x} cy={c.y} r={R * 0.82} k={k} width={0.7 / k} opacity={0.4} />
       {ticks}
-      <path d={`M${nTip.x} ${nTip.y} L${nL.x} ${nL.y} L${nR.x} ${nR.y} Z`} fill="#F26B57" />
+      <path d={`M${nTip.x} ${nTip.y} L${nL.x} ${nL.y} L${nR.x} ${nR.y} Z`}
+        fill="#F26B57" stroke={INKHALO} strokeWidth={1.8 / k} strokeLinejoin="round" />
       {compass.labels && R * 0.045 * k >= 6 && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
         <RingLabel key={d} c={c} deg={north + d} r={R * 1.07} size={R * 0.045}
           text={String(d)} fill="#DFE3EC" weight={600} halo={R * 0.01} vr={vr} />
@@ -526,7 +647,7 @@ function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
       {compass.labels && DIRS8.map((d8, i) => (
         <RingLabel key={d8.key} c={c} deg={north + i * 45} r={R * 0.73}
           size={Math.min(Math.max(i % 2 === 0 ? R * 0.085 : R * 0.05, 9 / k), R * 0.12)} text={d8.key} weight={800}
-          fill={i === 0 ? '#F26B57' : '#EFE4C8'} halo={R * 0.014} vr={vr} />
+          fill={i === 0 ? '#F26B57' : '#EFE4C8'} halo={R * 0.014} vr={vr} upright={i % 2 === 0} />
       ))}
     </g>
   )
@@ -549,14 +670,47 @@ function CustomOverlay({ c, R, north, compass }: ChakraProps) {
 /* Room / object markers                                               */
 /* ------------------------------------------------------------------ */
 
-function MarkersLayer({ markers, k, vr }: { markers: Marker[]; k: number; vr: number }) {
+function MarkersLayer(props: {
+  markers: Marker[]; k: number; vr: number; center: Pt | null; north: number; R: number
+}) {
+  const { markers, k, vr, center, north, R } = props
   if (markers.length === 0) return null
   return (
     <g>
       {markers.map((m) => {
         const meta = markerKindMeta(m.kind)
+        // every marker's placement is one lookup away — reuse it to echo the marker's own
+        // zone (a thin ring in the zone's colour) and, for entrances, to tie back to the wheel
+        const pl = center ? placementOf(m.p, center, north) : null
         return (
           <g key={m.id}>
+            {m.kind === 'entrance' && center && pl && R > 0 && (() => {
+              const rim = polar(center, north + pl.bearing, R)
+              const padaA0 = north + GATE_START_DEG + pl.padaIdx * 11.25
+              const q = GATE_QUALITY[pl.pada.code]
+              const qColor = q?.v === 'good' ? GATE_GOOD : q?.v === 'caution' ? GATE_CAUTION : '#F26B57'
+              return (
+                <Fragment>
+                  {/* the pada this entrance actually crosses, lit up — readable even with no wheel showing */}
+                  <path d={ringSectorPath(center, R * 0.86, R, padaA0, padaA0 + 11.25)}
+                    fill={qColor} fillOpacity={0.16} />
+                  {/* a radial tie: centre through the marker (they're collinear by construction) to the rim */}
+                  <line x1={center.x} y1={center.y} x2={rim.x} y2={rim.y}
+                    stroke={INKHALO} strokeWidth={3 / k} opacity={0.4} strokeDasharray={`${7 / k} ${6 / k}`} />
+                  <line x1={center.x} y1={center.y} x2={rim.x} y2={rim.y}
+                    stroke="#F26B57" strokeWidth={1.3 / k} opacity={0.65} strokeDasharray={`${7 / k} ${6 / k}`} />
+                  <circle cx={rim.x} cy={rim.y} r={3.2 / k} fill={qColor} stroke={INKHALO} strokeWidth={1.4 / k} />
+                  {R * k > 100 && (
+                    <RingLabel c={center} deg={north + pl.bearing} r={R + 14 / k} size={9.5 / k}
+                      text={pl.pada.code} fill={qColor} weight={800} halo={2.6 / k} vr={vr} />
+                  )}
+                </Fragment>
+              )
+            })()}
+            {pl && (
+              <circle cx={m.p.x} cy={m.p.y} r={9.3 / k} fill="none"
+                stroke={pl.zone.color} strokeWidth={1.3 / k} opacity={0.85} />
+            )}
             <circle cx={m.p.x} cy={m.p.y} r={10 / k} fill={INKHALO} opacity={0.75} />
             <circle cx={m.p.x} cy={m.p.y} r={8 / k} fill={meta.color} stroke="#FFFDF4" strokeWidth={1.4 / k} />
             <text x={m.p.x} y={m.p.y + 0.5 / k} fontSize={9 / k} fontFamily={FONT} fontWeight={800}
@@ -583,15 +737,26 @@ function MarkersLayer({ markers, k, vr }: { markers: Marker[]; k: number; vr: nu
 
 function CenterMarker(props: {
   c: Pt; brahmaR: number; k: number; brahmasthan: boolean; closed: boolean
-  areaText: string | null; overridden: boolean; vr?: number
+  areaText: string | null; overridden: boolean; vr?: number; north: number
 }) {
-  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
+  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0, north } = props
   return (
     <g>
       {closed && brahmasthan && brahmaR > 0 && (
         <g>
-          <circle cx={c.x} cy={c.y} r={brahmaR} fill={GOLD} fillOpacity={0.06}
-            stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${6 / k}`} opacity={0.9} />
+          {/* the classical central-ninth square (brahmaR is already that cell's half-side,
+              per analysis.ts's brahmasthanRadius), aligned to north alongside the drawing's
+              own inscribed circle — same math as Grid9's Brahma block, drawn everywhere else too */}
+          <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+            <rect x={c.x - brahmaR} y={c.y - brahmaR} width={brahmaR * 2} height={brahmaR * 2}
+              fill={GOLD} fillOpacity={0.055} stroke="none" />
+            <rect x={c.x - brahmaR} y={c.y - brahmaR} width={brahmaR * 2} height={brahmaR * 2}
+              fill="none" stroke={INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
+            <rect x={c.x - brahmaR} y={c.y - brahmaR} width={brahmaR * 2} height={brahmaR * 2}
+              fill="none" stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
+          </g>
+          <circle cx={c.x} cy={c.y} r={brahmaR} fill="none"
+            stroke={GOLD} strokeWidth={0.8 / k} strokeDasharray={`${5 / k} ${5 / k}`} opacity={0.45} />
           <text x={c.x} y={c.y - brahmaR - 9 / k} fontSize={10.5 / k} fontFamily={FONT}
             fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
             transform={`rotate(${-vr} ${c.x} ${c.y - brahmaR - 9 / k})`}
@@ -647,8 +812,12 @@ export function Scene(props: SceneProps) {
   }, [sampled, pts.length, closed, metersPerPx, unit])
 
   const chakraProps: ChakraProps | null = showCompass && center
-    ? { c: center, R: RS, north: northDeg, compass, k, vr, pts: sampled, closed, idPrefix }
+    ? { c: center, R: RS, north: northDeg, compass, k, vr, pts: sampled, closed, idPrefix, baseR: R }
     : null
+
+  // entrance ties reach whichever ring is actually on screen (the scaled wheel radius when a
+  // compass is showing), falling back to the plot's own circumradius when no wheel is selected
+  const tieR = chakraProps ? chakraProps.R : R
 
   return (
     <g>
@@ -684,12 +853,12 @@ export function Scene(props: SceneProps) {
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
       <StrokesLayer strokes={props.strokes ?? []} />
-      <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} />
+      <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}
           brahmaR={brahmasthanRadius(sampled, center, northDeg) * ((compass.brahmaPct ?? 100) / 100)}
           k={k} brahmasthan={compass.brahmasthan}
-          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} />
+          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} north={northDeg} />
       )}
     </g>
   )

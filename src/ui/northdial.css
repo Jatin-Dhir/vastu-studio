@@ -1,0 +1,14 @@
+/* North dial extras — base sizing/cursor/touch-action stay in index.css (untouched);
+   this file only covers what the round-17 dial upgrade adds: a tabular-nums degree
+   readout and a keyboard focus ring, since the dial is now a real role="slider" control. */
+
+.north-dial-readout {
+  font-variant-numeric: tabular-nums;
+  font-family: 'Inter Variable', Inter, system-ui, sans-serif;
+}
+
+.north-dial:focus-visible {
+  outline: 2px solid #D9B45B;
+  outline-offset: 2px;
+  border-radius: 50%;
+}
