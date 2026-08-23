@@ -1,15 +1,21 @@
 import type { ProjectFile } from '../types'
 import { serializeProject, useStore } from '../store'
 import { newProjectId, putProject } from '../db'
+import { shareBlobNative } from '../native'
 
 export function downloadBlob(blob: Blob, filename: string) {
-  const a = document.createElement('a')
-  a.href = URL.createObjectURL(blob)
-  a.download = filename
-  document.body.appendChild(a)
-  a.click()
-  a.remove()
-  setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  // inside the Android/iOS shell an anchor download silently does nothing —
+  // route through the native share sheet there; the web keeps the download
+  void shareBlobNative(blob, filename).then((handled) => {
+    if (handled) return
+    const a = document.createElement('a')
+    a.href = URL.createObjectURL(blob)
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+  })
 }
 
 export function saveProjectFile() {
