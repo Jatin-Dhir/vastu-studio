@@ -4,16 +4,8 @@ import { useStore } from '../store'
 import { centroid, edgePoint, sampledPolygon } from '../geometry'
 import { placementOf } from '../analysis'
 import { NorthDial } from './NorthDial'
-import { COMPASS_META, GATE_QUALITY, MARKER_KINDS, PLACEMENT_RULES } from '../vastu'
-import type { CompassId, MarkerKind } from '../types'
-
-const PILLS: { id: CompassId; label: string }[] = [
-  { id: 'zones16', label: '16' },
-  { id: 'gates32', label: '32' },
-  { id: 'chakra8', label: '8' },
-  { id: 'grid9', label: 'Grid' },
-  { id: 'dial', label: 'Dial' },
-]
+import { GATE_QUALITY, MARKER_KINDS, PLACEMENT_RULES } from '../vastu'
+import type { MarkerKind } from '../types'
 
 /** Persistent what-do-I-do-now pill — instructions no longer vanish with a toast. */
 function ToolHint() {
@@ -143,14 +135,16 @@ function MarkerKindRow() {
   )
 }
 
-/** Floating compass switcher + degree pill + lock, top-centre of the canvas. */
+/**
+ * Floating degree readout + lock, top-centre of the canvas — quick access to the
+ * two things worth checking mid-edit. Compass TYPE lives only in the Compass card
+ * in the side panel/sheet now: a row of terse number pills (16/32/8/Grid/Dial)
+ * floating over the drawing read as unexplained clutter, not a control.
+ */
 export function QuickBar() {
   const closed = useStore((s) => s.closed)
   const hasBg = useStore((s) => s.bg.kind !== 'none')
   const tool = useStore((s) => s.tool)
-  const compassId = useStore((s) => s.compass.id)
-  const customUrl = useStore((s) => s.compass.customUrl)
-  const setCompass = useStore((s) => s.setCompass)
   const northDeg = useStore((s) => s.northDeg)
   const setNorth = useStore((s) => s.setNorth)
   const locked = useStore((s) => s.locked)
@@ -171,25 +165,10 @@ export function QuickBar() {
   const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw'
   if (!hasBg || (!closed && !armed)) return null
 
-  const pills = customUrl ? [...PILLS, { id: 'custom' as CompassId, label: 'Own' }] : PILLS
-
   return (
     <div className="quickbar" ref={popRef}>
       {closed && (
-      <div className="quickbar-row">
-        <div className="qpill-scroll">
-          {pills.map((p) => (
-            <button
-              key={p.id}
-              className={`qpill ${compassId === p.id ? 'on' : ''}`}
-              title={COMPASS_META.find((m) => m.id === p.id)?.label}
-              onClick={() => setCompass({ id: compassId === p.id ? 'none' : p.id })}
-            >
-              {p.label}
-            </button>
-          ))}
-        </div>
-        <span className="qsep" />
+      <div className="quickbar-row compact">
         <button className={`qpill deg ${degOpen ? 'on' : ''}`} onClick={() => setDegOpen(!degOpen)}>
           N{northDeg}°
         </button>

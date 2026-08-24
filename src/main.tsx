@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import '@fontsource-variable/inter'
 import '@fontsource/cormorant-garamond/600.css'
 import './index.css'
+import './theme.css'
 import App from './App'
 import { initNative, isNative } from './native'
 

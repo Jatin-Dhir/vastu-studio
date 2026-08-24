@@ -1,0 +1,43 @@
+/* Appearance: theme (Ink/Paper) and accent overrides for the UI chrome — panels,
+   sheets, dialogs, text. Every rule here just redefines the :root custom
+   properties index.css already uses everywhere, so nothing else needs to change.
+   The canvas/compass drawing itself (src/canvas/Scene.tsx) stays ink-dark: it's a
+   pure SVG component also used to rasterise the PNG export, so its colours are
+   plain hex constants, not CSS variables — a light "paper" plan render is a
+   separate, larger piece of work, not a CSS toggle. */
+
+:root[data-theme='paper'] {
+  --bg: #F3F1EA;
+  --bg-2: #ECE8DE;
+  --panel: rgba(255, 253, 248, 0.86);
+  --panel-solid: #FFFDF8;
+  --stroke: rgba(24, 22, 14, 0.09);
+  --stroke-2: rgba(24, 22, 14, 0.16);
+  --text: #26251E;
+  --muted: #6E6C5D;
+  --dim: #9C9A88;
+  --teal: #2E7E84;
+  --danger: #C23B2E;
+  --ok: #3E8E52;
+}
+
+:root[data-theme='paper'] .stage-wrap {
+  background:
+    radial-gradient(1200px 700px at 55% 42%, rgba(169,120,46,0.05), transparent 60%),
+    radial-gradient(circle at 0 0, rgba(20,18,10,0.05) 1px, transparent 1.4px),
+    var(--bg);
+  background-size: auto, 26px 26px, auto;
+}
+
+/* accents — every mode gets its own gold-role triad, tuned for contrast on both grounds */
+:root[data-accent='gold'] { --gold: #D9B45B; --gold-2: #E8C56B; --gold-soft: rgba(217,180,91,0.14); }
+:root[data-theme='paper'][data-accent='gold'] { --gold: #A9782E; --gold-2: #8F631F; --gold-soft: rgba(169,120,46,0.14); }
+
+:root[data-accent='teal'] { --gold: #5FB8C9; --gold-2: #7ECBDA; --gold-soft: rgba(95,184,201,0.14); }
+:root[data-theme='paper'][data-accent='teal'] { --gold: #1F7A8C; --gold-2: #166370; --gold-soft: rgba(31,122,140,0.14); }
+
+:root[data-accent='rose'] { --gold: #D98BA0; --gold-2: #E8A3B5; --gold-soft: rgba(217,139,160,0.14); }
+:root[data-theme='paper'][data-accent='rose'] { --gold: #B0506B; --gold-2: #954059; --gold-soft: rgba(176,80,107,0.14); }
+
+:root[data-accent='sage'] { --gold: #93B587; --gold-2: #A9C89E; --gold-soft: rgba(147,181,135,0.14); }
+:root[data-theme='paper'][data-accent='sage'] { --gold: #5C7D50; --gold-2: #4C6942; --gold-soft: rgba(92,125,80,0.14); }

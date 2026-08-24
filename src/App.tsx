@@ -68,7 +68,15 @@ export default function App() {
   const mapOpen = useStore((s) => s.mapOpen)
   const projectsOpen = useStore((s) => s.projectsOpen)
   const reportOpen = useStore((s) => s.reportOpen)
+  const theme = useStore((s) => s.theme)
+  const accent = useStore((s) => s.accent)
   const fileRef = useRef<HTMLInputElement>(null)
+
+  /* appearance: theme/accent live as plain data-attributes so pure CSS drives every colour */
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    document.documentElement.dataset.accent = accent
+  }, [theme, accent])
 
   /* file picker trigger */
   useEffect(() => {
@@ -223,10 +231,12 @@ export default function App() {
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
-        <GuideCard />
         <CalibrateBar />
         <StatusChip />
       </div>
+      {/* fixed to the real viewport, like Toasts — .stage-wrap clips absolute children
+          with overflow:hidden, which was cramping this against the dock on real phones */}
+      <GuideCard />
       <Toasts />
       <CalibrateDialog />
       <MarkerDialog />

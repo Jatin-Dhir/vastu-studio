@@ -12,6 +12,20 @@ export interface Toast {
 
 interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[] }
 
+export type ThemeMode = 'ink' | 'paper'
+export type AccentId = 'gold' | 'teal' | 'rose' | 'sage'
+const THEME_KEY = 'vastu-studio.theme.v1'
+function loadThemePrefs(): { theme: ThemeMode; accent: AccentId } {
+  try {
+    const raw = localStorage.getItem(THEME_KEY)
+    if (raw) return { theme: 'ink', accent: 'gold', ...JSON.parse(raw) }
+  } catch { /* private mode or corrupt value */ }
+  return { theme: 'ink', accent: 'gold' }
+}
+function saveThemePrefs(p: { theme: ThemeMode; accent: AccentId }) {
+  try { localStorage.setItem(THEME_KEY, JSON.stringify(p)) } catch { /* private mode */ }
+}
+
 export interface VastuStore {
   bg: BgState
   metersPerPx: number | null
@@ -72,6 +86,14 @@ export interface VastuStore {
   /** which import produced the current background — steers the calibrate hint */
   bgHint: 'map-screenshot' | null
   setBgHint: (h: 'map-screenshot' | null) => void
+  theme: ThemeMode
+  accent: AccentId
+  setTheme: (t: ThemeMode) => void
+  setAccent: (a: AccentId) => void
+  /** remove just the background image — keeps the traced outline, scale and everything else */
+  clearBackground: () => void
+  /** remove all room/door/object markers — keeps the outline and everything else */
+  clearMarkers: () => void
   toasts: Toast[]
   undoStack: Snapshot[]
   redoStack: Snapshot[]
@@ -217,6 +239,14 @@ export const useStore = create<VastuStore>()((set, get) => {
     setScaleSkipped: (scaleSkipped) => set({ scaleSkipped }),
     bgHint: null,
     setBgHint: (bgHint) => set({ bgHint }),
+    ...loadThemePrefs(),
+    setTheme: (theme) => { saveThemePrefs({ theme, accent: get().accent }); set({ theme }) },
+    setAccent: (accent) => { saveThemePrefs({ theme: get().theme, accent }); set({ accent }) },
+    clearBackground: () => {
+      push()
+      set((s) => ({ bg: { ...s.bg, kind: 'none' as const, dataUrl: undefined, dxfText: undefined } }))
+    },
+    clearMarkers: () => { push(); set({ markers: [], selectedMarker: null }) },
     toasts: [],
     undoStack: [],
     redoStack: [],

@@ -1,13 +1,14 @@
 import { useState } from 'react'
 import {
-  Check, Download, FileText, FolderOpen, HelpCircle, Lock, LockOpen, Map as MapIcon,
-  Maximize2, MoreHorizontal, Redo2, Ruler, Save, Trash2, Undo2, Upload,
+  Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
+  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Trash2, Undo2, Upload,
 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { exportPng } from '../export'
 import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
+import { AppearanceSheet } from './AppearanceSheet'
 import { goToStep, useGuide } from './steps'
 
 export function TopBar() {
@@ -21,8 +22,45 @@ export function TopBar() {
   const setLocked = useStore((s) => s.setLocked)
   const closed = useStore((s) => s.closed)
   const hasBg = useStore((s) => s.bg.kind !== 'none')
+  const hasMarkers = useStore((s) => s.markers.length > 0)
+  const hasStrokes = useStore((s) => s.strokes.length > 0)
+  const hasOutline = useStore((s) => s.pts.length > 0)
   const { track, active } = useGuide()
   const [moreOpen, setMoreOpen] = useState(false)
+  const [clearOpen, setClearOpen] = useState(false)
+  const [appearanceOpen, setAppearanceOpen] = useState(false)
+
+  const clearRows: SheetRow[] = [
+    {
+      icon: Image, label: 'Remove background image', disabled: !hasBg,
+      sub: 'Keeps your outline, scale, markers and drawings',
+      onTap: () => useStore.getState().clearBackground(),
+    },
+    {
+      icon: MapPin, label: 'Remove all markers', disabled: !hasMarkers,
+      sub: 'Doors, rooms, objects — everything else stays',
+      onTap: () => useStore.getState().clearMarkers(),
+    },
+    {
+      icon: PenLine, label: 'Remove all drawings', disabled: !hasStrokes,
+      sub: 'Pen and line annotations only',
+      onTap: () => useStore.getState().clearStrokes(),
+    },
+    {
+      icon: Eraser, label: 'Clear the outline', disabled: !hasOutline,
+      sub: 'Keeps the background image and scale',
+      onTap: () => useStore.getState().clearOutline(),
+    },
+    {
+      icon: Trash2, label: 'Clear everything', danger: true,
+      sub: 'Plan, outline, scale, markers and drawings',
+      onTap: () => {
+        useStore.getState().toast('Clear the plan, outline and scale?', 'warn', 'Clear everything', () => {
+          window.dispatchEvent(new CustomEvent('vastu:reset'))
+        })
+      },
+    },
+  ]
 
   const moreRows: SheetRow[] = [
     {
@@ -42,23 +80,18 @@ export function TopBar() {
         </span>
       ),
     },
+    { icon: Palette, label: 'Appearance', sub: 'Theme and accent colour', onTap: () => setAppearanceOpen(true) },
     { icon: Maximize2, label: 'Fit to screen', sub: 'Bring the whole plan into view', onTap: requestFit },
     { icon: Upload, label: 'Import a plan', sub: 'PDF · DXF · photo · .vastu project', onTap: () => window.dispatchEvent(new CustomEvent('vastu:open-file')) },
     { icon: MapIcon, label: 'From Maps', sub: 'Capture the plot from satellite view', onTap: () => useStore.getState().setMapOpen(true) },
     { icon: FolderOpen, label: 'Projects', sub: 'Open, rename, back up', onTap: () => useStore.getState().setProjectsOpen(true) },
     { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', onTap: saveProjectFile },
     { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },
-    {
-      icon: Trash2, label: 'Start fresh', sub: 'Clear the plan, outline and scale', danger: true,
-      onTap: () => {
-        useStore.getState().toast('Clear the plan, outline and scale?', 'warn', 'Clear everything', () => {
-          window.dispatchEvent(new CustomEvent('vastu:reset'))
-        })
-      },
-    },
+    { icon: Eraser, label: 'Clear…', sub: 'Remove just the background, markers, drawings or outline', onTap: () => setClearOpen(true) },
   ]
 
   return (
+    <>
     <header className="topbar">
       <div className="brand">
         <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
@@ -136,8 +169,13 @@ export function TopBar() {
           <MoreHorizontal size={18} />
         </button>
       </div>
-
-      <ActionSheet open={moreOpen} title="Vastu Studio" rows={moreRows} onClose={() => setMoreOpen(false)} />
     </header>
+    {/* rendered OUTSIDE the header: .topbar's backdrop-filter creates a containing
+        block for position:fixed descendants, which was confining this sheet's
+        scrim to the 54px topbar strip instead of the real viewport */}
+    <ActionSheet open={moreOpen} title="Vastu Studio" rows={moreRows} onClose={() => setMoreOpen(false)} />
+    <ActionSheet open={clearOpen} title="Clear…" rows={clearRows} onClose={() => setClearOpen(false)} />
+    <AppearanceSheet open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+    </>
   )
 }
