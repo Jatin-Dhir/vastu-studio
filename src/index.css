@@ -914,8 +914,13 @@ kbd {
 /* ————— guide card — the one place that always says what's next ————— */
 .guide-card {
   position: fixed;
-  left: 14px; bottom: 14px;
-  width: min(340px, calc(100vw - 28px));
+  /* centred along the bottom edge — the tool rail is a tall vertical strip on
+     the LEFT at any desktop window height, so anchoring here instead of
+     bottom-left is what actually guarantees no overlap, not a bigger offset */
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  width: min(400px, calc(100vw - 28px));
   z-index: 19;
   display: flex; flex-direction: column; gap: 9px;
   padding: 12px 12px 13px;
@@ -1574,6 +1579,7 @@ kbd {
   .guide-card {
     position: fixed;
     left: 8px; right: 8px;
+    transform: none;
     width: auto;
     bottom: calc(150px + env(safe-area-inset-bottom));
     z-index: 19;
