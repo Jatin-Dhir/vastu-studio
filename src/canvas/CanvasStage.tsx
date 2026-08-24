@@ -5,6 +5,7 @@ import { importDxf, type DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import { haptic } from '../native'
+import { markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -12,7 +13,7 @@ const CLOSE_PX = COARSE ? 20 : 13
 const HIT_PX = COARSE ? 18 : 12
 const pushHistory = () =>
   useStore.setState((s) => ({
-    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges, markers: s.markers, strokes: s.strokes }].slice(-100),
+    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges, markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes }].slice(-100),
     redoStack: [],
   }))
 
@@ -36,7 +37,7 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape'
   idx: number
   markerId: string | null
   startX: number
@@ -76,12 +77,18 @@ export function CanvasStage() {
   const markers = useStore((s) => s.markers)
   const selectedMarker = useStore((s) => s.selectedMarker)
   const strokes = useStore((s) => s.strokes)
+  const roomShapes = useStore((s) => s.roomShapes)
+  const selectedRoomShape = useStore((s) => s.selectedRoomShape)
+  const roomDrawMode = useStore((s) => s.roomDrawMode)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
   const [editDragging, setEditDragging] = useState(false)
   // which vertex/edge is being reshaped — drives the live length callout, independent of the showEdgeLabels setting
   const [dragIdx, setDragIdx] = useState<{ mode: 'vertex' | 'bulge'; idx: number } | null>(null)
+  // live preview while dragging a new room rect/ellipse — a single small drag, not a
+  // 60fps-critical gesture, so plain state (like the calibration line) is fine here
+  const [activeRoom, setActiveRoom] = useState<[Pt, Pt] | null>(null)
   // ink preview is driven imperatively (like the view transform) so drawing never re-renders the scene
   const activeStrokeRef = useRef<Pt[]>([])
   const activeInkRef = useRef<SVGPathElement>(null)
@@ -282,11 +289,12 @@ export function CanvasStage() {
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-role]')
+    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-role]')
     const vidx = target?.getAttribute('data-vidx')
     const bidx = target?.getAttribute('data-bidx')
     const mkid = target?.getAttribute('data-mkid')
     const strokeId = target?.getAttribute('data-strokeid')
+    const rsid = target?.getAttribute('data-rsid')
     const role = target?.getAttribute('data-role')
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY
@@ -302,8 +310,18 @@ export function CanvasStage() {
       d.mode = 'idle'
       return
     }
+    else if (rsid != null) {
+      useStore.getState().setSelectedRoomShape(
+        useStore.getState().selectedRoomShape === rsid ? null : rsid)
+      d.mode = 'idle'
+      return
+    }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
+    else if (useStore.getState().tool === 'room' && !useStore.getState().locked && e.button === 0) {
+      d.mode = 'room-shape'
+      setActiveRoom([d.grabbed!, d.grabbed!])
+    }
     else if (useStore.getState().tool === 'draw' && !useStore.getState().locked && e.button === 0) {
       const s0 = useStore.getState()
       d.mode = 'drawing'
@@ -435,6 +453,17 @@ export function CanvasStage() {
         strokePathD(activeStrokeRef.current, s.drawMode === 'line' ? 'line' : 'pen'))
       return
     }
+    if (d.mode === 'room-shape' && d.grabbed) {
+      let p2 = world
+      // hold Shift for a true square / perfect circle, like every other drawing tool
+      if ((e.nativeEvent as PointerEvent).shiftKey) {
+        const dx = p2.x - d.grabbed.x, dy = p2.y - d.grabbed.y
+        const m = Math.max(Math.abs(dx), Math.abs(dy))
+        p2 = { x: d.grabbed.x + Math.sign(dx || 1) * m, y: d.grabbed.y + Math.sign(dy || 1) * m }
+      }
+      setActiveRoom([d.grabbed, p2])
+      return
+    }
     if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
       if (d.mode === 'calA') s.setCal(world, s.calB)
       else s.setCal(s.calA, world)
@@ -504,6 +533,22 @@ export function CanvasStage() {
           color: s0.drawMode === 'line' ? s0.lineColor : s0.penColor,
           width: (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k2,
         })
+      }
+      return
+    }
+    // room-shape commits on release too — it's a drag, same reasoning as ink above
+    if (mode === 'room-shape') {
+      const s0 = useStore.getState()
+      const region = activeRoom
+      setActiveRoom(null)
+      const k2 = viewRef.current.k
+      if (region) {
+        const [p1, p2] = region
+        const big = Math.hypot(p2.x - p1.x, p2.y - p1.y) > 6 / k2
+        if (big) {
+          haptic('light')
+          s0.addRoomShape(s0.roomDrawMode, [p1, p2])
+        }
       }
       return
     }
@@ -694,7 +739,8 @@ export function CanvasStage() {
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
           northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
-          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes} idPrefix="live"
+          k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes}
+          roomShapes={roomShapes} selectedRoomShape={selectedRoomShape} idPrefix="live"
         />
 
         {/* live ink preview + snap rings — attributes set imperatively so drawing/tracing never re-renders */}
@@ -714,6 +760,49 @@ export function CanvasStage() {
             stroke="rgba(0,0,0,0)" strokeWidth={Math.max(s2.width * 2, (COARSE ? 20 : 12) / k)}
             style={{ cursor: 'pointer' }} />
         ))}
+
+        {/* room-shape hit areas — the whole room is tappable, not just its border */}
+        {(tool === 'select' || tool === 'room') && !locked && roomShapes.map((r) => {
+          const [p1, p2] = r.pts
+          if (!p1 || !p2) return null
+          if (r.shape === 'ellipse') {
+            const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+            return <ellipse key={`hit-${r.id}`} data-rsid={r.id} cx={mid.x} cy={mid.y}
+              rx={Math.abs(p2.x - p1.x) / 2} ry={Math.abs(p2.y - p1.y) / 2}
+              fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
+          }
+          const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y)
+          return <rect key={`hit-${r.id}`} data-rsid={r.id} x={x} y={y}
+            width={Math.abs(p2.x - p1.x)} height={Math.abs(p2.y - p1.y)}
+            fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
+        })}
+
+        {/* live room-shape preview while dragging out a new rect/ellipse */}
+        {activeRoom && (() => {
+          const [p1, p2] = activeRoom
+          const color = markerKindMeta(useStore.getState().roomShapeKind).color
+          const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y)
+          const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y)
+          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+          return (
+            <g>
+              {roomDrawMode === 'ellipse' ? (
+                <ellipse cx={mid.x} cy={mid.y} rx={w / 2} ry={h / 2}
+                  fill={color} fillOpacity={0.16} stroke={color} strokeWidth={2 / k} strokeDasharray={`${7 / k} ${5 / k}`} />
+              ) : (
+                <rect x={x} y={y} width={w} height={h}
+                  fill={color} fillOpacity={0.16} stroke={color} strokeWidth={2 / k} strokeDasharray={`${7 / k} ${5 / k}`} />
+              )}
+              {metersPerPx && (
+                <text x={mid.x} y={y - 10 / k} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                  fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${mid.x} ${y - 10 / k})`}
+                  stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
+                  {formatLen(w * metersPerPx, unit)} × {formatLen(h * metersPerPx, unit)}
+                </text>
+              )}
+            </g>
+          )
+        })()}
 
         {/* live trace segment */}
         {liveTo && (

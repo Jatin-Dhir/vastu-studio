@@ -1,13 +1,114 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Fragment, useEffect, useMemo, useState } from 'react'
+import type { ReactNode } from 'react'
 import { Printer, Share2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { makePlanPng } from '../export'
-import { placementOf, zoneRows } from '../analysis'
-import { centroid, circumradius, perimeter, polygonArea, sampledPolygon } from '../geometry'
+import { brahmasthanRadius, placementOf, zoneRows } from '../analysis'
+import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
-import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
+import { ANALYSIS_DISCLAIMER, GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
 import { evaluateVastu } from '../evaluate'
+import type { Finding, Severity } from '../evaluate'
+import type { Marker, NorthSource, Pt, ScaleSource } from '../types'
 import './report.css'
+
+/* ------------------------------------------------------------------ */
+/* Small presentational helpers, local to the report.                  */
+/* ------------------------------------------------------------------ */
+
+/** Colour-coded verdict badge — the same good/warn/bad/info palette the findings list uses. */
+function Pill({ sev, children }: { sev: Severity; children: ReactNode }) {
+  return <span className={`report-pill report-pill-${sev}`}>{children}</span>
+}
+
+type RuleVerdict = 'ideal' | 'good' | 'caution' | 'avoid' | 'neutral'
+
+/** Same ideal→good→avoid→caution precedence CanvasOverlays' MarkerChips and evaluate.ts's
+ *  placement loop use, so a room's verdict here can never disagree with the canvas badge. */
+function ruleVerdict(kind: string, zoneKey: string): { verdict: RuleVerdict; why: string | null } {
+  const rule = PLACEMENT_RULES[kind]
+  if (!rule) return { verdict: 'neutral', why: null }
+  if (rule.ideal.includes(zoneKey)) return { verdict: 'ideal', why: rule.why.ideal ?? null }
+  if (rule.good.includes(zoneKey)) return { verdict: 'good', why: rule.why.good ?? null }
+  if (rule.avoid.includes(zoneKey)) return { verdict: 'avoid', why: rule.why.avoid ?? null }
+  if (rule.caution.includes(zoneKey)) return { verdict: 'caution', why: rule.why.caution ?? null }
+  return { verdict: 'neutral', why: null }
+}
+
+function VerdictPill({ verdict }: { verdict: RuleVerdict }) {
+  const sev: Severity = verdict === 'avoid' ? 'bad' : verdict === 'caution' ? 'warn' : verdict === 'neutral' ? 'info' : 'good'
+  const label = verdict === 'ideal' ? 'Ideal' : verdict === 'good' ? 'Good' : verdict === 'avoid' ? 'Avoid' : verdict === 'caution' ? 'Caution' : 'Neutral'
+  return <Pill sev={sev}>{label}</Pill>
+}
+
+/** Extra zone/pada context for a finding row — built from the same placementOf() the rest of
+ *  the app uses, so this wording never drifts from RightPanel/CanvasOverlays. */
+function findingContext(f: Finding, markers: Marker[], center: Pt, northDeg: number):
+  { zoneLabel: string; theme: string; extra: string | null } | null {
+  if (f.zoneIdx != null) {
+    const z = ZONES16[f.zoneIdx]
+    return { zoneLabel: `${z.key} — ${z.name}`, theme: z.theme, extra: null }
+  }
+  if (f.markerId) {
+    const m = markers.find((x) => x.id === f.markerId)
+    if (m) {
+      const pl = placementOf(m.p, center, northDeg)
+      return {
+        zoneLabel: `${pl.zone.key} — ${pl.zone.name}`,
+        theme: pl.zone.theme,
+        // padas are already broken out in their own report column/section for entrances
+        // and rooms alike — here in the findings list only the entrance's devata earns
+        // a repeat mention, so a room finding doesn't get a "pada" label that isn't its idiom
+        extra: m.kind === 'entrance'
+          ? `${pl.pada.devta} devata · ${pl.bearing.toFixed(1)}° from centre`
+          : `${pl.bearing.toFixed(1)}° from centre`,
+      }
+    }
+  }
+  return null
+}
+
+function plural(n: number, word: string): string {
+  return `${n} ${word}${n === 1 ? '' : 's'}`
+}
+
+/** North-aligned bounding-box extents — the same rotation analysis.ts's brahmasthanRadius uses
+ *  to find the plot's own centre square, just kept as width/height instead of one radius. */
+function northAlignedExtents(sampled: Pt[], center: Pt, northDeg: number): { ew: number; ns: number } | null {
+  if (sampled.length < 3) return null
+  const rad = (-northDeg * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of sampled) {
+    const x = center.x + (p.x - center.x) * cos - (p.y - center.y) * sin
+    const y = center.y + (p.x - center.x) * sin + (p.y - center.y) * cos
+    if (x < minX) minX = x
+    if (x > maxX) maxX = x
+    if (y < minY) minY = y
+    if (y > maxY) maxY = y
+  }
+  return { ew: maxX - minX, ns: maxY - minY }
+}
+
+function northSourceLabel(src: NorthSource): string {
+  switch (src) {
+    case 'map': return 'derived automatically from the map capture — confirm on site with a compass'
+    case 'plan': return "traced from the plan's own north arrow"
+    case 'manual': return 'set manually by the practitioner'
+    default: return 'not set — treated as drawn, not yet confirmed against true north'
+  }
+}
+
+function scaleSourceLabel(src: ScaleSource): string {
+  switch (src) {
+    case 'manual': return 'measured manually on the plan'
+    case 'dxf': return 'read from the DXF drawing units'
+    case 'map': return 'derived from the map capture'
+    case 'pdf': return 'read from the imported PDF page'
+    case 'demo': return 'demo scale — not a real measurement'
+    default: return ''
+  }
+}
 
 export function ReportView() {
   const setReportOpen = useStore((s) => s.setReportOpen)
@@ -20,9 +121,11 @@ export function ReportView() {
   const northDeg = useStore((s) => s.northDeg)
   const northSource = useStore((s) => s.northSource)
   const metersPerPx = useStore((s) => s.metersPerPx)
+  const scaleSource = useStore((s) => s.scaleSource)
   const unit = useStore((s) => s.unit)
   const markers = useStore((s) => s.markers)
   const projectName = useStore((s) => s.projectName)
+  const compass = useStore((s) => s.compass)
 
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [imgBlob, setImgBlob] = useState<Blob | null>(null)
@@ -42,8 +145,44 @@ export function ReportView() {
   const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
   const center = useMemo(() => centerOverride ?? (pts.length >= 3 ? centroid(sampled) : null), [centerOverride, pts.length, sampled])
   const rows = useMemo(() => (closed && center ? zoneRows(sampled, center, northDeg) : null), [closed, center, sampled, northDeg])
+  const extents = useMemo(
+    () => (closed && center ? northAlignedExtents(sampled, center, northDeg) : null),
+    [closed, center, sampled, northDeg],
+  )
+  const brahmaRadiusPx = useMemo(
+    () => (closed && center ? brahmasthanRadius(sampled, center, northDeg) * (compass.brahmaPct / 100) : null),
+    [closed, center, sampled, northDeg, compass.brahmaPct],
+  )
+  const ev = useMemo(
+    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers, brahmaPct: compass.brahmaPct }) : null),
+    [closed, center, sampled, northDeg, markers, compass.brahmaPct],
+  )
+  const sevCounts = useMemo<Record<Severity, number>>(() => {
+    const c: Record<Severity, number> = { good: 0, info: 0, warn: 0, bad: 0 }
+    ev?.findings.forEach((f) => { c[f.severity] += 1 })
+    return c
+  }, [ev])
+  const verdictLine = useMemo(() => {
+    if (!ev) return null
+    if (ev.findings.length === 0) return 'No entrances or rooms are marked yet — pin them on the plan for this report to generate findings.'
+    const { good, warn, bad } = sevCounts
+    if (bad > 0) return `${plural(bad, 'finding')} flagged to address, plus ${plural(warn, 'point')} of caution and ${plural(good, 'favourable point')} noted.`
+    if (warn > 0) return `No serious doshas flagged — ${plural(warn, 'point')} of caution noted alongside ${plural(good, 'favourable point')}.`
+    if (good > 0) return `A favourable layout overall — ${plural(good, 'favourable point')} noted, nothing flagged for concern.`
+    return 'No strongly favourable or unfavourable signals yet for the items marked.'
+  }, [ev, sevCounts])
+  const shapeFindingByZone = useMemo(() => {
+    const map = new Map<number, Finding>()
+    ev?.findings.forEach((f) => { if (f.zoneIdx != null) map.set(f.zoneIdx, f) })
+    return map
+  }, [ev])
+
   const entrances = markers.filter((m) => m.kind === 'entrance')
   const others = markers.filter((m) => m.kind !== 'entrance')
+  const kindsPresent = Array.from(new Set(others.map((m) => m.kind))).filter((k) => PLACEMENT_RULES[k])
+  const curvedEdgeCount = bulges.filter((b) => Math.abs(b) > 1e-4).length
+  const scaleLabel = scaleSourceLabel(scaleSource)
+  const northLabel = northSourceLabel(northSource)
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
   const doPrint = () => {
@@ -83,7 +222,12 @@ export function ReportView() {
         <header className="report-head">
           <div>
             <h1>Vastu Analysis Report</h1>
-            <div className="report-sub">{projectName} · {dateStr}</div>
+            <div className="report-sub">{projectName}</div>
+            <div className="report-coverline">
+              <span><b>Date</b> {dateStr}</span>
+              {report.practitioner && <span><b>Prepared by</b> {report.practitioner}</span>}
+              {report.client && <span><b>Client</b> {report.client}</span>}
+            </div>
           </div>
           <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden>
             <rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)"
@@ -101,51 +245,109 @@ export function ReportView() {
             onChange={(e) => setReport({ practitioner: e.target.value })} /></label>
         </div>
 
+        {ev && (
+          <section>
+            <h2>Summary</h2>
+            <div className="report-scoreboard">
+              <div className="report-stat report-stat-good">
+                <span className="report-stat-num">{sevCounts.good}</span>
+                <span className="report-stat-label">Favourable</span>
+              </div>
+              <div className="report-stat report-stat-warn">
+                <span className="report-stat-num">{sevCounts.warn}</span>
+                <span className="report-stat-label">Caution</span>
+              </div>
+              <div className="report-stat report-stat-bad">
+                <span className="report-stat-num">{sevCounts.bad}</span>
+                <span className="report-stat-label">To address</span>
+              </div>
+              <div className="report-stat report-stat-info">
+                <span className="report-stat-num">{sevCounts.info}</span>
+                <span className="report-stat-label">Noted</span>
+              </div>
+            </div>
+            {verdictLine && <p className="report-verdict">{verdictLine}</p>}
+          </section>
+        )}
+
+        <div className="report-disclaimer">{ANALYSIS_DISCLAIMER}</div>
+
         {imgUrl
           ? <img className="report-plan" src={imgUrl} alt="Analysed plan" />
           : <div className="report-plan report-plan-loading">Rendering plan…</div>}
 
-        <div className="report-facts">
-          {closed && metersPerPx && (
-            <>
-              <span><b>Area</b> {formatArea(polygonArea(sampled) * metersPerPx ** 2, unit)}</span>
-              <span><b>Perimeter</b> {formatLen(perimeter(sampled, true) * metersPerPx, unit)}</span>
-            </>
-          )}
-          {metersPerPx && <span><b>Scale</b> {formatScale(metersPerPx, unit)}</span>}
-          <span><b>North</b> {northDeg}° ({northSource === 'map' ? 'auto from map' : northSource === 'plan' ? 'plan arrow' : 'set manually'})</span>
-        </div>
+        <section>
+          <h2>Property facts</h2>
+          <div className="report-facts">
+            {closed && metersPerPx && (
+              <>
+                <span><b>Area</b> {formatArea(polygonArea(sampled) * metersPerPx ** 2, unit)}</span>
+                <span><b>Perimeter</b> {formatLen(perimeter(sampled, true) * metersPerPx, unit)}</span>
+                {extents && (
+                  <span><b>Dimensions</b> ≈ {formatLen(extents.ew * metersPerPx, unit)} E–W × {formatLen(extents.ns * metersPerPx, unit)} N–S</span>
+                )}
+                {brahmaRadiusPx != null && (
+                  <span><b>Brahmasthan</b> {formatLen(brahmaRadiusPx * metersPerPx, unit)} radius from centre
+                    {compass.brahmaPct !== 100 ? ` (set to ${compass.brahmaPct}% of the drawing-derived size)` : ''}</span>
+                )}
+              </>
+            )}
+            {closed && !metersPerPx && (
+              <span className="report-note">Scale not set — area, perimeter and the Brahmasthan size can't be computed for this plan.</span>
+            )}
+            <span><b>Boundary</b> {pts.length} vertices{curvedEdgeCount > 0 ? `, ${curvedEdgeCount} curved` : ''}</span>
+            <span><b>Scale</b> {formatScale(metersPerPx, unit)}{metersPerPx && scaleLabel ? ` — ${scaleLabel}` : ''}</span>
+            <span><b>North</b> {northDeg}° — {northLabel}</span>
+          </div>
+        </section>
 
-        {center && closed && (() => {
-          const ev = evaluateVastu({ sampled, center, northDeg, markers, brahmaPct: useStore.getState().compass.brahmaPct })
-          if (ev.findings.length === 0) return null
-          return (
-            <section>
-              <h2>Vastu findings</h2>
-              <div className="report-findings">
-                {ev.findings.map((f, i) => (
+        {ev && ev.findings.length > 0 && (
+          <section>
+            <h2>Vastu findings</h2>
+            <div className="report-findings">
+              {ev.findings.map((f, i) => {
+                const ctx = center ? findingContext(f, markers, center, northDeg) : null
+                return (
                   <div key={i} className={`report-finding sev-${f.severity}`}>
                     <span className="report-finding-mark">
                       {f.severity === 'good' ? '✓' : f.severity === 'bad' ? '✕' : f.severity === 'warn' ? '!' : 'ℹ'}
                     </span>
-                    <span><b>{f.title}.</b> {f.detail}.</span>
+                    <span>
+                      <b>{f.title}.</b> {f.detail}.
+                      {ctx && (
+                        <span className="report-finding-ctx"> {ctx.zoneLabel} — {ctx.theme}{ctx.extra ? ` · ${ctx.extra}` : ''}</span>
+                      )}
+                    </span>
                   </div>
-                ))}
-              </div>
-              <div className="report-note">{ANALYSIS_DISCLAIMER}</div>
-            </section>
-          )
-        })()}
+                )
+              })}
+            </div>
+          </section>
+        )}
 
         {center && entrances.length > 0 && (
           <section>
             <h2>Entrances</h2>
             {entrances.map((m) => {
               const pl = placementOf(m.p, center, northDeg)
+              const q = GATE_QUALITY[pl.pada.code]
+              const sideGood = GATES32
+                .filter((g) => g.code[0] === pl.pada.code[0] && GATE_QUALITY[g.code]?.v === 'good')
+                .map((g) => g.code)
               return (
                 <div key={m.id} className="report-entrance">
-                  <b>{m.label}</b>: pada <b>{pl.pada.code} · {pl.pada.devta}</b> in the {pl.zone.key} zone
-                  ({pl.zone.name}), {pl.bearing.toFixed(1)}° from the centre.
+                  <div className="report-entrance-head">
+                    <b>{m.label}</b>
+                    {q?.v === 'good' && <Pill sev="good">Auspicious</Pill>}
+                    {q?.v === 'caution' && <Pill sev="warn">Challenging</Pill>}
+                    {!q && <Pill sev="info">Neutral</Pill>}
+                  </div>
+                  pada <b>{pl.pada.code} · {pl.pada.devta}</b> in the {pl.zone.key} zone
+                  ({pl.zone.name} — {pl.zone.theme}), {pl.bearing.toFixed(1)}° from the centre.
+                  {q?.note && <div className="report-note">{q.note}.</div>}
+                  {q?.v !== 'good' && sideGood.length > 0 && (
+                    <div className="report-note">More favourable gates on this side, per the classical gate chart: {sideGood.join(', ')}.</div>
+                  )}
                   {m.note && <div className="report-note">{m.note}</div>}
                 </div>
               )
@@ -158,23 +360,49 @@ export function ReportView() {
             <h2>Rooms & objects</h2>
             <div className="report-table-wrap">
               <table className="report-table">
-                <thead><tr><th>Item</th><th>Type</th><th>Zone</th><th>Pada</th><th>Notes</th></tr></thead>
+                <thead><tr><th>Item</th><th>Type</th><th>Zone</th><th>Pada</th><th>Verdict</th><th>Notes</th></tr></thead>
                 <tbody>
                   {others.map((m) => {
                     const pl = placementOf(m.p, center, northDeg)
+                    const { verdict, why } = ruleVerdict(m.kind, pl.zone.key)
                     return (
-                      <tr key={m.id}>
-                        <td>{m.label}</td>
-                        <td>{markerKindMeta(m.kind).name}</td>
-                        <td><span className="report-zonechip" style={{ background: pl.zone.color }} />{pl.zone.key} — {pl.zone.name}</td>
-                        <td>{pl.pada.code} {pl.pada.devta}</td>
-                        <td>{m.note ?? ''}</td>
-                      </tr>
+                      <Fragment key={m.id}>
+                        <tr>
+                          <td>{m.label}</td>
+                          <td>{markerKindMeta(m.kind).name}</td>
+                          <td><span className="report-zonechip" style={{ background: pl.zone.color }} />{pl.zone.key} — {pl.zone.name}</td>
+                          <td>{pl.pada.code} {pl.pada.devta}</td>
+                          <td><VerdictPill verdict={verdict} /></td>
+                          <td>{m.note ?? ''}</td>
+                        </tr>
+                        {why && (
+                          <tr className="report-subrow">
+                            <td colSpan={6} className="report-note">{why}.</td>
+                          </tr>
+                        )}
+                      </Fragment>
                     )
                   })}
                 </tbody>
               </table>
             </div>
+            {kindsPresent.length > 0 && (
+              <div className="report-rulekey">
+                <div className="report-rulekey-title">Classical placement reference, for the room types above</div>
+                {kindsPresent.map((k) => {
+                  const rule = PLACEMENT_RULES[k]
+                  return (
+                    <div key={k} className="report-rulekey-row">
+                      <b>{markerKindMeta(k).name}</b>
+                      {rule.ideal.length > 0 && <span> · ideal {rule.ideal.join(', ')}</span>}
+                      {rule.good.length > 0 && <span> · good {rule.good.join(', ')}</span>}
+                      {rule.caution.length > 0 && <span> · caution {rule.caution.join(', ')}</span>}
+                      {rule.avoid.length > 0 && <span> · avoid {rule.avoid.join(', ')}</span>}
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </section>
         )}
 
@@ -183,17 +411,33 @@ export function ReportView() {
             <h2>Zone balance (16 zones)</h2>
             <div className="report-table-wrap">
               <table className="report-table">
-                <thead><tr><th></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}</tr></thead>
+                <thead><tr><th></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}<th>Status</th></tr></thead>
                 <tbody>
-                  {rows.map((r) => (
-                    <tr key={r.key}>
-                      <td><span className="report-zonechip" style={{ background: r.color }} /></td>
-                      <td><b>{r.key}</b> {r.name}</td>
-                      <td>{r.theme}</td>
-                      <td>{r.pct.toFixed(1)}%</td>
-                      {metersPerPx && <td>{formatArea(r.areaPx * metersPerPx ** 2, unit)}</td>}
-                    </tr>
-                  ))}
+                  {rows.map((r, i) => {
+                    const flag = shapeFindingByZone.get(i)
+                    const over = flag ? /extended/.test(flag.title) : false
+                    return (
+                      <Fragment key={r.key}>
+                        <tr>
+                          <td><span className="report-zonechip" style={{ background: r.color }} /></td>
+                          <td><b>{r.key}</b> {r.name}</td>
+                          <td>{r.theme}</td>
+                          <td>{r.pct.toFixed(1)}%</td>
+                          {metersPerPx && <td>{formatArea(r.areaPx * metersPerPx ** 2, unit)}</td>}
+                          <td>
+                            {flag
+                              ? <Pill sev={flag.severity}>{over ? 'Over-occupied' : 'Under-used'}</Pill>
+                              : <span className="lbl-balanced">Balanced</span>}
+                          </td>
+                        </tr>
+                        {flag && (
+                          <tr className="report-subrow">
+                            <td colSpan={metersPerPx ? 6 : 5} className="report-note">{flag.detail}.</td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

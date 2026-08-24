@@ -1,17 +1,30 @@
-import { Crosshair, Map as MapIcon, MapPin, MousePointer2, Navigation, Pencil, PenLine, Ruler, Trash2, Upload } from 'lucide-react'
+import { Fragment } from 'react'
+import { Crosshair, Map as MapIcon, MapPin, MousePointer2, Navigation, Pencil, PenLine, Ruler, Square, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
 import type { Tool } from '../types'
 
-// ordered to match the taught journey — outline first, then scale/north, then the payoff tools
-const TOOLS: { id: Tool; icon: typeof MousePointer2; label: string; short: string; kbd: string }[] = [
-  { id: 'select', icon: MousePointer2, label: 'Select · Pan', short: 'Select', kbd: 'V' },
-  { id: 'trace', icon: PenLine, label: 'Trace outline', short: 'Trace', kbd: 'T' },
-  { id: 'calibrate', icon: Ruler, label: 'Set scale', short: 'Scale', kbd: 'C' },
-  { id: 'north', icon: Navigation, label: 'Align north — tap the plan arrow, tail then tip', short: 'North', kbd: 'N' },
-  { id: 'marker', icon: MapPin, label: 'Mark rooms, doors & objects', short: 'Mark', kbd: 'P' },
-  { id: 'draw', icon: Pencil, label: 'Draw on the plan — pen & straight lines', short: 'Draw', kbd: 'D' },
-  { id: 'center', icon: Crosshair, label: 'Move the centre — only if the auto-centre looks off', short: 'Centre', kbd: 'M' },
+interface ToolDef { id: Tool; icon: typeof MousePointer2; label: string; short: string; kbd: string }
+
+// grouped like a real toolbar — setup, then the two ways to draw, then annotate, then fine-tune
+const GROUPS: ToolDef[][] = [
+  [
+    { id: 'select', icon: MousePointer2, label: 'Select · Pan', short: 'Select', kbd: 'V' },
+  ],
+  [
+    { id: 'trace', icon: PenLine, label: 'Trace outline', short: 'Trace', kbd: 'T' },
+    { id: 'calibrate', icon: Ruler, label: 'Set scale', short: 'Scale', kbd: 'C' },
+    { id: 'north', icon: Navigation, label: 'Align north — tap the plan arrow, tail then tip', short: 'North', kbd: 'N' },
+  ],
+  [
+    { id: 'room', icon: Square, label: 'Draw a room or area — rectangle, circle', short: 'Room', kbd: 'R' },
+    { id: 'marker', icon: MapPin, label: 'Mark doors & single objects', short: 'Mark', kbd: 'P' },
+    { id: 'draw', icon: Pencil, label: 'Draw on the plan — pen & straight lines', short: 'Draw', kbd: 'D' },
+  ],
+  [
+    { id: 'center', icon: Crosshair, label: 'Move the centre — only if the auto-centre looks off', short: 'Centre', kbd: 'M' },
+  ],
 ]
+const TOOLS = GROUPS.flat()
 
 export function ToolRail() {
   const tool = useStore((s) => s.tool)
@@ -30,17 +43,22 @@ export function ToolRail() {
 
   return (
     <div className="tool-rail">
-      {TOOLS.map(({ id, icon: Icon, label, short, kbd }) => (
-        <button
-          key={id}
-          className={`rail-btn ${tool === id ? 'on' : ''}`}
-          disabled={!hasBg && id !== 'select'}
-          onClick={need(() => setTool(id))}
-          data-tip={`${label}  ·  ${kbd}`}
-        >
-          <Icon size={17} />
-          <span className="rail-label">{short}</span>
-        </button>
+      {GROUPS.map((group, gi) => (
+        <Fragment key={gi}>
+          {gi > 0 && <div className="hsep" />}
+          {group.map(({ id, icon: Icon, label, short, kbd }) => (
+            <button
+              key={id}
+              className={`rail-btn ${tool === id ? 'on' : ''}`}
+              disabled={!hasBg && id !== 'select'}
+              onClick={need(() => setTool(id))}
+              data-tip={`${label}  ·  ${kbd}`}
+            >
+              <Icon size={17} />
+              <span className="rail-label">{short}</span>
+            </button>
+          ))}
+        </Fragment>
       ))}
       <div className="hsep" />
       <button className="rail-btn hide-mobile" data-tip="Import PDF / DXF / image"

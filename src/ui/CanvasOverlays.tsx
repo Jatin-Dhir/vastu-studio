@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Lock, LockOpen, Navigation, Pencil, Plus, RotateCcw, Slash, Spline, Trash2, X } from 'lucide-react'
+import { Check, Circle as CircleIcon, Lock, LockOpen, Navigation, Pencil, Plus, RotateCcw, Slash, Spline, Square as SquareIcon, Trash2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, edgePoint, sampledPolygon } from '../geometry'
 import { placementOf } from '../analysis'
@@ -44,6 +44,10 @@ function ToolHint() {
     text = useStore.getState().drawMode === 'line'
       ? 'Drag a straight line — ends snap to your outline’s corners & edges'
       : 'Draw freely on the plan — pan with two fingers'
+  } else if (tool === 'room') {
+    text = useStore.getState().roomDrawMode === 'ellipse'
+      ? 'Drag out a circle — hold Shift for a perfect circle'
+      : 'Drag out a room — hold Shift for a perfect square'
   }
   if (!text) return null
   return <div className="tool-hint">{text}</div>
@@ -87,6 +91,63 @@ function DrawOptionsRow() {
           </button>
         </>
       )}
+    </div>
+  )
+}
+
+/** Shape + kind picker while the Room tool is armed. */
+function RoomOptionsRow() {
+  const roomDrawMode = useStore((s) => s.roomDrawMode)
+  const roomShapeKind = useStore((s) => s.roomShapeKind)
+  const st = useStore.getState()
+  return (
+    <div className="quickbar-row kinds">
+      <button className={`qpill ${roomDrawMode === 'rect' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('rect')}>
+        <SquareIcon size={12} /> Rectangle
+      </button>
+      <button className={`qpill ${roomDrawMode === 'ellipse' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('ellipse')}>
+        <CircleIcon size={12} /> Circle
+      </button>
+      <span className="qsep" />
+      {MARKER_KINDS.filter((m) => m.kind !== 'entrance').map((m) => (
+        <button key={m.kind} className={`qpill kind ${roomShapeKind === m.kind ? 'on' : ''}`}
+          onClick={() => st.setRoomShapeKind(m.kind as MarkerKind)}>
+          <span className="kind-dot" style={{ background: m.color }} />
+          {m.name}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+/** Edit / delete chips for a tapped room shape. */
+export function RoomShapeChips() {
+  const selectedRoomShape = useStore((s) => s.selectedRoomShape)
+  const roomShapes = useStore((s) => s.roomShapes)
+  const view = useStore((s) => s.view)
+  const locked = useStore((s) => s.locked)
+  const editing = useStore((s) => s.roomShapeEditing)
+  const r = roomShapes.find((x) => x.id === selectedRoomShape)
+  if (!r || locked || editing) return null
+  const [p1, p2] = r.pts
+  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+  const rad = (view.rot * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const sx = view.tx + view.k * (mid.x * cos - mid.y * sin)
+  const sy = view.ty + view.k * (mid.x * sin + mid.y * cos)
+  const st = useStore.getState()
+  return (
+    <div className="sel-chips" style={{
+      left: Math.max(8, Math.min(sx - 60, (window.innerWidth || 800) - 220)),
+      top: Math.max(60, sy - 30),
+    }}>
+      <button className="chip" onClick={() => st.setRoomShapeEditing(true)}>
+        <Pencil size={12} /> {r.label}
+      </button>
+      <button className="chip danger" onClick={() => st.deleteRoomShape(r.id)}>
+        <Trash2 size={12} />
+      </button>
+      <button className="chip" onClick={() => st.setSelectedRoomShape(null)}><X size={12} /></button>
     </div>
   )
 }
@@ -162,7 +223,7 @@ export function QuickBar() {
     return () => window.removeEventListener('pointerdown', onDown)
   }, [degOpen])
 
-  const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw'
+  const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw' || tool === 'room'
   if (!hasBg || (!closed && !armed)) return null
 
   return (
@@ -182,6 +243,7 @@ export function QuickBar() {
 
       {tool === 'marker' && !locked && <MarkerKindRow />}
       {tool === 'draw' && !locked && <DrawOptionsRow />}
+      {tool === 'room' && !locked && <RoomOptionsRow />}
       <ToolHint />
 
       {degOpen && closed && (

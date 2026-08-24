@@ -1,9 +1,13 @@
 /* ————— report — phone layout —————
  *
- * All base (non-phone) report styling lives in src/index.css — this file only
- * ADDS to it. Do not move the base rules here; override them from a
- * max-width media query instead, so index.css stays the single source of
- * truth for desktop/print.
+ * All base (non-phone) report styling for the ORIGINAL sections lives in
+ * src/index.css — this file only ADDS to it. Do not move those base rules
+ * here; override them from a max-width media query instead, so index.css
+ * stays the single source of truth for that original desktop/print styling.
+ * Exception: the content-depth pass added a block of brand-new classes
+ * (search "New report sections" below) fully styled right here, because
+ * index.css was out of scope for that change — those are new selectors,
+ * not overrides, so they don't conflict with the rule above.
  *
  * IMPORTANT — the print mechanism (defined in src/index.css, untouched here):
  *   @media print sets `body * { visibility: hidden }` then makes
@@ -35,6 +39,112 @@
 
 /* compact print/PDF label, hidden until the phone breakpoint below shows it */
 .report-actions .btn-label-sm { display: none; }
+
+/* -----------------------------------------------------------------------
+ * New report sections (content-depth pass). Base (non-phone) report rules
+ * normally live in src/index.css, but that file is out of scope for this
+ * change, so every brand-new class introduced below is fully styled here
+ * instead — nothing here redefines a selector index.css already owns.
+ * ----------------------------------------------------------------------- */
+
+/* header byline — gives the date/practitioner/client real visual weight
+   without touching the existing h1/.report-sub rules in index.css */
+.report-coverline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  margin-top: 7px;
+  font-size: 12px;
+  color: #444C5C;
+}
+.report-coverline b { color: #1E2430; margin-right: 3px; }
+
+/* methodology callout — kept prominent and separate from the muted
+   .report-note treatment so it can't be mistaken for fine print */
+.report-disclaimer {
+  margin: 14px 0 20px;
+  padding: 10px 14px;
+  border-left: 3px solid #B8963E;
+  background: #FBF7EC;
+  color: #6A5A2E;
+  font-size: 12px;
+  line-height: 1.5;
+  border-radius: 0 6px 6px 0;
+}
+
+/* at-a-glance verdict scoreboard */
+.report-scoreboard {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.report-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 6px;
+  border-radius: 8px;
+  background: #F4F2EA;
+  border: 1px solid #E8E4D8;
+}
+.report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1E2430; }
+.report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #8A94A6; }
+.report-stat-good .report-stat-num { color: #3E8E52; }
+.report-stat-warn .report-stat-num { color: #B07A1E; }
+.report-stat-bad .report-stat-num { color: #B23A2E; }
+.report-stat-info .report-stat-num { color: #4A7C94; }
+.report-verdict { margin: 6px 0 0; color: #444C5C; }
+
+/* small colour-coded verdict badges — reused for markers, gates and zone status */
+.report-pill {
+  display: inline-block;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 2px 7px;
+  border-radius: 20px;
+  margin-left: 6px;
+  vertical-align: 1px;
+  white-space: nowrap;
+}
+.report-pill-good { background: rgba(62,142,82,0.14); color: #3E8E52; }
+.report-pill-warn { background: rgba(176,122,30,0.14); color: #B07A1E; }
+.report-pill-bad  { background: rgba(178,58,46,0.14); color: #B23A2E; }
+.report-pill-info { background: rgba(74,124,148,0.14); color: #4A7C94; }
+
+/* muted zone/pada context appended after a finding's own title+detail */
+.report-finding-ctx { color: #6A7280; }
+
+.report-entrance-head { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-bottom: 2px; }
+.report-entrance-head .report-pill { margin-left: 0; }
+
+/* the "why" sub-row under a Rooms & objects / Zone balance table row */
+.report-subrow td { padding-top: 0; padding-bottom: 8px; }
+
+/* classical placement-rule reference under the Rooms & objects table */
+.report-rulekey {
+  margin-top: 10px;
+  padding: 8px 10px;
+  background: #F9F7F0;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #56606E;
+}
+.report-rulekey-title {
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-size: 10px;
+  color: #8A94A6;
+  margin-bottom: 4px;
+}
+.report-rulekey-row { padding: 2px 0; }
+.report-rulekey-row b { color: #1E2430; }
+
+.lbl-balanced { color: #9AA2B0; font-style: italic; }
 
 /* ----- phone layout, <=760px (matches the app's existing mobile breakpoint) ----- */
 
@@ -68,6 +178,16 @@
     font-size: 13px;
     gap: 8px 16px;
   }
+
+  .report-coverline { font-size: 11px; gap: 3px 10px; }
+
+  .report-disclaimer { font-size: 12.5px; padding: 9px 12px; }
+
+  /* 4 stat tiles are too cramped on a phone-width page — two rows of two instead */
+  .report-scoreboard { grid-template-columns: repeat(2, 1fr); gap: 6px; }
+  .report-stat-num { font-size: 19px; }
+
+  .report-rulekey { font-size: 12px; }
 
   /* body-copy rows read at 14px+ instead of the desktop 12.5px */
   .report-finding,
@@ -125,6 +245,10 @@
   /* keep a finding/entrance/table row from splitting across a page break */
   .report-finding,
   .report-entrance,
+  .report-disclaimer,
+  .report-stat,
+  .report-subrow,
+  .report-rulekey-row,
   .report-table tr {
     break-inside: avoid;
   }

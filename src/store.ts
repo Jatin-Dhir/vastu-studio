@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { splitBulge } from './geometry'
-import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, ScaleSource, Stroke, Tool, Unit, ViewState } from './types'
+import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, Tool, Unit, ViewState } from './types'
 
 export interface Toast {
   id: number
@@ -10,7 +10,7 @@ export interface Toast {
   onAction?: () => void
 }
 
-interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[] }
+interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[]; roomShapes: RoomShape[] }
 
 export type ThemeMode = 'ink' | 'paper'
 export type AccentId = 'gold' | 'teal' | 'rose' | 'sage'
@@ -136,6 +136,20 @@ export interface VastuStore {
   setMarkerKind: (k: MarkerKind) => void
   markerEditing: boolean
   setMarkerEditing: (on: boolean) => void
+  roomShapes: RoomShape[]
+  selectedRoomShape: string | null
+  roomShapeKind: MarkerKind
+  roomDrawMode: RoomShapeKind
+  roomShapeEditing: boolean
+  addRoomShape: (shape: RoomShapeKind, pts: Pt[]) => string
+  updateRoomShapePts: (id: string, pts: Pt[]) => void
+  updateRoomShape: (id: string, patch: Partial<Omit<RoomShape, 'id'>>) => void
+  deleteRoomShape: (id: string) => void
+  clearRoomShapes: () => void
+  setSelectedRoomShape: (id: string | null) => void
+  setRoomShapeKind: (k: MarkerKind) => void
+  setRoomDrawMode: (m: RoomShapeKind) => void
+  setRoomShapeEditing: (on: boolean) => void
   setReport: (patch: Partial<ReportMeta>) => void
   setReportOpen: (open: boolean) => void
   setProjectsOpen: (open: boolean) => void
@@ -169,8 +183,8 @@ let toastSeq = 1
 
 export const useStore = create<VastuStore>()((set, get) => {
   const push = () => {
-    const { pts, closed, bulges, markers, strokes, undoStack } = get()
-    const stack = [...undoStack, { pts, closed, bulges, markers, strokes }]
+    const { pts, closed, bulges, markers, strokes, roomShapes, undoStack } = get()
+    const stack = [...undoStack, { pts, closed, bulges, markers, strokes, roomShapes }]
     if (stack.length > 100) stack.shift()
     set({ undoStack: stack, redoStack: [] })
   }
@@ -267,6 +281,8 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedMarker: null,
         strokes: [],
         selectedStroke: null,
+        roomShapes: [],
+        selectedRoomShape: null,
         calA: null,
         calB: null,
         scaleSuggestion: null,
@@ -286,6 +302,8 @@ export const useStore = create<VastuStore>()((set, get) => {
         northA: null,
         selectedVertex: null,
         selectedEdge: null,
+        selectedRoomShape: null,
+        roomShapeEditing: false,
       })
     },
     setView: (view) => set({ view }),
@@ -400,6 +418,42 @@ export const useStore = create<VastuStore>()((set, get) => {
     setMarkerKind: (markerKind) => set({ markerKind }),
     markerEditing: false,
     setMarkerEditing: (markerEditing) => set({ markerEditing }),
+
+    roomShapes: [],
+    selectedRoomShape: null,
+    roomShapeKind: 'bed',
+    roomDrawMode: 'rect',
+    roomShapeEditing: false,
+    addRoomShape: (shape, pts) => {
+      push()
+      const s = get()
+      const kind = s.roomShapeKind
+      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `rm${Math.floor(performance.now() * 1000)}`
+      const count = s.roomShapes.filter((r) => r.kind === kind).length
+      const base = kind.charAt(0).toUpperCase() + kind.slice(1)
+      const room: RoomShape = { id, kind, shape, label: count > 0 ? `${base} ${count + 1}` : base, pts }
+      set({ roomShapes: [...s.roomShapes, room], selectedRoomShape: id })
+      return id
+    },
+    updateRoomShapePts: (id, pts) =>
+      set((s) => ({ roomShapes: s.roomShapes.map((r) => (r.id === id ? { ...r, pts } : r)) })),
+    updateRoomShape: (id, patch) => {
+      push()
+      set((s) => ({ roomShapes: s.roomShapes.map((r) => (r.id === id ? { ...r, ...patch } : r)) }))
+    },
+    deleteRoomShape: (id) => {
+      push()
+      set((s) => ({
+        roomShapes: s.roomShapes.filter((r) => r.id !== id),
+        selectedRoomShape: s.selectedRoomShape === id ? null : s.selectedRoomShape,
+      }))
+    },
+    clearRoomShapes: () => { push(); set({ roomShapes: [], selectedRoomShape: null }) },
+    setSelectedRoomShape: (selectedRoomShape) =>
+      set({ selectedRoomShape, ...(selectedRoomShape === null ? { roomShapeEditing: false } : {}) }),
+    setRoomShapeKind: (roomShapeKind) => set({ roomShapeKind }),
+    setRoomDrawMode: (roomDrawMode) => set({ roomDrawMode }),
+    setRoomShapeEditing: (roomShapeEditing) => set({ roomShapeEditing }),
     setReport: (patch) => set((s) => ({ report: { ...s.report, ...patch } })),
     setReportOpen: (reportOpen) => set({ reportOpen }),
     setProjectsOpen: (projectsOpen) => set({ projectsOpen }),
@@ -416,7 +470,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
     undo: () => {
-      const { undoStack, pts, closed, bulges, markers, strokes } = get()
+      const { undoStack, pts, closed, bulges, markers, strokes, roomShapes } = get()
       if (undoStack.length === 0) return
       const prev = undoStack[undoStack.length - 1]
       set((s) => ({
@@ -425,14 +479,16 @@ export const useStore = create<VastuStore>()((set, get) => {
         bulges: prev.bulges,
         markers: prev.markers,
         strokes: prev.strokes ?? s.strokes,
+        roomShapes: prev.roomShapes ?? s.roomShapes,
         selectedMarker: null,
         selectedStroke: null,
+        selectedRoomShape: null,
         undoStack: s.undoStack.slice(0, -1),
-        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes }],
+        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes, roomShapes }],
       }))
     },
     redo: () => {
-      const { redoStack, pts, closed, bulges, markers, strokes } = get()
+      const { redoStack, pts, closed, bulges, markers, strokes, roomShapes } = get()
       if (redoStack.length === 0) return
       const next = redoStack[redoStack.length - 1]
       set((s) => ({
@@ -441,10 +497,12 @@ export const useStore = create<VastuStore>()((set, get) => {
         bulges: next.bulges,
         markers: next.markers,
         strokes: next.strokes ?? s.strokes,
+        roomShapes: next.roomShapes ?? s.roomShapes,
         selectedMarker: null,
         selectedStroke: null,
+        selectedRoomShape: null,
         redoStack: s.redoStack.slice(0, -1),
-        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes }],
+        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes, roomShapes }],
       }))
     },
 
@@ -466,6 +524,8 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedMarker: null,
         strokes: p.strokes ?? [],
         selectedStroke: null,
+        roomShapes: p.roomShapes ?? [],
+        selectedRoomShape: null,
         report: { client: '', address: '', practitioner: '', notes: '', ...p.report },
         selectedVertex: null,
         selectedEdge: null,
@@ -495,6 +555,7 @@ export function serializeProject(s: VastuStore): ProjectFile {
     locked: s.locked,
     markers: s.markers,
     strokes: s.strokes,
+    roomShapes: s.roomShapes,
     report: s.report,
   }
 }

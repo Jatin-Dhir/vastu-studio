@@ -7,9 +7,9 @@ import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
-import { CalibrateDialog, DwgDialog, MarkerDialog, ShortcutsDialog } from './ui/Dialogs'
+import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
-import { CloseChip, MarkerChips, QuickBar, RotateChip, SelectionChips, StrokeChips } from './ui/CanvasOverlays'
+import { CloseChip, MarkerChips, QuickBar, RoomShapeChips, RotateChip, SelectionChips, StrokeChips } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
@@ -117,6 +117,7 @@ export default function App() {
         case 'n': case 'N': s.setTool('north'); break
         case 'p': case 'P': s.setTool('marker'); break
         case 'd': case 'D': s.setTool('draw'); break
+        case 'r': case 'R': s.setTool('room'); break
         case 'f': case 'F': requestFit(); break
         case '?': s.setShortcutsOpen(true); break
         case 'Enter': if (!s.closed && s.pts.length >= 3) s.closePolygon(); break
@@ -203,7 +204,7 @@ export default function App() {
         s.compass !== prev.compass || s.northDeg !== prev.northDeg ||
         s.metersPerPx !== prev.metersPerPx || s.centerOverride !== prev.centerOverride ||
         s.unit !== prev.unit || s.locked !== prev.locked ||
-        s.markers !== prev.markers || s.strokes !== prev.strokes || s.report !== prev.report
+        s.markers !== prev.markers || s.strokes !== prev.strokes || s.roomShapes !== prev.roomShapes || s.report !== prev.report
       ) {
         window.clearTimeout(timer)
         timer = window.setTimeout(autosave, 900)
@@ -228,6 +229,7 @@ export default function App() {
         <SelectionChips />
         <MarkerChips />
         <StrokeChips />
+        <RoomShapeChips />
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
@@ -240,6 +242,7 @@ export default function App() {
       <Toasts />
       <CalibrateDialog />
       <MarkerDialog />
+      <RoomShapeDialog />
       <ShortcutsDialog />
       <DwgDialog />
       {mapOpen && <MapModal />}

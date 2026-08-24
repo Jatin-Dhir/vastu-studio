@@ -67,7 +67,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     centerOverridden: !!s.centerOverride,
     northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
     unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels,
-    markers: s.markers, strokes: s.strokes, idPrefix: 'exp',
+    markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes, idPrefix: 'exp',
   })
 
   /* title + footer furniture, drawn in world coordinates */
@@ -89,21 +89,24 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
 
   const bar = s.metersPerPx ? pickScaleBar(s.metersPerPx, s.unit, w * 0.24) : null
   const barY = maxY - bandBottom * 0.42
+  // a light, paper-toned ground — this image is a deliverable (the client report,
+  // or shared straight from Export PNG), not the in-app dark canvas; a dark plan
+  // pasted into an otherwise-white report read as a mismatched, unfinished artifact
   const furniture = createElement('g', { fontFamily: FONT },
     createElement('text', {
-      x: minX + w * 0.02, y: minY + bandTop * 0.62, fontSize: t1, fontWeight: 800, fill: '#F3E5C0',
+      x: minX + w * 0.02, y: minY + bandTop * 0.62, fontSize: t1, fontWeight: 800, fill: '#2A2A22',
     }, `${title} — Vastu analysis`),
     createElement('text', {
       x: maxX - w * 0.02, y: minY + bandTop * 0.62, fontSize: t2, fontWeight: 600,
-      fill: '#98A1B3', textAnchor: 'end',
+      fill: '#6E6C5D', textAnchor: 'end',
     }, dateStr),
     createElement('line', {
       x1: minX + w * 0.02, y1: minY + bandTop * 0.86, x2: maxX - w * 0.02, y2: minY + bandTop * 0.86,
-      stroke: '#D9B45B', strokeWidth: w * 0.0012, opacity: 0.55,
+      stroke: '#A9782E', strokeWidth: w * 0.0012, opacity: 0.55,
     }),
     createElement('text', {
       x: maxX - w * 0.02, y: barY + t2 * 0.35, fontSize: t2, fontWeight: 600,
-      fill: '#C9CFDD', textAnchor: 'end',
+      fill: '#40402E', textAnchor: 'end',
     }, statBits.join('   ·   ')),
     ...(bar ? [
       ...[0, 1, 2, 3].map((i) => createElement('rect', {
@@ -112,13 +115,13 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
         y: barY - t2 * 0.42,
         width: bar.worldPx / 4,
         height: t2 * 0.5,
-        fill: i % 2 === 0 ? '#D9B45B' : '#232733',
-        stroke: '#D9B45B', strokeWidth: w * 0.0006,
+        fill: i % 2 === 0 ? '#A9782E' : '#EDEAE1',
+        stroke: '#A9782E', strokeWidth: w * 0.0006,
       })),
       createElement('text', {
         key: 'sbl',
         x: minX + w * 0.02 + bar.worldPx + w * 0.012,
-        y: barY + t2 * 0.28, fontSize: t2 * 0.95, fontWeight: 650, fill: '#C9CFDD',
+        y: barY + t2 * 0.28, fontSize: t2 * 0.95, fontWeight: 650, fill: '#40402E',
       }, bar.label),
     ] : []),
   )
@@ -129,7 +132,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
       { xmlns: 'http://www.w3.org/2000/svg', width: outW, height: outH, viewBox: `${minX} ${minY} ${w} ${h}` },
       createElement('style', null,
         `@font-face{font-family:'Inter Variable';src:url(${interWoff2}) format('woff2-variations');font-weight:100 900;font-style:normal;}`),
-      createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#0B0C10' }),
+      createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#F3F1EA' }),
       scene,
       furniture,
     ),

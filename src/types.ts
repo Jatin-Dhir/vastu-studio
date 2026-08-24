@@ -1,7 +1,7 @@
 export interface Pt { x: number; y: number }
 
 export type Unit = 'ft' | 'm'
-export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker' | 'draw'
+export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker' | 'draw' | 'room'
 
 /** Freehand annotation ink — lives ON the plan, never part of the outline. */
 export interface Stroke {
@@ -21,6 +21,21 @@ export interface Marker {
   label: string
   p: Pt
   note?: string
+}
+
+/** A drawn room/area outline — same kind vocabulary as point markers, so an
+ *  area gets the exact same zone-placement verdict a pin would (by its centroid). */
+export type RoomShapeKind = 'rect' | 'ellipse' | 'polygon'
+export interface RoomShape {
+  id: string
+  kind: MarkerKind
+  shape: RoomShapeKind
+  label: string
+  note?: string
+  /** rect: [corner1, corner2] axis-aligned in world space
+   *  ellipse: [center, edgePoint] — rx=|dx|, ry=|dy|
+   *  polygon: the vertices, implicitly closed */
+  pts: Pt[]
 }
 
 export interface ReportMeta {
@@ -86,5 +101,6 @@ export interface ProjectFile {
   locked?: boolean
   markers?: Marker[]
   strokes?: Stroke[]
+  roomShapes?: RoomShape[]
   report?: ReportMeta
 }

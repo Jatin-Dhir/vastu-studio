@@ -1,5 +1,5 @@
-import { Fragment, useMemo } from 'react'
-import type { BgState, CompassState, Marker, Pt, Stroke, Unit } from '../types'
+import { cloneElement, Fragment, useMemo } from 'react'
+import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { brahmasthanRadius, placementOf } from '../analysis'
@@ -43,6 +43,8 @@ export interface SceneProps {
   showEdgeLabels: boolean
   markers?: Marker[]
   strokes?: Stroke[]
+  roomShapes?: RoomShape[]
+  selectedRoomShape?: string | null
   idPrefix: string
 }
 
@@ -225,17 +227,24 @@ function Outline(props: {
   const edges: [Pt, Pt, number][] = []
   for (let i = 0; i < (closed ? n : n - 1); i++) edges.push([pts[i], pts[(i + 1) % n], bulges[i] ?? 0])
 
+  // real wall thickness once scale is known (23cm / ~9in, the standard interior-wall
+  // convention) — a solid architectural band, not a thin decorative line; before scaling,
+  // a sensible screen-constant stands in so the outline still reads as a wall
+  const wallW = metersPerPx ? 0.23 / metersPerPx : 15 / k
+
   return (
     <g>
-      {closed && <path d={d} fill={GOLD} fillOpacity={0.055} stroke="none" />}
-      <path d={d} fill="none" stroke={GOLD} strokeWidth={8 / k} opacity={0.14}
+      {closed && <path d={d} fill={GOLD} fillOpacity={0.03} stroke="none" />}
+      {/* a real architectural wall: a neutral solid band framed by two crisp dark face
+          lines — the convention every floor-plan drawing (and every reference chart the
+          owner sent) actually uses. Gold is the VASTU overlay's colour, not the building's —
+          keeping the wall itself neutral is what makes it read as a real structure. */}
+      <path d={d} fill="none" stroke="rgba(0,0,0,0.4)" strokeWidth={wallW + 3 / k} opacity={0.45}
         strokeLinejoin="round" strokeLinecap="round" />
-      <path d={d} fill="none" stroke="rgba(20,16,4,0.55)" strokeWidth={3.6 / k}
+      <path d={d} fill="none" stroke="#17181C" strokeWidth={wallW}
         strokeLinejoin="round" strokeLinecap="round" />
-      <path d={d} fill="none" stroke={GOLD} strokeWidth={2.2 / k}
+      <path d={d} fill="none" stroke="#C9C6BC" strokeWidth={Math.max(0, wallW - 2.6 / k)}
         strokeLinejoin="round" strokeLinecap="round" />
-      <path d={d} fill="none" stroke="#FFF3D6" strokeWidth={0.7 / k}
-        strokeLinejoin="round" strokeLinecap="round" opacity={0.55} />
       {showEdgeLabels && metersPerPx && edges.map(([a, b, bu], i) => {
         const L = edgeLength(a, b, bu)
         if (L * k < 46) return null
@@ -670,6 +679,57 @@ function CustomOverlay({ c, R, north, compass }: ChakraProps) {
 /* Room / object markers                                               */
 /* ------------------------------------------------------------------ */
 
+/** Drawn room/area outlines — rect, ellipse, or polygon. Same MarkerKind vocabulary
+ *  and colour as point markers, so a room and a pin of the same kind read as one system. */
+function RoomShapesLayer({ shapes, selected, k, vr }: {
+  shapes: RoomShape[]; selected?: string | null; k: number; vr: number
+}) {
+  if (shapes.length === 0) return null
+  return (
+    <g>
+      {shapes.map((r) => {
+        const meta = markerKindMeta(r.kind)
+        const on = r.id === selected
+        const [p1, p2] = r.pts
+        if (!p1 || !p2) return null
+        let shapeEl: React.ReactElement<React.SVGProps<SVGElement>>
+        let cx: number, cy: number
+        if (r.shape === 'ellipse') {
+          cx = (p1.x + p2.x) / 2; cy = (p1.y + p2.y) / 2
+          const rx = Math.abs(p2.x - p1.x) / 2, ry = Math.abs(p2.y - p1.y) / 2
+          shapeEl = <ellipse cx={cx} cy={cy} rx={rx} ry={ry} />
+        } else if (r.shape === 'polygon' && r.pts.length >= 3) {
+          const xs = r.pts.map((p) => p.x), ys = r.pts.map((p) => p.y)
+          cx = (Math.min(...xs) + Math.max(...xs)) / 2
+          cy = (Math.min(...ys) + Math.max(...ys)) / 2
+          const d = `M${r.pts.map((p) => `${p.x} ${p.y}`).join('L')}Z`
+          shapeEl = <path d={d} />
+        } else {
+          const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y)
+          const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y)
+          cx = x + w / 2; cy = y + h / 2
+          shapeEl = <rect x={x} y={y} width={w} height={h} rx={Math.min(6 / k, w / 4, h / 4)} />
+        }
+        return (
+          <g key={r.id}>
+            {cloneElement(shapeEl, { fill: meta.color, fillOpacity: on ? 0.28 : 0.16 })}
+            {cloneElement(shapeEl, { fill: 'none', stroke: INKHALO, strokeWidth: (on ? 4.4 : 3) / k, opacity: 0.55 })}
+            {cloneElement(shapeEl, {
+              fill: 'none', stroke: meta.color, strokeWidth: (on ? 2.6 : 1.8) / k,
+              strokeDasharray: on ? undefined : `${9 / k} ${5 / k}`, opacity: 0.95,
+            })}
+            <text x={cx} y={cy} fontSize={10.5 / k} fontFamily={FONT} fontWeight={700}
+              fill="#F5EFDD" textAnchor="middle" dominantBaseline="central"
+              transform={`rotate(${-vr} ${cx} ${cy})`} {...haloProps(3 / k)}>
+              {r.label}
+            </text>
+          </g>
+        )
+      })}
+    </g>
+  )
+}
+
 function MarkersLayer(props: {
   markers: Marker[]; k: number; vr: number; center: Pt | null; north: number; R: number
 }) {
@@ -853,6 +913,7 @@ export function Scene(props: SceneProps) {
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
       <StrokesLayer strokes={props.strokes ?? []} />
+      <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} />
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}

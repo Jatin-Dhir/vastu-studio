@@ -151,8 +151,54 @@ export function MarkerDialog() {
   )
 }
 
+export function RoomShapeDialog() {
+  const editing = useStore((s) => s.roomShapeEditing)
+  const selectedRoomShape = useStore((s) => s.selectedRoomShape)
+  const roomShapes = useStore((s) => s.roomShapes)
+  const r = roomShapes.find((x) => x.id === selectedRoomShape)
+  const [label, setLabel] = useState('')
+  const [note, setNote] = useState('')
+  const [kind, setKind] = useState<MarkerKind>('bed')
+
+  useEffect(() => {
+    if (editing && r) { setLabel(r.label); setNote(r.note ?? ''); setKind(r.kind) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, selectedRoomShape])
+
+  if (!editing || !r) return null
+  const close = () => useStore.getState().setRoomShapeEditing(false)
+  const save = () => {
+    useStore.getState().updateRoomShape(r.id, { label: label.trim() || r.label, note: note.trim() || undefined, kind })
+    close()
+  }
+
+  return (
+    <Dialog title="Edit room" onClose={close} width={380}>
+      <div className="marker-kind-grid">
+        {MARKER_KINDS.filter((k2) => k2.kind !== 'entrance').map((k2) => (
+          <button key={k2.kind} className={`chip ${kind === k2.kind ? 'on-gold' : ''}`}
+            onClick={() => setKind(k2.kind as MarkerKind)}>
+            <span className="kind-dot" style={{ background: k2.color }} /> {k2.name}
+          </button>
+        ))}
+      </div>
+      <div className="cal-row">
+        <input type="text" value={label} placeholder="Name (e.g. Bedroom 2)"
+          onChange={(e) => setLabel(e.target.value)} />
+        <textarea className="marker-note" value={note} rows={3}
+          placeholder="Notes / remedy (goes into the report)…"
+          onChange={(e) => setNote(e.target.value)} />
+      </div>
+      <div className="dialog-actions">
+        <button className="btn-ghost" onClick={close}>Cancel</button>
+        <button className="btn-primary" onClick={save}>Save</button>
+      </div>
+    </Dialog>
+  )
+}
+
 const SHORTCUTS: [string, string][] = [
-  ['V', 'Select · pan'], ['T', 'Trace outline'], ['P', 'Mark rooms & doors'],
+  ['V', 'Select · pan'], ['T', 'Trace outline'], ['R', 'Draw a room or area'], ['P', 'Mark doors & objects'],
   ['C', 'Set scale'], ['N', 'Align north'], ['M', 'Pin centre'],
   ['F', 'Fit view'], ['Enter', 'Close outline'], ['Esc / Backspace', 'Undo last point · dismiss'],
   ['Ctrl+Z / Ctrl+Y', 'Undo · redo'], ['Double-click edge', 'Insert point'], ['Right-click point', 'Delete point'],
@@ -172,6 +218,7 @@ const GESTURES: [string, string][] = [
   ['Twist with two fingers', 'Rotate the view'],
   ['Tap ✓', 'Close the outline'],
   ['Tap a point or edge', 'Select it — chips appear for delete / adjust'],
+  ['Drag out a room, hold', 'A perfect square or circle'],
   ['Hold the sheet handle', 'Drag the panel between peek, half and full'],
 ]
 

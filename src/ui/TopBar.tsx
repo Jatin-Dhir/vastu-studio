@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import {
   Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
-  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Trash2, Undo2, Upload,
+  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Square as SquareIcon, Trash2, Undo2, Upload,
 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
@@ -24,6 +24,7 @@ export function TopBar() {
   const hasBg = useStore((s) => s.bg.kind !== 'none')
   const hasMarkers = useStore((s) => s.markers.length > 0)
   const hasStrokes = useStore((s) => s.strokes.length > 0)
+  const hasRoomShapes = useStore((s) => s.roomShapes.length > 0)
   const hasOutline = useStore((s) => s.pts.length > 0)
   const { track, active } = useGuide()
   const [moreOpen, setMoreOpen] = useState(false)
@@ -45,6 +46,11 @@ export function TopBar() {
       icon: PenLine, label: 'Remove all drawings', disabled: !hasStrokes,
       sub: 'Pen and line annotations only',
       onTap: () => useStore.getState().clearStrokes(),
+    },
+    {
+      icon: SquareIcon, label: 'Remove all room shapes', disabled: !hasRoomShapes,
+      sub: 'Drawn rectangles and circles only',
+      onTap: () => useStore.getState().clearRoomShapes(),
     },
     {
       icon: Eraser, label: 'Clear the outline', disabled: !hasOutline,
