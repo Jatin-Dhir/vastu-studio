@@ -929,11 +929,16 @@ export function CanvasStage() {
           })()
         )}
 
-        {/* curve (bulge) handles — drag an edge midpoint to bow the wall */}
+        {/* curve (bulge) handles — drag an edge midpoint to bow the wall.
+           A dozen-plus of these sit on screen at once in select mode, so the
+           resting state stays a quiet outline; only a curved edge (worth
+           noticing) or an actively-selected one earns the solid gold fill. */}
         {tool === 'select' && !locked && pts.length >= 2 && (closed ? pts : pts.slice(0, -1)).map((p, i) => {
           const p2 = pts[(i + 1) % pts.length]
           const m = edgePoint(p, p2, bulges[i] ?? 0, 0.5)
           const sel = selectedEdge === i
+          const curved = Math.abs(bulges[i] ?? 0) > 1e-4
+          const prominent = sel || curved
           const size = ((COARSE ? 6.5 : 5) + (sel ? 1.5 : 0)) / k
           return (
             <g key={`b${i}`} data-bidx={i} style={{ cursor: 'grab' }}>
@@ -941,8 +946,8 @@ export function CanvasStage() {
               {sel && <circle cx={m.x} cy={m.y} r={12 / k} fill="none" stroke={GOLD} strokeWidth={1.3 / k} opacity={0.8} />}
               <rect x={m.x - size} y={m.y - size} width={size * 2} height={size * 2}
                 transform={`rotate(45 ${m.x} ${m.y})`}
-                fill={Math.abs(bulges[i] ?? 0) > 1e-4 ? GOLD : '#151820'}
-                stroke={GOLD} strokeWidth={1.5 / k} opacity={0.95} />
+                fill={prominent ? GOLD : 'rgba(20,22,28,0.5)'}
+                stroke={GOLD} strokeWidth={1.5 / k} opacity={prominent ? 0.95 : 0.55} />
             </g>
           )
         })}

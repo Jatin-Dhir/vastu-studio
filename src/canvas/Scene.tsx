@@ -344,15 +344,17 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: 
   return (
     <g>
       {fills}
+      {/* zone dividers: a quiet reference grid, not a crosshatch over the actual floor plan —
+         16 full-length lines at the old opacity fought the walls/rooms for attention */}
       {ZONES16.map((_, i) => {
         const a = north - 11.25 + i * 22.5
         const p = polar(c, a, R)
         return (
           <Fragment key={i}>
             <line x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-              stroke={INKHALO} strokeWidth={2.4 / k} opacity={0.5} />
+              stroke={INKHALO} strokeWidth={1.8 / k} opacity={0.28} />
             <line x1={c.x} y1={c.y} x2={p.x} y2={p.y}
-              stroke="#EFE3C0" strokeWidth={1.1 / k} opacity={0.72} />
+              stroke="#EFE3C0" strokeWidth={0.85 / k} opacity={0.38} />
           </Fragment>
         )
       })}
