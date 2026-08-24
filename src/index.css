@@ -1496,6 +1496,18 @@ kbd {
   .rotate-chip { top: auto; bottom: calc(138px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); flex-direction: column-reverse; }
   .rotate-pop { flex-wrap: wrap; max-width: calc(100vw - 20px); }
 
+  /* the guide card claims a tall band just above the dock on the north/scale/etc.
+     steps (up to ~160px of hint text + actions on top of its own 150px offset) —
+     when it's on screen, give it the space instead of letting these settle into it.
+     sel-chips sits higher than rotate-chip so the two don't stack on each other
+     when a shape is selected mid-guide (both can be on screen at once). */
+  .app:has(.guide-card) .rotate-chip {
+    bottom: calc(360px + env(safe-area-inset-bottom));
+  }
+  .app:has(.guide-card) .sel-chips {
+    bottom: calc(420px + env(safe-area-inset-bottom));
+  }
+
   /* selection/marker/stroke chips: a centred bar above the dock always fits —
      point-anchoring a ~300px row inside a 360px screen cannot */
   .sel-chips {
