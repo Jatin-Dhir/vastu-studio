@@ -52,15 +52,19 @@ export interface VastuStore {
   markerKind: MarkerKind
   strokes: Stroke[]
   selectedStroke: string | null
-  drawMode: 'pen' | 'line' | 'arrow' | 'text' | 'erase'
+  drawMode: 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'erase'
   penColor: string
   lineColor: string
   drawWidth: number
   addStroke: (s: Stroke) => void
+  updateStroke: (id: string, patch: Partial<Pick<Stroke, 'pts' | 'color' | 'width'>>) => void
   deleteStroke: (id: string) => void
   clearStrokes: () => void
   setSelectedStroke: (id: string | null) => void
-  setDrawMode: (m: 'pen' | 'line' | 'arrow' | 'text' | 'erase') => void
+  /** the set-exact-length dialog for a selected line/arrow */
+  strokeLenEditing: boolean
+  setStrokeLenEditing: (on: boolean) => void
+  setDrawMode: (m: 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'erase') => void
   setDrawColor: (c: string) => void
   setDrawWidth: (w: number) => void
   texts: TextNote[]
@@ -256,11 +260,14 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedStroke: s.selectedStroke === id ? null : s.selectedStroke,
       }))
     },
+    updateStroke: (id, patch) => { push(); set((s) => ({ strokes: s.strokes.map((x) => (x.id === id ? { ...x, ...patch } : x)) })) },
     clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null, texts: [], selectedText: null, textEditing: false }) },
     setSelectedStroke: (selectedStroke) =>
-      set({ selectedStroke, ...(selectedStroke === null ? {} : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
+      set({ selectedStroke, ...(selectedStroke === null ? { strokeLenEditing: false } : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
+    strokeLenEditing: false,
+    setStrokeLenEditing: (strokeLenEditing) => set({ strokeLenEditing }),
     setDrawMode: (drawMode) => set({ drawMode }),
-    setDrawColor: (c) => set((s) => (s.drawMode === 'line' || s.drawMode === 'arrow' ? { lineColor: c } : { penColor: c })),
+    setDrawColor: (c) => set((s) => (s.drawMode === 'pen' || s.drawMode === 'text' ? { penColor: c } : { lineColor: c })),
     setDrawWidth: (drawWidth) => set({ drawWidth }),
     texts: [],
     selectedText: null,

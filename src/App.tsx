@@ -8,7 +8,7 @@ import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
-import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog, TextDialog } from './ui/Dialogs'
+import { CalibrateDialog, DwgDialog, LineLengthDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog, TextDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
@@ -126,7 +126,7 @@ export default function App() {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
       const s = useStore.getState()
       // modal surfaces own the keyboard while open — each closes itself on Escape
-      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
+      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.strokeLenEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
@@ -279,6 +279,7 @@ export default function App() {
       <CalibrateDialog />
       <MarkerDialog />
       <TextDialog />
+      <LineLengthDialog />
       <RoomShapeDialog />
       <ShortcutsDialog />
       <DwgDialog />

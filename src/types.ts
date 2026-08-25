@@ -4,10 +4,11 @@ export type Unit = 'ft' | 'm'
 export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker' | 'draw' | 'room'
 
 /** Freehand annotation ink — lives ON the plan, never part of the outline.
- *  'arrow' is a line with a head at pts[last]. */
+ *  'arrow' is a line with a head at pts[last]; 'rect'/'ellipse' are outline
+ *  shapes spanning pts[0]..pts[1] as an axis-aligned bounding box. */
 export interface Stroke {
   id: string
-  kind: 'pen' | 'line' | 'arrow'
+  kind: 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse'
   pts: Pt[]
   color: string
   /** world px, fixed at draw time so ink zooms with the plan */

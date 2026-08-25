@@ -1,6 +1,6 @@
-import { FileUp, Map as MapIcon, Sparkles } from 'lucide-react'
+import { FileUp, Map as MapIcon, PenLine, Sparkles } from 'lucide-react'
 import { useStore } from '../store'
-import { importFromUrl, loadDemo } from '../importFile'
+import { importFromUrl, loadDemo, startBlank } from '../importFile'
 
 export function EmptyState() {
   const setMapOpen = useStore((s) => s.setMapOpen)
@@ -43,6 +43,9 @@ export function EmptyState() {
         <div className="empty-actions">
           <button className="btn-ghost" onClick={() => setMapOpen(true)}>
             <MapIcon size={15} /> From Maps
+          </button>
+          <button className="btn-ghost" onClick={startBlank}>
+            <PenLine size={15} /> Blank sheet
           </button>
           <button className="btn-ghost" onClick={loadDemo}>
             <Sparkles size={15} /> Sample plan

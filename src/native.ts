@@ -48,6 +48,7 @@ export async function initNative(): Promise<void> {
       if (s.markerEditing) return s.setMarkerEditing(false)
       if (s.roomShapeEditing) return s.setRoomShapeEditing(false)
       if (s.textEditing) return s.setTextEditing(false)
+      if (s.strokeLenEditing) return s.setStrokeLenEditing(false)
       if (s.selectedMarker) return s.setSelectedMarker(null)
       if (s.selectedStroke) return s.setSelectedStroke(null)
       if (s.selectedRoomShape) return s.setSelectedRoomShape(null)

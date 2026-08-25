@@ -172,6 +172,38 @@ export function loadDemo() {
   s.toast('Sample plan loaded — scale preset. Tap corners to trace the boundary', 'ok')
 }
 
+/**
+ * A blank gridded sheet to draw a plan from scratch — no import needed.
+ * 2000×1500 px at 1 px ≈ 1 cm (a 20 m × 15 m sheet), so the 100 px grid is 1 m;
+ * lengths are real from the first stroke, and Recalibrate can change it anytime.
+ */
+export function startBlank() {
+  const w = 2000, h = 1500
+  const c = document.createElement('canvas')
+  c.width = w; c.height = h
+  const ctx = c.getContext('2d')!
+  ctx.fillStyle = '#F6F3EA'
+  ctx.fillRect(0, 0, w, h)
+  ctx.lineWidth = 1
+  for (let x = 0; x <= w; x += 100) {
+    ctx.strokeStyle = x % 500 === 0 ? 'rgba(60,55,35,0.16)' : 'rgba(60,55,35,0.08)'
+    ctx.beginPath(); ctx.moveTo(x + 0.5, 0); ctx.lineTo(x + 0.5, h); ctx.stroke()
+  }
+  for (let y = 0; y <= h; y += 100) {
+    ctx.strokeStyle = y % 500 === 0 ? 'rgba(60,55,35,0.16)' : 'rgba(60,55,35,0.08)'
+    ctx.beginPath(); ctx.moveTo(0, y + 0.5); ctx.lineTo(w, y + 0.5); ctx.stroke()
+  }
+  const s = useStore.getState()
+  s.replaceBg(
+    { kind: 'raster', name: 'Blank sheet.png', dataUrl: c.toDataURL('image/png'), w, h, ...freshBgDefaults() },
+    0.01, 'manual',
+  )
+  s.setNorth(0, 'manual')
+  requestFit()
+  s.setTool('trace')
+  s.toast('Blank sheet — 20 m × 15 m, 1 m grid, north up. Trace the plot boundary, or draw freely (Recalibrate to change scale)', 'ok')
+}
+
 /** A screenshot from Google/Apple Maps: north is up by convention; the scale bar calibrates it. */
 export async function importMapsScreenshot(file: File, opts?: { force?: boolean }) {
   const s0 = useStore.getState()

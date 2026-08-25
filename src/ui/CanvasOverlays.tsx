@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
+import { Check, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
-import { centroid, edgePoint, sampledPolygon } from '../geometry'
+import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
+import { formatLen } from '../format'
 import { placementOf } from '../analysis'
 import { NorthDial } from './NorthDial'
 import { GATE_QUALITY, MARKER_KINDS, PLACEMENT_RULES } from '../vastu'
@@ -46,9 +47,11 @@ function ToolHint() {
   } else if (tool === 'draw') {
     text = drawMode === 'line' ? 'Drag a straight line — ends snap to your outline’s corners & edges'
       : drawMode === 'arrow' ? 'Drag an arrow, tail to tip — ends snap to corners & edges'
-        : drawMode === 'text' ? 'Tap the plan to place a note'
-          : drawMode === 'erase' ? 'Tap or swipe across a drawing or note to remove it'
-            : 'Draw freely on the plan — pan with two fingers'
+        : drawMode === 'rect' ? 'Drag a rectangle — hold Shift for a square'
+          : drawMode === 'ellipse' ? 'Drag a circle — hold Shift for a perfect circle'
+            : drawMode === 'text' ? 'Tap the plan to place a note'
+              : drawMode === 'erase' ? 'Tap or swipe across a drawing or note to remove it'
+                : 'Draw freely on the plan — pan with two fingers'
   } else if (tool === 'room') {
     text = roomDrawMode === 'ellipse' ? 'Drag out a circle — hold Shift for a perfect circle'
       : roomDrawMode === 'polygon'
@@ -66,11 +69,11 @@ const DRAW_COLORS = ['#F26B57', '#D9B45B', '#5B8DEF', '#63B56F', '#F2F2F2']
 /** Pen/line/arrow/text/eraser, colour and width options while the Draw tool is armed. */
 function DrawOptionsRow() {
   const drawMode = useStore((s) => s.drawMode)
-  const drawColor = useStore((s) => (s.drawMode === 'line' || s.drawMode === 'arrow' ? s.lineColor : s.penColor))
+  const drawColor = useStore((s) => (s.drawMode === 'pen' || s.drawMode === 'text' ? s.penColor : s.lineColor))
   const drawWidth = useStore((s) => s.drawWidth)
   const hasInk = useStore((s) => s.strokes.length > 0 || s.texts.length > 0)
   const st = useStore.getState()
-  const strokey = drawMode === 'pen' || drawMode === 'line' || drawMode === 'arrow'
+  const strokey = drawMode !== 'text' && drawMode !== 'erase'
   return (
     <div className="quickbar-row kinds">
       <button className={`qpill ${drawMode === 'pen' ? 'on' : ''}`} onClick={() => st.setDrawMode('pen')}>
@@ -81,6 +84,12 @@ function DrawOptionsRow() {
       </button>
       <button className={`qpill ${drawMode === 'arrow' ? 'on' : ''}`} onClick={() => st.setDrawMode('arrow')}>
         <MoveUpRight size={12} /> Arrow
+      </button>
+      <button className={`qpill ${drawMode === 'rect' ? 'on' : ''}`} onClick={() => st.setDrawMode('rect')}>
+        <SquareIcon size={12} /> Rect
+      </button>
+      <button className={`qpill ${drawMode === 'ellipse' ? 'on' : ''}`} onClick={() => st.setDrawMode('ellipse')}>
+        <CircleIcon size={12} /> Circle
       </button>
       <button className={`qpill ${drawMode === 'text' ? 'on' : ''}`} onClick={() => st.setDrawMode('text')}>
         <TypeIcon size={12} /> Text
@@ -235,19 +244,37 @@ export function StrokeChips() {
   const strokes = useStore((s) => s.strokes)
   const view = useStore((s) => s.view)
   const locked = useStore((s) => s.locked)
+  const editingLen = useStore((s) => s.strokeLenEditing)
+  const metersPerPx = useStore((s) => s.metersPerPx)
+  const unit = useStore((s) => s.unit)
   const s2 = strokes.find((x) => x.id === selectedStroke)
-  if (!s2 || locked) return null
+  if (!s2 || locked || editingLen) return null
   const mid = s2.pts[Math.floor(s2.pts.length / 2)]
   const rad = (view.rot * Math.PI) / 180
   const cos = Math.cos(rad), sin = Math.sin(rad)
   const sx = view.tx + view.k * (mid.x * cos - mid.y * sin)
   const sy = view.ty + view.k * (mid.x * sin + mid.y * cos)
   const st = useStore.getState()
+  const measurable = (s2.kind === 'line' || s2.kind === 'arrow') && s2.pts.length >= 2
+  const boxy = (s2.kind === 'rect' || s2.kind === 'ellipse') && s2.pts.length >= 2
   return (
     <div className="sel-chips" style={{
-      left: `max(8px, min(${sx - 40}px, calc(100vw - 160px)))`,
+      left: `max(8px, min(${sx - 40}px, calc(100vw - 220px)))`,
       top: Math.max(60, sy - 52),
     }}>
+      {measurable && (
+        <button className="chip" onClick={() => {
+          if (!metersPerPx) { st.toast('Set the scale first (Recalibrate in the panel) — then lines take exact real-world lengths', 'info'); return }
+          st.setStrokeLenEditing(true)
+        }}>
+          <Ruler size={12} /> {metersPerPx ? formatLen(dist(s2.pts[0], s2.pts[1]) * metersPerPx, unit) : 'Length…'}
+        </button>
+      )}
+      {boxy && metersPerPx && (
+        <span className="chip place">
+          {formatLen(Math.abs(s2.pts[1].x - s2.pts[0].x) * metersPerPx, unit)} × {formatLen(Math.abs(s2.pts[1].y - s2.pts[0].y) * metersPerPx, unit)}
+        </span>
+      )}
       <button className="chip danger" onClick={() => st.deleteStroke(s2.id)}>
         <Trash2 size={12} /> Delete
       </button>

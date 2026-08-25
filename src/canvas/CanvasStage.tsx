@@ -35,7 +35,7 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape' | 'erasing' | 'text-drag'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape' | 'ink-shape' | 'erasing' | 'text-drag'
   idx: number
   markerId: string | null
   rsid: string | null
@@ -92,6 +92,8 @@ export function CanvasStage() {
   // live preview while dragging a new room rect/ellipse — a single small drag, not a
   // 60fps-critical gesture, so plain state (like the calibration line) is fine here
   const [activeRoom, setActiveRoom] = useState<[Pt, Pt] | null>(null)
+  const [activeShape, setActiveShape] = useState<[Pt, Pt] | null>(null)
+  const activeLenRef = useRef<SVGTextElement>(null)
   // ink preview is driven imperatively (like the view transform) so drawing never re-renders the scene
   const activeStrokeRef = useRef<Pt[]>([])
   const activeInkRef = useRef<SVGPathElement>(null)
@@ -288,9 +290,23 @@ export function CanvasStage() {
     const rad = (COARSE ? 16 : 12) / viewRef.current.k
     const sids: string[] = []
     for (const st of s0.strokes) {
-      let hit = st.pts.length === 1 && dist(st.pts[0], w) < rad + st.width
-      for (let i = 1; i < st.pts.length && !hit; i++) {
-        if (distToSegment(w, st.pts[i - 1], st.pts[i]) < rad + st.width / 2) hit = true
+      // shapes hit along their outline — sample the ring/box into segments first
+      let pp = st.pts
+      if (st.kind === 'rect' && st.pts.length >= 2) {
+        const [a, b] = st.pts
+        pp = [a, { x: b.x, y: a.y }, b, { x: a.x, y: b.y }, a]
+      } else if (st.kind === 'ellipse' && st.pts.length >= 2) {
+        const [a, b] = st.pts
+        const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2
+        const rx = Math.abs(b.x - a.x) / 2, ry = Math.abs(b.y - a.y) / 2
+        pp = Array.from({ length: 25 }, (_, i) => {
+          const t = (i / 24) * 2 * Math.PI
+          return { x: cx + rx * Math.cos(t), y: cy + ry * Math.sin(t) }
+        })
+      }
+      let hit = pp.length === 1 && dist(pp[0], w) < rad + st.width
+      for (let i = 1; i < pp.length && !hit; i++) {
+        if (distToSegment(w, pp[i - 1], pp[i]) < rad + st.width / 2) hit = true
       }
       if (hit) sids.push(st.id)
     }
@@ -318,10 +334,12 @@ export function CanvasStage() {
       // another finger aborts any in-flight gesture — clear its live preview too, not just its mode
       const dd = drag.current
       if (dd.mode === 'room-shape') setActiveRoom(null)
+      else if (dd.mode === 'ink-shape') setActiveShape(null)
       else if (dd.mode === 'drawing') {
         activeStrokeRef.current = []
         penCursorRef.current = null
         activeInkRef.current?.setAttribute('d', '')
+        if (activeLenRef.current) activeLenRef.current.textContent = ''
         setSnapDot(0, null)
         setSnapDot(1, null)
       }
@@ -389,6 +407,10 @@ export function CanvasStage() {
       else if (s0.drawMode === 'erase') {
         d.mode = 'erasing'
         eraseAt(d.grabbed!)
+      }
+      else if (s0.drawMode === 'rect' || s0.drawMode === 'ellipse') {
+        d.mode = 'ink-shape'
+        setActiveShape([d.grabbed!, d.grabbed!])
       }
       else {
       d.mode = 'drawing'
@@ -528,9 +550,23 @@ export function CanvasStage() {
       }
       activeInkRef.current?.setAttribute('d',
         strokePathD(activeStrokeRef.current, s.drawMode === 'pen' ? 'pen' : 'line'))
+      // live length readout for line/arrow — the CAD feel: you see the size as you draw
+      const lbl = activeLenRef.current
+      if (lbl && (s.drawMode === 'line' || s.drawMode === 'arrow')) {
+        const a = activeStrokeRef.current[0], b = activeStrokeRef.current[1]
+        if (s.metersPerPx && a && b) {
+          const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 12 / k2
+          lbl.textContent = formatLen(dist(a, b) * s.metersPerPx, s.unit)
+          lbl.setAttribute('x', String(mx))
+          lbl.setAttribute('y', String(my))
+          lbl.setAttribute('font-size', String(11.5 / k2))
+          lbl.setAttribute('stroke-width', String(3 / k2))
+          lbl.setAttribute('transform', `rotate(${-viewRef.current.rot} ${mx} ${my})`)
+        } else lbl.textContent = ''
+      }
       return
     }
-    if (d.mode === 'room-shape' && d.grabbed) {
+    if ((d.mode === 'room-shape' || d.mode === 'ink-shape') && d.grabbed) {
       let p2 = world
       // hold Shift for a true square / perfect circle, like every other drawing tool
       if ((e.nativeEvent as PointerEvent).shiftKey) {
@@ -538,7 +574,8 @@ export function CanvasStage() {
         const m = Math.max(Math.abs(dx), Math.abs(dy))
         p2 = { x: d.grabbed.x + Math.sign(dx || 1) * m, y: d.grabbed.y + Math.sign(dy || 1) * m }
       }
-      setActiveRoom([d.grabbed, p2])
+      if (d.mode === 'ink-shape') setActiveShape([d.grabbed, p2])
+      else setActiveRoom([d.grabbed, p2])
       return
     }
     if ((d.mode === 'calA' || d.mode === 'calB') && d.moved && !s.locked) {
@@ -600,6 +637,7 @@ export function CanvasStage() {
       activeStrokeRef.current = []
       penCursorRef.current = null
       activeInkRef.current?.setAttribute('d', '')
+      if (activeLenRef.current) activeLenRef.current.textContent = ''
       setSnapDot(0, null)
       setSnapDot(1, null)
       const k2 = viewRef.current.k
@@ -613,6 +651,27 @@ export function CanvasStage() {
           color: s0.drawMode === 'pen' ? s0.penColor : s0.lineColor,
           width: (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k2,
         })
+      }
+      return
+    }
+    // an ink rectangle/circle commits on release, exactly like the room drag
+    if (mode === 'ink-shape') {
+      const s0 = useStore.getState()
+      const region = activeShape
+      setActiveShape(null)
+      const k2 = viewRef.current.k
+      if (region) {
+        const [p1, p2] = region
+        if (Math.hypot(p2.x - p1.x, p2.y - p1.y) > 6 / k2) {
+          haptic('light')
+          s0.addStroke({
+            id: (crypto as any).randomUUID ? crypto.randomUUID() : `st${Math.floor(performance.now() * 1000)}`,
+            kind: s0.drawMode as 'rect' | 'ellipse',
+            pts: [p1, p2],
+            color: s0.lineColor,
+            width: (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k2,
+          })
+        }
       }
       return
     }
@@ -857,12 +916,44 @@ export function CanvasStage() {
         {(tool === 'draw' || tool === 'trace') && (
           <g>
             {tool === 'draw' && <path ref={activeInkRef} fill="none" strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />}
+            {tool === 'draw' && (
+              <text ref={activeLenRef} fontFamily={FONT} fontWeight={700} textAnchor="middle"
+                fill="#F3E9CF" stroke="rgba(9,10,14,0.78)" paintOrder="stroke" />
+            )}
             <g ref={snapDotsRef}>
               <circle style={{ display: 'none' }} fill="none" stroke={GOLD} opacity={0.95} />
               <circle style={{ display: 'none' }} fill="none" stroke={GOLD} opacity={0.95} />
             </g>
           </g>
         )}
+
+        {/* live ink rectangle/circle preview with real dimensions */}
+        {activeShape && (() => {
+          const s0 = useStore.getState()
+          const [p1, p2] = activeShape
+          const wpx = (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k
+          const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y)
+          const w2 = Math.abs(p2.x - p1.x), h2 = Math.abs(p2.y - p1.y)
+          const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+          return (
+            <g>
+              {s0.drawMode === 'ellipse' ? (
+                <ellipse cx={mid.x} cy={mid.y} rx={w2 / 2} ry={h2 / 2}
+                  fill="none" stroke={s0.lineColor} strokeWidth={wpx} opacity={0.9} />
+              ) : (
+                <rect x={x} y={y} width={w2} height={h2}
+                  fill="none" stroke={s0.lineColor} strokeWidth={wpx} opacity={0.9} />
+              )}
+              {metersPerPx && (
+                <text x={mid.x} y={y - 10 / k} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                  fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${mid.x} ${y - 10 / k})`}
+                  stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
+                  {formatLen(w2 * metersPerPx, unit)} × {formatLen(h2 * metersPerPx, unit)}
+                </text>
+              )}
+            </g>
+          )
+        })()}
 
         {/* stroke hit paths — tap a stroke in Select mode to manage it */}
         {tool === 'select' && !locked && strokes.map((s2) => (

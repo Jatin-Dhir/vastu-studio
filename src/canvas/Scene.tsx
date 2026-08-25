@@ -52,8 +52,18 @@ export interface SceneProps {
   idPrefix: string
 }
 
-export function strokePathD(pts: Pt[], kind: 'pen' | 'line' | 'arrow' = 'line'): string {
+export function strokePathD(pts: Pt[], kind: 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' = 'line'): string {
   if (pts.length === 0) return ''
+  if (kind === 'rect' && pts.length >= 2) {
+    const [a, b] = pts
+    return `M${a.x.toFixed(2)} ${a.y.toFixed(2)}L${b.x.toFixed(2)} ${a.y.toFixed(2)}L${b.x.toFixed(2)} ${b.y.toFixed(2)}L${a.x.toFixed(2)} ${b.y.toFixed(2)}Z`
+  }
+  if (kind === 'ellipse' && pts.length >= 2) {
+    const [a, b] = pts
+    const cx = (a.x + b.x) / 2, cy = (a.y + b.y) / 2
+    const rx = Math.max(Math.abs(b.x - a.x) / 2, 0.01), ry = Math.max(Math.abs(b.y - a.y) / 2, 0.01)
+    return `M${(cx - rx).toFixed(2)} ${cy.toFixed(2)}a${rx.toFixed(2)} ${ry.toFixed(2)} 0 1 0 ${(rx * 2).toFixed(2)} 0a${rx.toFixed(2)} ${ry.toFixed(2)} 0 1 0 ${(-rx * 2).toFixed(2)} 0Z`
+  }
   let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
   if (kind === 'pen' && pts.length > 2) {
     // quadratics through segment midpoints — the samples steer, the curve stays fluid
