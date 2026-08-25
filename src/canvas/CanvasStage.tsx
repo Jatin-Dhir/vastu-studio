@@ -35,10 +35,11 @@ function snapPoint(prev: Pt, p: Pt): Pt {
 }
 
 interface DragState {
-  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape'
+  mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape' | 'erasing' | 'text-drag'
   idx: number
   markerId: string | null
   rsid: string | null
+  txid: string | null
   startX: number
   startY: number
   lastX: number
@@ -79,6 +80,9 @@ export function CanvasStage() {
   const roomShapes = useStore((s) => s.roomShapes)
   const selectedRoomShape = useStore((s) => s.selectedRoomShape)
   const roomDrawMode = useStore((s) => s.roomDrawMode)
+  const texts = useStore((s) => s.texts)
+  const selectedText = useStore((s) => s.selectedText)
+  const roomDraft = useStore((s) => s.roomDraft)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
   const [loupe, setLoupe] = useState<LoupeState | null>(null)
@@ -93,7 +97,7 @@ export function CanvasStage() {
   const activeInkRef = useRef<SVGPathElement>(null)
   const snapDotsRef = useRef<SVGGElement>(null)
   const penCursorRef = useRef<Pt | null>(null)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, txid: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
@@ -278,6 +282,33 @@ export function CanvasStage() {
   }, [])
 
   /* ---------- pointer handlers ---------- */
+  /** Eraser sweep: whole strokes and notes under the fingertip go at once; one undo step per gesture. */
+  const eraseAt = (w: Pt) => {
+    const s0 = useStore.getState()
+    const rad = (COARSE ? 16 : 12) / viewRef.current.k
+    const sids: string[] = []
+    for (const st of s0.strokes) {
+      let hit = st.pts.length === 1 && dist(st.pts[0], w) < rad + st.width
+      for (let i = 1; i < st.pts.length && !hit; i++) {
+        if (distToSegment(w, st.pts[i - 1], st.pts[i]) < rad + st.width / 2) hit = true
+      }
+      if (hit) sids.push(st.id)
+    }
+    const tids: string[] = []
+    for (const t of s0.texts) {
+      const lines = (t.text || ' ').split('\n')
+      const bw = Math.max(...lines.map((l) => l.length), 1) * t.size * 0.6
+      const bh = lines.length * t.size * 1.25
+      if (w.x > t.p.x - t.size * 0.3 - rad && w.x < t.p.x + bw + t.size * 0.3 + rad &&
+          w.y > t.p.y - t.size - rad && w.y < t.p.y - t.size + bh + t.size * 0.6 + rad) tids.push(t.id)
+    }
+    if (sids.length || tids.length) {
+      if (!drag.current.pushed) { pushHistory(); drag.current.pushed = true }
+      s0.eraseHits(sids, tids)
+      haptic('light')
+    }
+  }
+
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
     const svg = svgRef.current!
     try { svg.setPointerCapture(e.pointerId) } catch { /* synthetic or stale pointer */ }
@@ -299,17 +330,18 @@ export function CanvasStage() {
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-role]')
+    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-txid],[data-role]')
     const vidx = target?.getAttribute('data-vidx')
     const bidx = target?.getAttribute('data-bidx')
     const mkid = target?.getAttribute('data-mkid')
     const strokeId = target?.getAttribute('data-strokeid')
     const rsid = target?.getAttribute('data-rsid')
+    const txid = target?.getAttribute('data-txid')
     const role = target?.getAttribute('data-role')
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY
     d.lastX = e.clientX; d.lastY = e.clientY
-    d.moved = false; d.pushed = false; d.markerId = null; d.rsid = null
+    d.moved = false; d.pushed = false; d.markerId = null; d.rsid = null; d.txid = null
     d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true); setDragIdx({ mode: 'vertex', idx: d.idx }) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true); setDragIdx({ mode: 'bulge', idx: d.idx }) }
@@ -325,27 +357,44 @@ export function CanvasStage() {
       if (s0.tool === 'room' && !s0.locked && e.button === 0) {
         // room tool: a press on an existing room starts a new shape on top of it —
         // a press that stays a tap still selects, on release
-        d.mode = 'room-shape'
-        d.rsid = rsid
-        setActiveRoom([d.grabbed!, d.grabbed!])
+        if (s0.roomDrawMode === 'polygon') { d.mode = 'maybe-pan' } // taps place corners, drags pan
+        else {
+          d.mode = 'room-shape'
+          d.rsid = rsid
+          setActiveRoom([d.grabbed!, d.grabbed!])
+        }
       } else {
         s0.setSelectedRoomShape(s0.selectedRoomShape === rsid ? null : rsid)
         d.mode = 'idle'
         return
       }
     }
+    else if (txid != null) {
+      // text notes: drag moves, tap toggles selection — mirrors markers
+      d.mode = 'text-drag'
+      d.txid = txid
+    }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
     else if (useStore.getState().tool === 'room' && !useStore.getState().locked && e.button === 0) {
-      d.mode = 'room-shape'
-      setActiveRoom([d.grabbed!, d.grabbed!])
+      if (useStore.getState().roomDrawMode === 'polygon') { d.mode = 'maybe-pan' } // corner taps, like tracing
+      else {
+        d.mode = 'room-shape'
+        setActiveRoom([d.grabbed!, d.grabbed!])
+      }
     }
     else if (useStore.getState().tool === 'draw' && !useStore.getState().locked && e.button === 0) {
       const s0 = useStore.getState()
+      if (s0.drawMode === 'text') { d.mode = 'maybe-pan' } // a tap places the note, on release
+      else if (s0.drawMode === 'erase') {
+        d.mode = 'erasing'
+        eraseAt(d.grabbed!)
+      }
+      else {
       d.mode = 'drawing'
       let start = d.grabbed!
       let startSnapped = false
-      if (s0.drawMode === 'line') {
+      if (s0.drawMode === 'line' || s0.drawMode === 'arrow') {
         const r = snapToOutline(start)
         start = r.p; startSnapped = r.snapped
       }
@@ -354,7 +403,7 @@ export function CanvasStage() {
       const k0 = viewRef.current.k
       const ink = activeInkRef.current
       if (ink) {
-        ink.setAttribute('stroke', s0.drawMode === 'line' ? s0.lineColor : s0.penColor)
+        ink.setAttribute('stroke', s0.drawMode === 'pen' ? s0.penColor : s0.lineColor)
         ink.setAttribute('stroke-width', String((s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k0))
         ink.setAttribute('d', '')
       }
@@ -366,6 +415,7 @@ export function CanvasStage() {
       }
       setSnapDot(0, startSnapped ? start : null)
       setSnapDot(1, null)
+      }
     }
     else { d.mode = 'maybe-pan' }
     if (e.pointerType !== 'mouse' &&
@@ -446,10 +496,19 @@ export function CanvasStage() {
       s.moveMarker(d.markerId, world)
       return
     }
+    if (d.mode === 'erasing' && !s.locked) {
+      eraseAt(world)
+      return
+    }
+    if (d.mode === 'text-drag' && d.moved && d.txid && !s.locked) {
+      if (!d.pushed) { pushHistory(); d.pushed = true }
+      s.moveText(d.txid, world)
+      return
+    }
     if (d.mode === 'drawing') {
       const arr = activeStrokeRef.current
       const k2 = viewRef.current.k
-      if (s.drawMode === 'line') {
+      if (s.drawMode === 'line' || s.drawMode === 'arrow') {
         const r = snapToOutline(world)
         let p = r.p
         if (!r.snapped && s.angleSnap && arr.length > 0) p = snapPoint(arr[0], p)
@@ -468,7 +527,7 @@ export function CanvasStage() {
         }
       }
       activeInkRef.current?.setAttribute('d',
-        strokePathD(activeStrokeRef.current, s.drawMode === 'line' ? 'line' : 'pen'))
+        strokePathD(activeStrokeRef.current, s.drawMode === 'pen' ? 'pen' : 'line'))
       return
     }
     if (d.mode === 'room-shape' && d.grabbed) {
@@ -549,9 +608,9 @@ export function CanvasStage() {
       if (arr.length >= 2 && total > 4 / k2) {
         s0.addStroke({
           id: (crypto as any).randomUUID ? crypto.randomUUID() : `st${Math.floor(performance.now() * 1000)}`,
-          kind: s0.drawMode,
-          pts: s0.drawMode === 'line' ? [arr[0], arr[arr.length - 1]] : simplifyPath(arr, 0.4 / k2),
-          color: s0.drawMode === 'line' ? s0.lineColor : s0.penColor,
+          kind: s0.drawMode as 'pen' | 'line' | 'arrow', // 'drawing' only arms for these three
+          pts: s0.drawMode === 'pen' ? simplifyPath(arr, 0.4 / k2) : [arr[0], arr[arr.length - 1]],
+          color: s0.drawMode === 'pen' ? s0.penColor : s0.lineColor,
           width: (s0.drawWidth === 1 ? 2 : s0.drawWidth === 3 ? 6 : 3.5) / k2,
         })
       }
@@ -596,6 +655,10 @@ export function CanvasStage() {
       if (d.markerId) s.setSelectedMarker(s.selectedMarker === d.markerId ? null : d.markerId)
       return
     }
+    if (mode === 'text-drag') {
+      if (d.txid) s.setSelectedText(s.selectedText === d.txid ? null : d.txid)
+      return
+    }
     // a tap only ever places/dispatches from a plain press on empty canvas —
     // never from handle presses or the tail end of a pinch (mode 'idle')
     if (mode !== 'maybe-pan') return
@@ -624,6 +687,25 @@ export function CanvasStage() {
       case 'marker': {
         haptic('light')
         s.addMarker(world)
+        break
+      }
+      case 'draw': {
+        if (s.drawMode === 'text') {
+          haptic('light')
+          // legible at the zoom it was placed at, and it scales with the plan from there
+          const size = Math.min(200, Math.max(6, 18 / viewRef.current.k))
+          s.addText(world, s.penColor, size)
+          s.setTextEditing(true)
+        }
+        break
+      }
+      case 'room': {
+        if (s.roomDrawMode !== 'polygon') break
+        const draft = s.roomDraft ?? []
+        // close by tapping the first corner again — the same gesture as the outline
+        if (draft.length >= 3 && dist(world, draft[0]) < CLOSE_PX / k) { haptic('success'); s.closeRoomDraft(); break }
+        haptic('light')
+        s.setRoomDraft([...draft, world])
         break
       }
       case 'trace': {
@@ -767,7 +849,8 @@ export function CanvasStage() {
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
           northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes}
-          roomShapes={roomShapes} selectedRoomShape={selectedRoomShape} idPrefix="live"
+          roomShapes={roomShapes} selectedRoomShape={selectedRoomShape}
+          texts={texts} selectedText={selectedText} idPrefix="live"
         />
 
         {/* live ink preview + snap rings — attributes set imperatively so drawing/tracing never re-renders */}
@@ -788,10 +871,25 @@ export function CanvasStage() {
             style={{ cursor: 'pointer' }} />
         ))}
 
+        {/* text-note hit areas — tap to manage, drag to move (select tool only) */}
+        {tool === 'select' && !locked && texts.map((t) => {
+          const lines = (t.text || ' ').split('\n')
+          const bw = Math.max(...lines.map((l) => l.length), 1) * t.size * 0.6
+          const bh = lines.length * t.size * 1.25
+          return <rect key={`hit-${t.id}`} data-txid={t.id} x={t.p.x - t.size * 0.3} y={t.p.y - t.size}
+            width={bw + t.size * 0.6} height={bh + t.size * 0.6}
+            fill="rgba(0,0,0,0.001)" style={{ cursor: 'grab' }} />
+        })}
+
         {/* room-shape hit areas — the whole room is tappable, not just its border */}
         {(tool === 'select' || tool === 'room') && !locked && roomShapes.map((r) => {
           const [p1, p2] = r.pts
           if (!p1 || !p2) return null
+          if (r.shape === 'polygon' && r.pts.length >= 3) {
+            const dPath = `M${r.pts.map((p) => `${p.x} ${p.y}`).join('L')}Z`
+            return <path key={`hit-${r.id}`} data-rsid={r.id} d={dPath}
+              fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
+          }
           if (r.shape === 'ellipse') {
             const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
             return <ellipse key={`hit-${r.id}`} data-rsid={r.id} cx={mid.x} cy={mid.y}
@@ -803,6 +901,25 @@ export function CanvasStage() {
             width={Math.abs(p2.x - p1.x)} height={Math.abs(p2.y - p1.y)}
             fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
         })}
+
+        {/* free-traced area in progress — corners placed by taps, first corner closes it */}
+        {tool === 'room' && roomDraft && roomDraft.length > 0 && (() => {
+          const color = markerKindMeta(useStore.getState().roomShapeKind).color
+          const closable = roomDraft.length >= 3
+          const dPath = `M${roomDraft.map((p) => `${p.x} ${p.y}`).join('L')}`
+          return (
+            <g>
+              {closable && <path d={dPath + 'Z'} fill={color} fillOpacity={0.1} stroke="none" />}
+              <path d={dPath} fill="none" stroke={color} strokeWidth={2 / k}
+                strokeDasharray={`${7 / k} ${5 / k}`} strokeLinejoin="round" strokeLinecap="round" />
+              {roomDraft.map((p, i) => (
+                <circle key={i} cx={p.x} cy={p.y} r={(i === 0 && closable ? 7 : 4) / k}
+                  fill={i === 0 && closable ? color : 'rgba(20,22,28,0.6)'}
+                  stroke={color} strokeWidth={1.6 / k} />
+              ))}
+            </g>
+          )
+        })()}
 
         {/* live room-shape preview while dragging out a new rect/ellipse */}
         {activeRoom && (() => {

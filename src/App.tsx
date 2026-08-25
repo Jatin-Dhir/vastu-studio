@@ -8,9 +8,9 @@ import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
-import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog } from './ui/Dialogs'
+import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog, TextDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
-import { CloseChip, MarkerChips, QuickBar, RoomShapeChips, RotateChip, SelectionChips, StrokeChips } from './ui/CanvasOverlays'
+import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
@@ -126,7 +126,7 @@ export default function App() {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
       const s = useStore.getState()
       // modal surfaces own the keyboard while open — each closes itself on Escape
-      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
+      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
@@ -159,6 +159,8 @@ export default function App() {
           if (s.selectedMarker) s.setSelectedMarker(null)
           else if (s.selectedStroke) s.setSelectedStroke(null)
           else if (s.selectedRoomShape) s.setSelectedRoomShape(null)
+          else if (s.selectedText) s.setSelectedText(null)
+          else if (s.roomDraft) s.setRoomDraft(s.roomDraft.length > 1 ? s.roomDraft.slice(0, -1) : null)
           else if (s.selectedVertex != null || s.selectedEdge != null) s.setSelection({ vertex: null, edge: null })
           else if (s.tool === 'calibrate' && s.calA) s.setCal(null, null)
           else if (s.tool === 'trace' && !s.closed && s.pts.length > 0) s.popPoint()
@@ -235,7 +237,8 @@ export default function App() {
         s.compass !== prev.compass || s.northDeg !== prev.northDeg ||
         s.metersPerPx !== prev.metersPerPx || s.centerOverride !== prev.centerOverride ||
         s.unit !== prev.unit || s.locked !== prev.locked ||
-        s.markers !== prev.markers || s.strokes !== prev.strokes || s.roomShapes !== prev.roomShapes || s.report !== prev.report
+        s.markers !== prev.markers || s.strokes !== prev.strokes || s.roomShapes !== prev.roomShapes ||
+        s.texts !== prev.texts || s.report !== prev.report
       ) {
         window.clearTimeout(timer)
         timer = window.setTimeout(autosave, 900)
@@ -261,6 +264,8 @@ export default function App() {
         <MarkerChips />
         <StrokeChips />
         <RoomShapeChips />
+        <TextChips />
+        <RoomCloseChip />
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
@@ -273,6 +278,7 @@ export default function App() {
       <Toasts />
       <CalibrateDialog />
       <MarkerDialog />
+      <TextDialog />
       <RoomShapeDialog />
       <ShortcutsDialog />
       <DwgDialog />

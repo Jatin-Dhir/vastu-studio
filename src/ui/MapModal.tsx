@@ -167,7 +167,9 @@ export function MapModal() {
   const [style, setStyle] = useState<'sat' | 'osm'>(() => loadMem()?.style ?? 'sat')
   const [zoomNow, setZoomNow] = useState<number>(() => loadMem()?.z ?? 5)
   const [recents, setRecents] = useState<Hit[]>(loadRecents)
-  const provider = (st = style) => (st === 'osm' ? { ...OSM, native: 19 } : { ...SAT, native: 19 })
+  // satellite native capped at 18: Esri serves "Map data not yet available" placeholder
+  // tiles at 19 outside big cities — upsampled 18 imagery beats a wall of grey squares
+  const provider = (st = style) => (st === 'osm' ? { ...OSM, native: 19 } : { ...SAT, native: 18 })
   const shotRef = useRef<HTMLInputElement>(null)
   const [q, setQ] = useState('')
   const [hits, setHits] = useState<Hit[]>([])

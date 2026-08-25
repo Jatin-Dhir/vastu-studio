@@ -1,5 +1,5 @@
 import { cloneElement, Fragment, useMemo } from 'react'
-import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, Unit } from '../types'
+import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, TextNote, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { brahmasthanRadius, placementOf } from '../analysis'
@@ -45,12 +45,14 @@ export interface SceneProps {
   strokes?: Stroke[]
   roomShapes?: RoomShape[]
   selectedRoomShape?: string | null
+  texts?: TextNote[]
+  selectedText?: string | null
   /** light paper ground (PNG export) — swaps the few inks that assume the dark canvas */
   paper?: boolean
   idPrefix: string
 }
 
-export function strokePathD(pts: Pt[], kind: 'pen' | 'line' = 'line'): string {
+export function strokePathD(pts: Pt[], kind: 'pen' | 'line' | 'arrow' = 'line'): string {
   if (pts.length === 0) return ''
   let d = `M${pts[0].x.toFixed(2)} ${pts[0].y.toFixed(2)}`
   if (kind === 'pen' && pts.length > 2) {
@@ -67,15 +69,64 @@ export function strokePathD(pts: Pt[], kind: 'pen' | 'line' = 'line'): string {
   return d
 }
 
+/** Filled head for an arrow stroke — sized off the stroke width so it zooms with the plan. */
+export function arrowHeadD(pts: Pt[], width: number): string {
+  if (pts.length < 2) return ''
+  const a = pts[pts.length - 2], b = pts[pts.length - 1]
+  const dx = b.x - a.x, dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
+  if (len < 1e-6) return ''
+  const ux = dx / len, uy = dy / len
+  const hl = Math.max(width * 4.2, 6)
+  const hw = Math.max(width * 1.9, 2.6)
+  const bx = b.x - ux * hl, by = b.y - uy * hl
+  return `M${b.x.toFixed(2)} ${b.y.toFixed(2)}L${(bx - uy * hw).toFixed(2)} ${(by + ux * hw).toFixed(2)}L${(bx + uy * hw).toFixed(2)} ${(by - ux * hw).toFixed(2)}Z`
+}
+
 /** User ink — annotations drawn on the plan, independent of the outline. */
 export function StrokesLayer({ strokes }: { strokes: Stroke[] }) {
   if (strokes.length === 0) return null
   return (
     <g>
       {strokes.map((s) => (
-        <path key={s.id} d={strokePathD(s.pts, s.kind)} fill="none" stroke={s.color}
-          strokeWidth={s.width} strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+        <g key={s.id}>
+          <path d={strokePathD(s.pts, s.kind)} fill="none" stroke={s.color}
+            strokeWidth={s.width} strokeLinecap="round" strokeLinejoin="round" opacity={0.92} />
+          {s.kind === 'arrow' && (
+            <path d={arrowHeadD(s.pts, s.width)} fill={s.color} opacity={0.92} />
+          )}
+        </g>
       ))}
+    </g>
+  )
+}
+
+/** Text notes pinned to the plan — world-sized, so they zoom with the drawing. */
+function TextsLayer({ texts, selected, k, vr }: { texts: TextNote[]; selected?: string | null; k: number; vr: number }) {
+  if (texts.length === 0) return null
+  return (
+    <g>
+      {texts.map((t) => {
+        const lines = (t.text || '…').split('\n')
+        const on = t.id === selected
+        const longest = Math.max(...lines.map((l) => l.length), 1)
+        const boxW = longest * t.size * 0.6
+        const boxH = lines.length * t.size * 1.25
+        return (
+          <g key={t.id} transform={`rotate(${-vr} ${t.p.x} ${t.p.y})`}>
+            {on && (
+              <rect x={t.p.x - t.size * 0.3} y={t.p.y - t.size * 0.95} width={boxW + t.size * 0.6} height={boxH + t.size * 0.55}
+                fill="none" stroke={GOLD} strokeWidth={1.4 / k} strokeDasharray={`${6 / k} ${4 / k}`} rx={3 / k} opacity={0.95} />
+            )}
+            <text x={t.p.x} y={t.p.y} fontSize={t.size} fontFamily={FONT} fontWeight={650}
+              fill={t.color} {...haloProps(t.size * 0.22)}>
+              {lines.map((l, i) => (
+                <tspan key={i} x={t.p.x} dy={i === 0 ? 0 : t.size * 1.25}>{l}</tspan>
+              ))}
+            </text>
+          </g>
+        )
+      })}
     </g>
   )
 }
@@ -919,6 +970,7 @@ export function Scene(props: SceneProps) {
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
       <StrokesLayer strokes={props.strokes ?? []} />
+      <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} />
       <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} />
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} />
       {center && pts.length >= 3 && (

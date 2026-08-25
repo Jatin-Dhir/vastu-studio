@@ -40,11 +40,17 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
     maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
   }
-  // markers, ink and room shapes render wherever they were placed — include them or they crop
+  // markers, ink, room shapes and notes render wherever they were placed — include them or they crop
   // (room rects/ellipses/polygons all span exactly their stored points' bbox)
   for (const p of [...s.markers.map((m) => m.p), ...s.strokes.flatMap((st) => st.pts), ...s.roomShapes.flatMap((r) => r.pts)]) {
     minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
     maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+  }
+  for (const t of s.texts) {
+    const lines = (t.text || ' ').split('\n')
+    const bw = Math.max(...lines.map((l) => l.length), 1) * t.size * 0.6
+    minX = Math.min(minX, t.p.x); minY = Math.min(minY, t.p.y - t.size)
+    maxX = Math.max(maxX, t.p.x + bw); maxY = Math.max(maxY, t.p.y + lines.length * t.size * 1.25)
   }
   if (center && RS > 0 && s.compass.id !== 'none' && s.closed) {
     minX = Math.min(minX, center.x - RS * 1.16)
@@ -80,7 +86,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     centerOverridden: !!s.centerOverride,
     northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
     unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels,
-    markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes, idPrefix: 'exp',
+    markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes, texts: s.texts, idPrefix: 'exp',
     paper: true,
   })
 

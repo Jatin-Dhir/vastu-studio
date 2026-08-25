@@ -152,7 +152,7 @@ export function MarkerDialog() {
         {MARKER_KINDS.map((k2) => (
           <button key={k2.kind} className={`chip ${kind === k2.kind ? 'on-gold' : ''}`}
             onClick={() => setKind(k2.kind as MarkerKind)}>
-            <span className="kind-dot" style={{ background: k2.color }} /> {k2.name}
+            {k2.name}
           </button>
         ))}
       </div>
@@ -199,7 +199,7 @@ export function RoomShapeDialog() {
         {MARKER_KINDS.filter((k2) => k2.kind !== 'entrance').map((k2) => (
           <button key={k2.kind} className={`chip ${kind === k2.kind ? 'on-gold' : ''}`}
             onClick={() => setKind(k2.kind as MarkerKind)}>
-            <span className="kind-dot" style={{ background: k2.color }} /> {k2.name}
+            {k2.name}
           </button>
         ))}
       </div>
@@ -210,6 +210,50 @@ export function RoomShapeDialog() {
         <textarea className="marker-note" value={note} rows={3}
           placeholder="Notes / remedy (goes into the report)…"
           onChange={(e) => setNote(e.target.value)} />
+      </div>
+      <div className="dialog-actions">
+        <button className="btn-ghost" onClick={close}>Cancel</button>
+        <button className="btn-primary" onClick={save}>Save</button>
+      </div>
+    </Dialog>
+  )
+}
+
+export function TextDialog() {
+  const editing = useStore((s) => s.textEditing)
+  const selectedText = useStore((s) => s.selectedText)
+  const texts = useStore((s) => s.texts)
+  const t = texts.find((x) => x.id === selectedText)
+  const [text, setText] = useState('')
+  const areaRef = useRef<HTMLTextAreaElement>(null)
+
+  useEffect(() => {
+    if (editing && t) { setText(t.text); setTimeout(() => areaRef.current?.focus(), 60) }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editing, selectedText])
+
+  if (!editing || !t) return null
+  const close = () => {
+    const st = useStore.getState()
+    st.setTextEditing(false)
+    // a fresh note cancelled before it ever had content is nothing — remove it
+    if (!t.text.trim()) st.deleteText(t.id)
+  }
+  const save = () => {
+    const st = useStore.getState()
+    const v = text.trim()
+    if (!v) { st.deleteText(t.id); st.setTextEditing(false); return }
+    st.updateText(t.id, { text: v })
+    st.setTextEditing(false)
+  }
+
+  return (
+    <Dialog title="Note on the plan" onClose={close} width={380}>
+      <div className="cal-row">
+        <textarea ref={areaRef} className="marker-note" value={text} rows={3}
+          placeholder="e.g. Shift the mirror to the north wall"
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() } }} />
       </div>
       <div className="dialog-actions">
         <button className="btn-ghost" onClick={close}>Cancel</button>

@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { splitBulge } from './geometry'
-import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, Tool, Unit, ViewState } from './types'
+import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, TextNote, Tool, Unit, ViewState } from './types'
 
 export interface Toast {
   id: number
@@ -10,7 +10,7 @@ export interface Toast {
   onAction?: () => void
 }
 
-interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[]; roomShapes: RoomShape[]; compass?: CompassState }
+interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[]; roomShapes: RoomShape[]; texts?: TextNote[]; compass?: CompassState }
 
 export type ThemeMode = 'ink' | 'paper'
 export type AccentId = 'gold' | 'teal' | 'rose' | 'sage'
@@ -52,7 +52,7 @@ export interface VastuStore {
   markerKind: MarkerKind
   strokes: Stroke[]
   selectedStroke: string | null
-  drawMode: 'pen' | 'line'
+  drawMode: 'pen' | 'line' | 'arrow' | 'text' | 'erase'
   penColor: string
   lineColor: string
   drawWidth: number
@@ -60,9 +60,24 @@ export interface VastuStore {
   deleteStroke: (id: string) => void
   clearStrokes: () => void
   setSelectedStroke: (id: string | null) => void
-  setDrawMode: (m: 'pen' | 'line') => void
+  setDrawMode: (m: 'pen' | 'line' | 'arrow' | 'text' | 'erase') => void
   setDrawColor: (c: string) => void
   setDrawWidth: (w: number) => void
+  texts: TextNote[]
+  selectedText: string | null
+  textEditing: boolean
+  addText: (p: Pt, color: string, size: number) => string
+  updateText: (id: string, patch: Partial<Omit<TextNote, 'id'>>) => void
+  moveText: (id: string, p: Pt) => void
+  deleteText: (id: string) => void
+  setSelectedText: (id: string | null) => void
+  setTextEditing: (on: boolean) => void
+  /** erase-tool sweep — strokes/notes vanish live; the CALLER pushes history once per gesture */
+  eraseHits: (strokeIds: string[], textIds: string[]) => void
+  /** in-progress free-traced room corners (Room tool, trace mode) */
+  roomDraft: Pt[] | null
+  setRoomDraft: (pts: Pt[] | null) => void
+  closeRoomDraft: () => void
   report: ReportMeta
   reportOpen: boolean
   /** the report has been opened for THIS plan — the guide's last step keys off it */
@@ -191,8 +206,8 @@ export const useStore = create<VastuStore>()((set, get) => {
   // compass rides along only for the actions that mutate it (closePolygon) — a blanket capture
   // would make unrelated undos revert panel tweaks, since setCompass never pushes history
   const push = (extra?: { compass: CompassState }) => {
-    const { pts, closed, bulges, markers, strokes, roomShapes, undoStack } = get()
-    const stack = [...undoStack, { pts, closed, bulges, markers, strokes, roomShapes, ...extra }]
+    const { pts, closed, bulges, markers, strokes, roomShapes, texts, undoStack } = get()
+    const stack = [...undoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, ...extra }]
     if (stack.length > 100) stack.shift()
     set({ undoStack: stack, redoStack: [] })
   }
@@ -241,12 +256,47 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedStroke: s.selectedStroke === id ? null : s.selectedStroke,
       }))
     },
-    clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null }) },
+    clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null, texts: [], selectedText: null, textEditing: false }) },
     setSelectedStroke: (selectedStroke) =>
-      set({ selectedStroke, ...(selectedStroke === null ? {} : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false }) }),
+      set({ selectedStroke, ...(selectedStroke === null ? {} : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
     setDrawMode: (drawMode) => set({ drawMode }),
-    setDrawColor: (c) => set((s) => (s.drawMode === 'line' ? { lineColor: c } : { penColor: c })),
+    setDrawColor: (c) => set((s) => (s.drawMode === 'line' || s.drawMode === 'arrow' ? { lineColor: c } : { penColor: c })),
     setDrawWidth: (drawWidth) => set({ drawWidth }),
+    texts: [],
+    selectedText: null,
+    textEditing: false,
+    addText: (p, color, size) => {
+      push()
+      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `tx${Math.floor(performance.now() * 1000)}`
+      set((s) => ({
+        texts: [...s.texts, { id, p, text: '', color, size }],
+        selectedText: id,
+        selectedMarker: null, markerEditing: false, selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false,
+      }))
+      return id
+    },
+    updateText: (id, patch) => { push(); set((s) => ({ texts: s.texts.map((t) => (t.id === id ? { ...t, ...patch } : t)) })) },
+    moveText: (id, p) => set((s) => ({ texts: s.texts.map((t) => (t.id === id ? { ...t, p } : t)) })),
+    deleteText: (id) => {
+      push()
+      set((s) => ({ texts: s.texts.filter((t) => t.id !== id), selectedText: s.selectedText === id ? null : s.selectedText, textEditing: false }))
+    },
+    setSelectedText: (selectedText) =>
+      set({ selectedText, ...(selectedText === null ? { textEditing: false } : { selectedMarker: null, markerEditing: false, selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false }) }),
+    setTextEditing: (textEditing) => set({ textEditing }),
+    eraseHits: (strokeIds, textIds) =>
+      set((s) => ({
+        strokes: strokeIds.length ? s.strokes.filter((x) => !strokeIds.includes(x.id)) : s.strokes,
+        texts: textIds.length ? s.texts.filter((t) => !textIds.includes(t.id)) : s.texts,
+      })),
+    roomDraft: null,
+    setRoomDraft: (roomDraft) => set({ roomDraft }),
+    closeRoomDraft: () => {
+      const draft = get().roomDraft
+      if (!draft || draft.length < 3) return
+      get().addRoomShape('polygon', draft)
+      set({ roomDraft: null })
+    },
     report: { client: '', address: '', practitioner: '', notes: '' },
     reportOpen: false,
     reportOpened: false,
@@ -302,6 +352,9 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedStroke: null,
         roomShapes: [],
         selectedRoomShape: null,
+        texts: [],
+        selectedText: null,
+        roomDraft: null,
         calA: null,
         calB: null,
         northDeg: 0,
@@ -326,6 +379,9 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedEdge: null,
         selectedRoomShape: null,
         roomShapeEditing: false,
+        selectedText: null,
+        textEditing: false,
+        ...(tool !== 'room' ? { roomDraft: null } : {}),
       })
     },
     setView: (view) => set({ view }),
@@ -420,7 +476,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       const count = s.markers.filter((m) => m.kind === meta).length
       const base = meta.charAt(0).toUpperCase() + meta.slice(1)
       const marker: Marker = { id, kind: meta, label: count > 0 ? `${base} ${count + 1}` : base, p }
-      set({ markers: [...s.markers, marker], selectedMarker: id, selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false })
+      set({ markers: [...s.markers, marker], selectedMarker: id, selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false })
       return id
     },
     moveMarker: (id, p) =>
@@ -436,9 +492,9 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedMarker: s.selectedMarker === id ? null : s.selectedMarker,
       }))
     },
-    // selections are mutually exclusive — on phones all three chip bars share one fixed slot
+    // selections are mutually exclusive — on phones all the chip bars share one fixed slot
     setSelectedMarker: (selectedMarker) =>
-      set({ selectedMarker, ...(selectedMarker === null ? { markerEditing: false } : { selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false }) }),
+      set({ selectedMarker, ...(selectedMarker === null ? { markerEditing: false } : { selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
     setMarkerKind: (markerKind) => set({ markerKind }),
     markerEditing: false,
     setMarkerEditing: (markerEditing) => set({ markerEditing }),
@@ -456,7 +512,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       const count = s.roomShapes.filter((r) => r.kind === kind).length
       const base = kind.charAt(0).toUpperCase() + kind.slice(1)
       const room: RoomShape = { id, kind, shape, label: count > 0 ? `${base} ${count + 1}` : base, pts }
-      set({ roomShapes: [...s.roomShapes, room], selectedRoomShape: id, selectedMarker: null, markerEditing: false, selectedStroke: null })
+      set({ roomShapes: [...s.roomShapes, room], selectedRoomShape: id, selectedMarker: null, markerEditing: false, selectedStroke: null, selectedText: null, textEditing: false })
       return id
     },
     updateRoomShapePts: (id, pts) =>
@@ -474,7 +530,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     },
     clearRoomShapes: () => { push(); set({ roomShapes: [], selectedRoomShape: null }) },
     setSelectedRoomShape: (selectedRoomShape) =>
-      set({ selectedRoomShape, ...(selectedRoomShape === null ? { roomShapeEditing: false } : { selectedMarker: null, markerEditing: false, selectedStroke: null }) }),
+      set({ selectedRoomShape, ...(selectedRoomShape === null ? { roomShapeEditing: false } : { selectedMarker: null, markerEditing: false, selectedStroke: null, selectedText: null, textEditing: false }) }),
     setRoomShapeKind: (roomShapeKind) => set({ roomShapeKind }),
     setRoomDrawMode: (roomDrawMode) => set({ roomDrawMode }),
     setRoomShapeEditing: (roomShapeEditing) => set({ roomShapeEditing }),
@@ -494,7 +550,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
     undo: () => {
-      const { undoStack, pts, closed, bulges, markers, strokes, roomShapes } = get()
+      const { undoStack, pts, closed, bulges, markers, strokes, roomShapes, texts } = get()
       if (undoStack.length === 0) return
       if (get().locked) { get().toast('Plan is locked — tap the padlock to edit', 'warn'); return }
       const prev = undoStack[undoStack.length - 1]
@@ -505,16 +561,18 @@ export const useStore = create<VastuStore>()((set, get) => {
         markers: prev.markers,
         strokes: prev.strokes ?? s.strokes,
         roomShapes: prev.roomShapes ?? s.roomShapes,
+        texts: prev.texts ?? s.texts,
         ...(prev.compass ? { compass: prev.compass } : {}),
         selectedMarker: null,
         selectedStroke: null,
         selectedRoomShape: null,
+        selectedText: null,
         undoStack: s.undoStack.slice(0, -1),
-        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes, roomShapes, ...(prev.compass ? { compass: s.compass } : {}) }],
+        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, ...(prev.compass ? { compass: s.compass } : {}) }],
       }))
     },
     redo: () => {
-      const { redoStack, pts, closed, bulges, markers, strokes, roomShapes } = get()
+      const { redoStack, pts, closed, bulges, markers, strokes, roomShapes, texts } = get()
       if (redoStack.length === 0) return
       if (get().locked) { get().toast('Plan is locked — tap the padlock to edit', 'warn'); return }
       const next = redoStack[redoStack.length - 1]
@@ -525,12 +583,14 @@ export const useStore = create<VastuStore>()((set, get) => {
         markers: next.markers,
         strokes: next.strokes ?? s.strokes,
         roomShapes: next.roomShapes ?? s.roomShapes,
+        texts: next.texts ?? s.texts,
         ...(next.compass ? { compass: next.compass } : {}),
         selectedMarker: null,
         selectedStroke: null,
         selectedRoomShape: null,
+        selectedText: null,
         redoStack: s.redoStack.slice(0, -1),
-        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes, roomShapes, ...(next.compass ? { compass: s.compass } : {}) }],
+        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, ...(next.compass ? { compass: s.compass } : {}) }],
       }))
     },
 
@@ -555,6 +615,10 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedStroke: null,
         roomShapes: p.roomShapes ?? [],
         selectedRoomShape: null,
+        texts: p.texts ?? [],
+        selectedText: null,
+        textEditing: false,
+        roomDraft: null,
         report: { client: '', address: '', practitioner: '', notes: '', ...p.report },
         selectedVertex: null,
         selectedEdge: null,
@@ -591,6 +655,7 @@ export function serializeProject(s: VastuStore): ProjectFile {
     markers: s.markers,
     strokes: s.strokes,
     roomShapes: s.roomShapes,
+    texts: s.texts,
     report: s.report,
   }
 }

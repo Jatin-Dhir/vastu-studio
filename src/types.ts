@@ -3,14 +3,24 @@ export interface Pt { x: number; y: number }
 export type Unit = 'ft' | 'm'
 export type Tool = 'select' | 'calibrate' | 'trace' | 'center' | 'north' | 'marker' | 'draw' | 'room'
 
-/** Freehand annotation ink — lives ON the plan, never part of the outline. */
+/** Freehand annotation ink — lives ON the plan, never part of the outline.
+ *  'arrow' is a line with a head at pts[last]. */
 export interface Stroke {
   id: string
-  kind: 'pen' | 'line'
+  kind: 'pen' | 'line' | 'arrow'
   pts: Pt[]
   color: string
   /** world px, fixed at draw time so ink zooms with the plan */
   width: number
+}
+
+/** A text note pinned to the plan — size in world px so it zooms with the drawing. */
+export interface TextNote {
+  id: string
+  p: Pt
+  text: string
+  color: string
+  size: number
 }
 
 export type MarkerKind = 'entrance' | 'kitchen' | 'toilet' | 'bed' | 'pooja' | 'water' | 'custom'
@@ -102,5 +112,6 @@ export interface ProjectFile {
   markers?: Marker[]
   strokes?: Stroke[]
   roomShapes?: RoomShape[]
+  texts?: TextNote[]
   report?: ReportMeta
 }

@@ -22,7 +22,7 @@ export function TopBar() {
   const closed = useStore((s) => s.closed)
   const hasBg = useStore((s) => s.bg.kind !== 'none')
   const hasMarkers = useStore((s) => s.markers.length > 0)
-  const hasStrokes = useStore((s) => s.strokes.length > 0)
+  const hasStrokes = useStore((s) => s.strokes.length > 0 || s.texts.length > 0)
   const hasRoomShapes = useStore((s) => s.roomShapes.length > 0)
   const hasOutline = useStore((s) => s.pts.length > 0)
   const { track, active } = useGuide()
@@ -45,8 +45,8 @@ export function TopBar() {
       onTap: () => useStore.getState().clearMarkers(),
     },
     {
-      icon: PenLine, label: 'Remove all drawings', disabled: !hasStrokes,
-      sub: 'Pen and line annotations only',
+      icon: PenLine, label: 'Remove all drawings & notes', disabled: !hasStrokes,
+      sub: 'Pen, line, arrow and text annotations only',
       onTap: () => useStore.getState().clearStrokes(),
     },
     {

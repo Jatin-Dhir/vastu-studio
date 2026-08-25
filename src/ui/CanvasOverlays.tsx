@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Check, Circle as CircleIcon, Lock, LockOpen, Navigation, Pencil, Plus, RotateCcw, Slash, Spline, Square as SquareIcon, Trash2, X } from 'lucide-react'
+import { Check, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, edgePoint, sampledPolygon } from '../geometry'
 import { placementOf } from '../analysis'
@@ -18,6 +18,7 @@ function ToolHint() {
   const bgHint = useStore((s) => s.bgHint)
   const drawMode = useStore((s) => s.drawMode)
   const roomDrawMode = useStore((s) => s.roomDrawMode)
+  const draftLen = useStore((s) => s.roomDraft?.length ?? 0)
 
   let text: string | null = null
   if (tool === 'calibrate') {
@@ -43,13 +44,18 @@ function ToolHint() {
   } else if (tool === 'marker') {
     text = 'Pick a type, then tap the plan to mark it'
   } else if (tool === 'draw') {
-    text = drawMode === 'line'
-      ? 'Drag a straight line — ends snap to your outline’s corners & edges'
-      : 'Draw freely on the plan — pan with two fingers'
+    text = drawMode === 'line' ? 'Drag a straight line — ends snap to your outline’s corners & edges'
+      : drawMode === 'arrow' ? 'Drag an arrow, tail to tip — ends snap to corners & edges'
+        : drawMode === 'text' ? 'Tap the plan to place a note'
+          : drawMode === 'erase' ? 'Tap or swipe across a drawing or note to remove it'
+            : 'Draw freely on the plan — pan with two fingers'
   } else if (tool === 'room') {
-    text = roomDrawMode === 'ellipse'
-      ? 'Drag out a circle — hold Shift for a perfect circle'
-      : 'Drag out a room — hold Shift for a perfect square'
+    text = roomDrawMode === 'ellipse' ? 'Drag out a circle — hold Shift for a perfect circle'
+      : roomDrawMode === 'polygon'
+        ? (draftLen === 0 ? 'Trace the area — tap its first corner'
+          : draftLen < 3 ? `Tap the next corner · ${draftLen} placed`
+            : `Tap corners, then the first one (or the ✓) to close · ${draftLen} placed`)
+        : 'Drag out a room — hold Shift for a perfect square'
   }
   if (!text) return null
   return <div className="tool-hint">{text}</div>
@@ -57,13 +63,14 @@ function ToolHint() {
 
 const DRAW_COLORS = ['#F26B57', '#D9B45B', '#5B8DEF', '#63B56F', '#F2F2F2']
 
-/** Pen/line, colour and width options while the Draw tool is armed. */
+/** Pen/line/arrow/text/eraser, colour and width options while the Draw tool is armed. */
 function DrawOptionsRow() {
   const drawMode = useStore((s) => s.drawMode)
-  const drawColor = useStore((s) => (s.drawMode === 'line' ? s.lineColor : s.penColor))
+  const drawColor = useStore((s) => (s.drawMode === 'line' || s.drawMode === 'arrow' ? s.lineColor : s.penColor))
   const drawWidth = useStore((s) => s.drawWidth)
-  const hasStrokes = useStore((s) => s.strokes.length > 0)
+  const hasInk = useStore((s) => s.strokes.length > 0 || s.texts.length > 0)
   const st = useStore.getState()
+  const strokey = drawMode === 'pen' || drawMode === 'line' || drawMode === 'arrow'
   return (
     <div className="quickbar-row kinds">
       <button className={`qpill ${drawMode === 'pen' ? 'on' : ''}`} onClick={() => st.setDrawMode('pen')}>
@@ -72,22 +79,39 @@ function DrawOptionsRow() {
       <button className={`qpill ${drawMode === 'line' ? 'on' : ''}`} onClick={() => st.setDrawMode('line')}>
         <Slash size={12} /> Line
       </button>
-      <span className="qsep" />
-      {DRAW_COLORS.map((c) => (
-        <button key={c} className={`draw-swatch ${drawColor === c ? 'on' : ''}`} aria-label={`Draw colour ${c}`}
-          style={{ background: c }} onClick={() => st.setDrawColor(c)} />
-      ))}
-      <span className="qsep" />
-      {[1, 2, 3].map((w) => (
-        <button key={w} className={`draw-width ${drawWidth === w ? 'on' : ''}`} aria-label={`Line width ${w}`} onClick={() => st.setDrawWidth(w)}>
-          <span style={{ height: w === 1 ? 2 : w === 2 ? 3.5 : 6 }} />
-        </button>
-      ))}
-      {hasStrokes && (
+      <button className={`qpill ${drawMode === 'arrow' ? 'on' : ''}`} onClick={() => st.setDrawMode('arrow')}>
+        <MoveUpRight size={12} /> Arrow
+      </button>
+      <button className={`qpill ${drawMode === 'text' ? 'on' : ''}`} onClick={() => st.setDrawMode('text')}>
+        <TypeIcon size={12} /> Text
+      </button>
+      <button className={`qpill ${drawMode === 'erase' ? 'on' : ''}`} onClick={() => st.setDrawMode('erase')}>
+        <Eraser size={12} /> Erase
+      </button>
+      {drawMode !== 'erase' && (
         <>
           <span className="qsep" />
-          <button className="qpill" aria-label="Clear all drawings" onClick={() => {
-            st.toast('Remove all drawings from the plan?', 'warn', 'Clear all', () => useStore.getState().clearStrokes())
+          {DRAW_COLORS.map((c) => (
+            <button key={c} className={`draw-swatch ${drawColor === c ? 'on' : ''}`} aria-label={`Draw colour ${c}`}
+              style={{ background: c }} onClick={() => st.setDrawColor(c)} />
+          ))}
+        </>
+      )}
+      {strokey && (
+        <>
+          <span className="qsep" />
+          {[1, 2, 3].map((w) => (
+            <button key={w} className={`draw-width ${drawWidth === w ? 'on' : ''}`} aria-label={`Line width ${w}`} onClick={() => st.setDrawWidth(w)}>
+              <span style={{ height: w === 1 ? 2 : w === 2 ? 3.5 : 6 }} />
+            </button>
+          ))}
+        </>
+      )}
+      {hasInk && (
+        <>
+          <span className="qsep" />
+          <button className="qpill" aria-label="Clear all drawings and notes" onClick={() => {
+            st.toast('Remove all drawings and notes from the plan?', 'warn', 'Clear all', () => useStore.getState().clearStrokes())
           }}>
             <Trash2 size={12} />
           </button>
@@ -110,11 +134,13 @@ function RoomOptionsRow() {
       <button className={`qpill ${roomDrawMode === 'ellipse' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('ellipse')}>
         <CircleIcon size={12} /> Circle
       </button>
+      <button className={`qpill ${roomDrawMode === 'polygon' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('polygon')}>
+        <Spline size={12} /> Trace
+      </button>
       <span className="qsep" />
       {MARKER_KINDS.filter((m) => m.kind !== 'entrance').map((m) => (
         <button key={m.kind} className={`qpill kind ${roomShapeKind === m.kind ? 'on' : ''}`}
           onClick={() => st.setRoomShapeKind(m.kind as MarkerKind)}>
-          <span className="kind-dot" style={{ background: m.color }} />
           {m.name}
         </button>
       ))}
@@ -158,6 +184,51 @@ export function RoomShapeChips() {
   )
 }
 
+/** Edit / delete chips for a tapped text note. */
+export function TextChips() {
+  const selectedText = useStore((s) => s.selectedText)
+  const texts = useStore((s) => s.texts)
+  const view = useStore((s) => s.view)
+  const locked = useStore((s) => s.locked)
+  const editing = useStore((s) => s.textEditing)
+  const t = texts.find((x) => x.id === selectedText)
+  if (!t || locked || editing) return null
+  const rad = (view.rot * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  const sx = view.tx + view.k * (t.p.x * cos - t.p.y * sin)
+  const sy = view.ty + view.k * (t.p.x * sin + t.p.y * cos)
+  const st = useStore.getState()
+  const label = t.text ? (t.text.length > 14 ? t.text.slice(0, 14) + '…' : t.text) : 'Note'
+  return (
+    <div className="sel-chips" style={{
+      left: `max(8px, min(${sx - 60}px, calc(100vw - 220px)))`,
+      top: Math.max(60, sy - 44),
+    }}>
+      <button className="chip" onClick={() => st.setTextEditing(true)}>
+        <Pencil size={12} /> {label}
+      </button>
+      <button className="chip danger" aria-label="Delete" onClick={() => st.deleteText(t.id)}>
+        <Trash2 size={12} />
+      </button>
+      <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedText(null)}><X size={12} /></button>
+    </div>
+  )
+}
+
+/** Close chip for a free-traced area — mirrors the outline's close chip exactly. */
+export function RoomCloseChip() {
+  const roomDraft = useStore((s) => s.roomDraft)
+  const tool = useStore((s) => s.tool)
+  const locked = useStore((s) => s.locked)
+  if (locked || tool !== 'room' || !roomDraft || roomDraft.length < 3) return null
+  const st = useStore.getState()
+  return (
+    <button className="close-chip" onClick={() => st.closeRoomDraft()}>
+      <Check size={15} /> Close area · {roomDraft.length} points
+    </button>
+  )
+}
+
 /** Delete chip for a tapped ink stroke. */
 export function StrokeChips() {
   const selectedStroke = useStore((s) => s.selectedStroke)
@@ -194,7 +265,6 @@ function MarkerKindRow() {
       {MARKER_KINDS.map((m) => (
         <button key={m.kind} className={`qpill kind ${markerKind === m.kind ? 'on' : ''}`}
           onClick={() => setMarkerKind(m.kind as MarkerKind)}>
-          <span className="kind-dot" style={{ background: m.color }} />
           {m.name}
         </button>
       ))}

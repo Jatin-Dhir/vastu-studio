@@ -29,7 +29,10 @@
   --danger-fg: #C23B2E;
   --warn: #B07A1E;
   --ok: #3E8E52;
-  --shadow: 0 12px 40px rgba(24, 22, 14, 0.16);
+  /* light ground needs whisper-weight elevation — heavy dark blur reads as grime on paper */
+  --shadow: 0 2px 6px rgba(24, 22, 14, 0.08), 0 12px 30px rgba(24, 22, 14, 0.1);
+  --shadow-up: 0 -6px 22px rgba(24, 22, 14, 0.12);
+  --shadow-pop: 0 14px 40px rgba(24, 22, 14, 0.18);
 }
 
 :root[data-theme='paper'] .stage-wrap {
