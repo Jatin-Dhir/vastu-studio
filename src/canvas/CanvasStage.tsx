@@ -554,9 +554,10 @@ export function CanvasStage() {
       const lbl = activeLenRef.current
       if (lbl && (s.drawMode === 'line' || s.drawMode === 'arrow')) {
         const a = activeStrokeRef.current[0], b = activeStrokeRef.current[1]
-        if (s.metersPerPx && a && b) {
+        if (a && b) {
           const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 12 / k2
-          lbl.textContent = formatLen(dist(a, b) * s.metersPerPx, s.unit)
+          const px = dist(a, b)
+          lbl.textContent = s.metersPerPx ? formatLen(px * s.metersPerPx, s.unit) : `${Math.round(px)} u`
           lbl.setAttribute('x', String(mx))
           lbl.setAttribute('y', String(my))
           lbl.setAttribute('font-size', String(11.5 / k2))
@@ -944,13 +945,13 @@ export function CanvasStage() {
                 <rect x={x} y={y} width={w2} height={h2}
                   fill="none" stroke={s0.lineColor} strokeWidth={wpx} opacity={0.9} />
               )}
-              {metersPerPx && (
-                <text x={mid.x} y={y - 10 / k} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
-                  fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${mid.x} ${y - 10 / k})`}
-                  stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
-                  {formatLen(w2 * metersPerPx, unit)} × {formatLen(h2 * metersPerPx, unit)}
-                </text>
-              )}
+              <text x={mid.x} y={y - 10 / k} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${mid.x} ${y - 10 / k})`}
+                stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
+                {metersPerPx
+                  ? `${formatLen(w2 * metersPerPx, unit)} × ${formatLen(h2 * metersPerPx, unit)}`
+                  : `${Math.round(w2)} u × ${Math.round(h2)} u`}
+              </text>
             </g>
           )
         })()}

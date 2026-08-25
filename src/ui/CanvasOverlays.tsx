@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Check, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
-import { formatLen } from '../format'
+import { M_PER_FT, formatLen } from '../format'
 import { placementOf } from '../analysis'
 import { NorthDial } from './NorthDial'
 import { GATE_QUALITY, MARKER_KINDS, PLACEMENT_RULES } from '../vastu'
@@ -239,16 +239,39 @@ export function RoomCloseChip() {
 }
 
 /** Delete chip for a tapped ink stroke. */
+/** AutoCAD-style length input: a bare number means the current unit (plain drawing
+ *  units when no scale is set); suffixes m / cm / mm / ft / ' / in / " / u override,
+ *  and the surveyor's 12'6" form works too. Returns the target length in world px. */
+function parseLenToPx(raw: string, appUnit: 'ft' | 'm', mpp: number | null): number | null {
+  const s = raw.trim().toLowerCase().replace(',', '.')
+  if (!s) return null
+  const toPx = (meters: number) => (mpp ? meters / mpp : null)
+  const ftIn = /^(\d+(?:\.\d+)?)\s*'\s*(\d+(?:\.\d+)?)?\s*(?:"|in)?$/.exec(s)
+  if (ftIn) return toPx((parseFloat(ftIn[1]) * 12 + (ftIn[2] ? parseFloat(ftIn[2]) : 0)) * 0.0254)
+  const num = parseFloat(s)
+  if (!isFinite(num) || num <= 0) return null
+  if (/u$/.test(s)) return num
+  if (/mm$/.test(s)) return toPx(num / 1000)
+  if (/cm$/.test(s)) return toPx(num / 100)
+  if (/m$/.test(s)) return toPx(num)
+  if (/(ft|')$/.test(s)) return toPx(num * M_PER_FT)
+  if (/(in|")$/.test(s)) return toPx(num * 0.0254)
+  if (!mpp) return num // unscaled drawing: bare numbers are drawing units
+  return toPx(appUnit === 'ft' ? num * M_PER_FT : num)
+}
+
 export function StrokeChips() {
   const selectedStroke = useStore((s) => s.selectedStroke)
   const strokes = useStore((s) => s.strokes)
   const view = useStore((s) => s.view)
   const locked = useStore((s) => s.locked)
-  const editingLen = useStore((s) => s.strokeLenEditing)
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
+  const [lenEditing, setLenEditing] = useState(false)
+  const [lenVal, setLenVal] = useState('')
+  useEffect(() => { setLenEditing(false) }, [selectedStroke])
   const s2 = strokes.find((x) => x.id === selectedStroke)
-  if (!s2 || locked || editingLen) return null
+  if (!s2 || locked) return null
   const mid = s2.pts[Math.floor(s2.pts.length / 2)]
   const rad = (view.rot * Math.PI) / 180
   const cos = Math.cos(rad), sin = Math.sin(rad)
@@ -257,22 +280,54 @@ export function StrokeChips() {
   const st = useStore.getState()
   const measurable = (s2.kind === 'line' || s2.kind === 'arrow') && s2.pts.length >= 2
   const boxy = (s2.kind === 'rect' || s2.kind === 'ellipse') && s2.pts.length >= 2
+  const fmt = (px: number) => (metersPerPx ? formatLen(px * metersPerPx, unit) : `${Math.round(px)} u`)
+  const beginEdit = () => {
+    const px = dist(s2.pts[0], s2.pts[1])
+    setLenVal(metersPerPx
+      ? (unit === 'ft' ? (px * metersPerPx) / M_PER_FT : px * metersPerPx).toFixed(2)
+      : String(Math.round(px)))
+    setLenEditing(true)
+  }
+  const applyLen = () => {
+    const px = parseLenToPx(lenVal, unit, metersPerPx)
+    if (px == null || px <= 0) { st.toast('Enter a length — e.g. 12, 3.5m, 12\'6"', 'warn'); return }
+    const [a, b] = s2.pts
+    const cur = dist(a, b)
+    if (cur > 1e-6) {
+      const f = px / cur
+      st.updateStroke(s2.id, { pts: [a, { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }] })
+    }
+    setLenEditing(false)
+  }
   return (
     <div className="sel-chips" style={{
-      left: `max(8px, min(${sx - 40}px, calc(100vw - 220px)))`,
+      left: `max(8px, min(${sx - 40}px, calc(100vw - 240px)))`,
       top: Math.max(60, sy - 52),
     }}>
-      {measurable && (
-        <button className="chip" onClick={() => {
-          if (!metersPerPx) { st.toast('Set the scale first (Recalibrate in the panel) — then lines take exact real-world lengths', 'info'); return }
-          st.setStrokeLenEditing(true)
-        }}>
-          <Ruler size={12} /> {metersPerPx ? formatLen(dist(s2.pts[0], s2.pts[1]) * metersPerPx, unit) : 'Length…'}
+      {measurable && !lenEditing && (
+        <button className="chip" title="Set the exact length" onClick={beginEdit}>
+          <Ruler size={12} /> {fmt(dist(s2.pts[0], s2.pts[1]))}
         </button>
       )}
-      {boxy && metersPerPx && (
+      {measurable && lenEditing && (
+        <span className="chip len-edit">
+          <Ruler size={12} />
+          <input
+            autoFocus value={lenVal} inputMode="decimal" aria-label="Line length"
+            onFocus={(e) => e.target.select()}
+            onChange={(e) => setLenVal(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') applyLen()
+              else if (e.key === 'Escape') setLenEditing(false)
+            }}
+            onBlur={() => setLenEditing(false)}
+          />
+          <em>{metersPerPx ? unit : 'u'}</em>
+        </span>
+      )}
+      {boxy && (
         <span className="chip place">
-          {formatLen(Math.abs(s2.pts[1].x - s2.pts[0].x) * metersPerPx, unit)} × {formatLen(Math.abs(s2.pts[1].y - s2.pts[0].y) * metersPerPx, unit)}
+          {fmt(Math.abs(s2.pts[1].x - s2.pts[0].x))} × {fmt(Math.abs(s2.pts[1].y - s2.pts[0].y))}
         </span>
       )}
       <button className="chip danger" onClick={() => st.deleteStroke(s2.id)}>

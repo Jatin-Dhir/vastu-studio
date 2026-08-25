@@ -61,9 +61,6 @@ export interface VastuStore {
   deleteStroke: (id: string) => void
   clearStrokes: () => void
   setSelectedStroke: (id: string | null) => void
-  /** the set-exact-length dialog for a selected line/arrow */
-  strokeLenEditing: boolean
-  setStrokeLenEditing: (on: boolean) => void
   setDrawMode: (m: 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' | 'text' | 'erase') => void
   setDrawColor: (c: string) => void
   setDrawWidth: (w: number) => void
@@ -263,9 +260,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     updateStroke: (id, patch) => { push(); set((s) => ({ strokes: s.strokes.map((x) => (x.id === id ? { ...x, ...patch } : x)) })) },
     clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null, texts: [], selectedText: null, textEditing: false }) },
     setSelectedStroke: (selectedStroke) =>
-      set({ selectedStroke, ...(selectedStroke === null ? { strokeLenEditing: false } : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
-    strokeLenEditing: false,
-    setStrokeLenEditing: (strokeLenEditing) => set({ strokeLenEditing }),
+      set({ selectedStroke, ...(selectedStroke === null ? {} : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
     setDrawMode: (drawMode) => set({ drawMode }),
     setDrawColor: (c) => set((s) => (s.drawMode === 'pen' || s.drawMode === 'text' ? { penColor: c } : { lineColor: c })),
     setDrawWidth: (drawWidth) => set({ drawWidth }),

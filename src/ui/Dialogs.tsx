@@ -219,69 +219,6 @@ export function RoomShapeDialog() {
   )
 }
 
-/** Give a selected line/arrow an exact real-world length — the tip moves, the tail stays. */
-export function LineLengthDialog() {
-  const open = useStore((s) => s.strokeLenEditing)
-  const selectedStroke = useStore((s) => s.selectedStroke)
-  const strokes = useStore((s) => s.strokes)
-  const metersPerPx = useStore((s) => s.metersPerPx)
-  const s2 = strokes.find((x) => x.id === selectedStroke)
-  const [value, setValue] = useState('')
-  const [lenUnit, setLenUnit] = useState<string>('ft')
-  const inputRef = useRef<HTMLInputElement>(null)
-
-  useEffect(() => {
-    if (open && s2 && s2.pts.length >= 2 && metersPerPx) {
-      const u = useStore.getState().unit
-      const m = dist(s2.pts[0], s2.pts[1]) * metersPerPx
-      setLenUnit(u)
-      setValue((u === 'ft' ? m / M_PER_FT : m).toFixed(2))
-      setTimeout(() => inputRef.current?.select(), 60)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, selectedStroke])
-
-  if (!open || !s2 || s2.pts.length < 2 || !metersPerPx) return null
-  const close = () => useStore.getState().setStrokeLenEditing(false)
-  const apply = () => {
-    const st = useStore.getState()
-    const v = parseFloat(value.replace(',', '.'))
-    if (!isFinite(v) || v <= 0) { st.toast('Enter the length the line should have', 'warn'); return }
-    const toM = CAL_UNITS.find((u) => u.id === lenUnit)?.toM ?? 1
-    const [a, b] = s2.pts
-    const cur = dist(a, b)
-    if (cur < 1e-6) { close(); return }
-    const f = (v * toM) / metersPerPx / cur
-    st.updateStroke(s2.id, { pts: [a, { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }] })
-    haptic('light')
-    st.setStrokeLenEditing(false)
-  }
-
-  return (
-    <Dialog title="Set line length" onClose={close} width={380}>
-      <p className="dialog-sub">
-        The line keeps its direction and start point — only the tip moves to match.
-      </p>
-      <div className="cal-row">
-        <input ref={inputRef} type="number" min="0" step="any" value={value}
-          onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') apply() }} />
-        <div className="seg">
-          {CAL_UNITS.map((u) => (
-            <button key={u.id} className={lenUnit === u.id ? 'on' : ''} onClick={() => setLenUnit(u.id)}>
-              {u.label}
-            </button>
-          ))}
-        </div>
-      </div>
-      <div className="dialog-actions">
-        <button className="btn-ghost" onClick={close}>Cancel</button>
-        <button className="btn-primary" onClick={apply}>Apply</button>
-      </div>
-    </Dialog>
-  )
-}
-
 export function TextDialog() {
   const editing = useStore((s) => s.textEditing)
   const selectedText = useStore((s) => s.selectedText)
