@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD, strokePathD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
-import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgeLength, edgePoint, nearestOnEdge, polar, sampledPolygon, simplifyPath } from '../geometry'
+import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgeLength, edgePoint, nearestOnEdge, polar, polygonArea, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import { haptic } from '../native'
 import { setGestureBusy } from './gesture'
@@ -139,7 +139,14 @@ export function CanvasStage() {
     return null
   }, [pts.length, sampled, centerOverride])
 
-  const R = useMemo(() => (center && pts.length >= 3 ? circumradius(center, sampled) * 1.03 : 0), [center, pts.length, sampled])
+  // the wheel's AREA equals the plot's (πR² = A) — the compass reads as the plot's equal,
+  // not a halo around it; an open outline falls back to its enclosing circle
+  const R = useMemo(() => {
+    if (!center || pts.length < 3) return 0
+    return closed
+      ? Math.sqrt(Math.abs(polygonArea(sampled)) / Math.PI)
+      : circumradius(center, sampled) * 1.03
+  }, [center, pts.length, sampled, closed])
 
   const toWorld = (clientX: number, clientY: number): Pt => {
     const rect = svgRef.current!.getBoundingClientRect()

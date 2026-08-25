@@ -87,7 +87,7 @@ export function evaluateVastu(args: {
   }
 
   /* Brahmasthan occupancy — sized from the drawing itself, never the compass */
-  const bR = brahmasthanRadius(sampled, center, northDeg) * ((args.brahmaPct ?? 100) / 100)
+  const bR = brahmasthanRadius(sampled) * ((args.brahmaPct ?? 100) / 100)
   for (const m of markers) {
     if (dist(m.p, center) < bR) {
       const heavy = m.kind === 'toilet' || m.kind === 'kitchen' || m.kind === 'water'

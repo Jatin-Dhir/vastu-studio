@@ -29,7 +29,10 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
 
   const sampled = sampledPolygon(s.pts, s.bulges, s.closed)
   const center: Pt | null = s.centerOverride ?? (s.pts.length >= 3 ? centroid(sampled) : null)
-  const R = center && s.pts.length >= 3 ? circumradius(center, sampled) * 1.03 : 0
+  // mirror the canvas: wheel area = plot area when closed, enclosing circle otherwise
+  const R = center && s.pts.length >= 3
+    ? (s.closed ? Math.sqrt(Math.abs(polygonArea(sampled)) / Math.PI) : circumradius(center, sampled) * 1.03)
+    : 0
   const RS = R * (s.compass.scalePct / 100)
 
   let minX = 0, minY = 0, maxX = Math.max(1, s.bg.w), maxY = Math.max(1, s.bg.h)

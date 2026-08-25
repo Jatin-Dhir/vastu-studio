@@ -866,24 +866,19 @@ function CenterMarker(props: {
   c: Pt; brahmaR: number; k: number; brahmasthan: boolean; closed: boolean
   areaText: string | null; overridden: boolean; vr?: number; north: number
 }) {
-  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0, north } = props
+  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
   return (
     <g>
       {closed && brahmasthan && brahmaR > 0 && (
         <g>
-          {/* the classical central-ninth square (brahmaR is already that cell's half-side,
-              per analysis.ts's brahmasthanRadius), aligned to north alongside the drawing's
-              own inscribed circle — same math as Grid9's Brahma block, drawn everywhere else too */}
-          <g transform={`rotate(${north} ${c.x} ${c.y})`}>
-            <rect x={c.x - brahmaR} y={c.y - brahmaR} width={brahmaR * 2} height={brahmaR * 2}
-              fill={GOLD} fillOpacity={0.055} stroke="none" />
-            <rect x={c.x - brahmaR} y={c.y - brahmaR} width={brahmaR * 2} height={brahmaR * 2}
-              fill="none" stroke={INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
-            <rect x={c.x - brahmaR} y={c.y - brahmaR} width={brahmaR * 2} height={brahmaR * 2}
-              fill="none" stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
-          </g>
-          <circle cx={c.x} cy={c.y} r={brahmaR} fill="none"
-            stroke={GOLD} strokeWidth={0.8 / k} strokeDasharray={`${5 / k} ${5 / k}`} opacity={0.45} />
+          {/* the Brahmasthan circle — exactly one ninth of the plot's area (the mandala's
+              central 3×3 of 81 padas), per analysis.ts's brahmasthanRadius */}
+          <circle cx={c.x} cy={c.y} r={brahmaR}
+            fill={GOLD} fillOpacity={0.055} stroke="none" />
+          <circle cx={c.x} cy={c.y} r={brahmaR}
+            fill="none" stroke={INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
+          <circle cx={c.x} cy={c.y} r={brahmaR}
+            fill="none" stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
           <text x={c.x} y={c.y - brahmaR - 9 / k} fontSize={10.5 / k} fontFamily={FONT}
             fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
             transform={`rotate(${-vr} ${c.x} ${c.y - brahmaR - 9 / k})`}
@@ -985,7 +980,7 @@ export function Scene(props: SceneProps) {
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}
-          brahmaR={brahmasthanRadius(sampled, center, northDeg) * ((compass.brahmaPct ?? 100) / 100)}
+          brahmaR={brahmasthanRadius(sampled) * ((compass.brahmaPct ?? 100) / 100)}
           k={k} brahmasthan={compass.brahmasthan}
           closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} north={northDeg} />
       )}

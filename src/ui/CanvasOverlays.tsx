@@ -239,10 +239,19 @@ export function RoomCloseChip() {
 }
 
 /** Delete chip for a tapped ink stroke. */
-/** AutoCAD-style length input: a bare number means the current unit (plain drawing
+const LEN_UNITS = [
+  { id: 'ft', toM: M_PER_FT },
+  { id: 'm', toM: 1 },
+  { id: 'in', toM: 0.0254 },
+  { id: 'cm', toM: 0.01 },
+] as const
+type LenUnit = (typeof LEN_UNITS)[number]['id']
+const toMOf = (u: LenUnit) => LEN_UNITS.find((x) => x.id === u)!.toM
+
+/** AutoCAD-style length input: a bare number means the picked unit (plain drawing
  *  units when no scale is set); suffixes m / cm / mm / ft / ' / in / " / u override,
  *  and the surveyor's 12'6" form works too. Returns the target length in world px. */
-function parseLenToPx(raw: string, appUnit: 'ft' | 'm', mpp: number | null): number | null {
+function parseLenToPx(raw: string, appUnit: LenUnit, mpp: number | null): number | null {
   const s = raw.trim().toLowerCase().replace(',', '.')
   if (!s) return null
   const toPx = (meters: number) => (mpp ? meters / mpp : null)
@@ -257,7 +266,7 @@ function parseLenToPx(raw: string, appUnit: 'ft' | 'm', mpp: number | null): num
   if (/(ft|')$/.test(s)) return toPx(num * M_PER_FT)
   if (/(in|")$/.test(s)) return toPx(num * 0.0254)
   if (!mpp) return num // unscaled drawing: bare numbers are drawing units
-  return toPx(appUnit === 'ft' ? num * M_PER_FT : num)
+  return toPx(num * toMOf(appUnit))
 }
 
 export function StrokeChips() {
@@ -269,6 +278,7 @@ export function StrokeChips() {
   const unit = useStore((s) => s.unit)
   const [lenEditing, setLenEditing] = useState(false)
   const [lenVal, setLenVal] = useState('')
+  const [lenUnit, setLenUnit] = useState<LenUnit>('ft')
   useEffect(() => { setLenEditing(false) }, [selectedStroke])
   const s2 = strokes.find((x) => x.id === selectedStroke)
   if (!s2 || locked) return null
@@ -283,13 +293,22 @@ export function StrokeChips() {
   const fmt = (px: number) => (metersPerPx ? formatLen(px * metersPerPx, unit) : `${Math.round(px)} u`)
   const beginEdit = () => {
     const px = dist(s2.pts[0], s2.pts[1])
+    setLenUnit(unit)
     setLenVal(metersPerPx
-      ? (unit === 'ft' ? (px * metersPerPx) / M_PER_FT : px * metersPerPx).toFixed(2)
+      ? ((px * metersPerPx) / toMOf(unit)).toFixed(2)
       : String(Math.round(px)))
     setLenEditing(true)
   }
+  // tap the unit to cycle ft → m → in → cm; the shown number converts so the length stays put
+  const cycleUnit = () => {
+    const idx = LEN_UNITS.findIndex((u) => u.id === lenUnit)
+    const next = LEN_UNITS[(idx + 1) % LEN_UNITS.length]
+    const v = parseFloat(lenVal.replace(',', '.'))
+    if (isFinite(v) && v > 0) setLenVal(((v * toMOf(lenUnit)) / next.toM).toFixed(2))
+    setLenUnit(next.id)
+  }
   const applyLen = () => {
-    const px = parseLenToPx(lenVal, unit, metersPerPx)
+    const px = parseLenToPx(lenVal, lenUnit, metersPerPx)
     if (px == null || px <= 0) { st.toast('Enter a length — e.g. 12, 3.5m, 12\'6"', 'warn'); return }
     const [a, b] = s2.pts
     const cur = dist(a, b)
@@ -310,7 +329,8 @@ export function StrokeChips() {
         </button>
       )}
       {measurable && lenEditing && (
-        <span className="chip len-edit">
+        <span className="chip len-edit"
+          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setLenEditing(false) }}>
           <Ruler size={12} />
           <input
             autoFocus value={lenVal} inputMode="decimal" aria-label="Line length"
@@ -320,9 +340,15 @@ export function StrokeChips() {
               if (e.key === 'Enter') applyLen()
               else if (e.key === 'Escape') setLenEditing(false)
             }}
-            onBlur={() => setLenEditing(false)}
           />
-          <em>{metersPerPx ? unit : 'u'}</em>
+          {metersPerPx ? (
+            <button className="len-unit" aria-label="Change unit"
+              onPointerDown={(e) => e.preventDefault()} onClick={cycleUnit}>
+              {lenUnit}
+            </button>
+          ) : (
+            <em>u</em>
+          )}
         </span>
       )}
       {boxy && (

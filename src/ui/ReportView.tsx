@@ -72,8 +72,8 @@ function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }
 
-/** North-aligned bounding-box extents — the same rotation analysis.ts's brahmasthanRadius uses
- *  to find the plot's own centre square, just kept as width/height instead of one radius. */
+/** North-aligned bounding-box extents — the plot rotated into the north frame,
+ *  kept as width/height so the report can quote E–W × N–S dimensions. */
 function northAlignedExtents(sampled: Pt[], center: Pt, northDeg: number): { ew: number; ns: number } | null {
   if (sampled.length < 3) return null
   const rad = (-northDeg * Math.PI) / 180
@@ -156,7 +156,7 @@ export function ReportView() {
     [closed, center, sampled, northDeg],
   )
   const brahmaRadiusPx = useMemo(
-    () => (closed && center ? brahmasthanRadius(sampled, center, northDeg) * (compass.brahmaPct / 100) : null),
+    () => (closed && center ? brahmasthanRadius(sampled) * (compass.brahmaPct / 100) : null),
     [closed, center, sampled, northDeg, compass.brahmaPct],
   )
   // drawn rooms report as pseudo-markers at their bbox centre — same list RightPanel analyses
