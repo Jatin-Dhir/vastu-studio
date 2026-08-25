@@ -1,4 +1,5 @@
 import { useStore } from './store'
+import { newProjectId } from './db'
 import { importRaster } from './importers/raster'
 import { detectPdfScaleRatio, openPdf, renderPdfPage } from './importers/pdf'
 import { importDxf } from './importers/dxf'
@@ -11,36 +12,45 @@ function freshBgDefaults() {
   return { opacity: 1, grayscale: false, invert: false }
 }
 
-export async function importFiles(files: FileList | File[] | Blob[], opts?: { force?: boolean; nameHint?: string }) {
+/** Returns true only when a file actually landed — callers chaining follow-up steps must check. */
+export async function importFiles(files: FileList | File[] | Blob[], opts?: { force?: boolean; nameHint?: string }): Promise<boolean> {
   const all = Array.from(files as ArrayLike<File>)
   const file = all[0]
-  if (!file) return
+  if (!file) return false
   const s = useStore.getState()
   const name = (file as File).name ?? opts?.nameHint ?? 'imported'
   const ext = name.toLowerCase().split('.').pop() ?? ''
+  // opening a project swaps the whole workspace (the lock travels with it) — everything else edits this plan
+  const isProject = ext === 'vastu' || (ext === 'json' && name.includes('.vastu'))
+  if (s.locked && !isProject) {
+    s.toast('Plan is locked — tap the padlock to edit', 'warn')
+    return false
+  }
 
   try {
     if (ext === 'dwg') {
       s.setDwgNotice(true)
-      return
+      return false
     }
-    // a traced outline is real work — never let a stray paste or mis-tap wipe it silently
-    if (s.pts.length >= 3 && !opts?.force) {
-      s.toast(`Importing “${name}” replaces the current plan, outline and scale`, 'warn', 'Replace', () => {
+    // a traced outline, markers and drawings are real work — never let a stray paste or mis-tap wipe them silently
+    if ((s.pts.length >= 3 || s.markers.length > 0 || s.strokes.length > 0 || s.roomShapes.length > 0) && !opts?.force) {
+      s.toast(`Importing “${name}” replaces the current plan, outline, scale, markers and drawings`, 'warn', 'Replace', () => {
         void importFiles(all, { force: true })
       })
-      return
+      return false
     }
     if (all.length > 1) {
       s.toast(`One file at a time — importing “${name}”`, 'info')
     }
-    if (ext === 'vastu' || (ext === 'json' && name.includes('.vastu'))) {
+    if (isProject) {
       const text = await (file as File).text()
       const p = parseProject(text)
       s.loadProject(p)
+      // a file open becomes its own library entry — never autosave over the previously open project's record
+      s.setProjectMeta({ id: newProjectId(), name: name.replace(/\.[^.]+$/, '') })
       requestFit()
       s.toast('Project restored', 'ok')
-      return
+      return true
     }
     if (ext === 'pdf' || file.type === 'application/pdf') {
       s.setBusy('Rendering PDF…')
@@ -60,7 +70,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
         const mpp = (ratio * 0.0254) / 72 / pxPerPt
         const st = useStore.getState()
         // the offer outlives the toast — the guide and calibrate bar keep it available
-        st.setScaleSuggestion({ metersPerPx: mpp, label: `printed 1 : ${ratio}` })
+        st.setScaleSuggestion({ metersPerPx: mpp, label: `printed 1 : ${ratio}`, source: 'pdf' })
         st.toast(
           `Drawing states 1 : ${ratio} — that makes it ${formatLen(w * mpp, st.unit)} wide`,
           'info', 'Apply scale',
@@ -72,7 +82,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
           },
         )
       }
-      return
+      return true
     }
     if (ext === 'dxf') {
       s.setBusy('Parsing DXF…')
@@ -102,7 +112,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
           const widthM = dxf.w * mpp
           if (widthM >= 3 && widthM <= 1000) {
             const st = useStore.getState()
-            st.setScaleSuggestion({ metersPerPx: mpp, label: `read as ${unitName}` })
+            st.setScaleSuggestion({ metersPerPx: mpp, label: `read as ${unitName}`, source: 'dxf' })
             st.toast(
               `No units in the DXF — read as ${unitName} it is ${formatLen(widthM, st.unit)} wide`,
               'info', 'Apply scale',
@@ -116,21 +126,28 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
           }
         }
       }
-      return
+      return true
     }
-    if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif'].includes(ext)) {
+    if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'heic', 'heif'].includes(ext)) {
       s.setBusy('Loading image…')
       const { dataUrl, w, h } = await importRaster(file)
       s.replaceBg({ kind: 'raster', name, dataUrl, w, h, ...freshBgDefaults() }, null, null)
       requestFit()
       s.toast('Image imported', 'ok')
       afterImportGuide()
-      return
+      return true
     }
     s.toast(`Unsupported file type: .${ext}`, 'warn')
+    return false
   } catch (err) {
     console.error(err)
-    s.toast(err instanceof Error ? err.message : 'Import failed', 'warn')
+    // Chromium has no HEIC decode — name the real problem instead of the generic decode error
+    if (['heic', 'heif'].includes(ext) || /hei[cf]/.test(file.type)) {
+      s.toast('This looks like an iPhone HEIC photo, which this device cannot decode — share or export it as JPEG and import that', 'warn')
+    } else {
+      s.toast(err instanceof Error ? err.message : 'Import failed', 'warn')
+    }
+    return false
   } finally {
     useStore.getState().setBusy(null)
   }
@@ -156,8 +173,18 @@ export function loadDemo() {
 }
 
 /** A screenshot from Google/Apple Maps: north is up by convention; the scale bar calibrates it. */
-export async function importMapsScreenshot(file: File) {
-  await importFiles([file])
+export async function importMapsScreenshot(file: File, opts?: { force?: boolean }) {
+  const s0 = useStore.getState()
+  // the replace-confirm lives here, not in importFiles, so an accepted Replace re-runs THIS path
+  // and keeps the north-up + scale-bar guidance (locked plans fall through to importFiles' refusal)
+  if (!s0.locked && (s0.pts.length >= 3 || s0.markers.length > 0 || s0.strokes.length > 0 || s0.roomShapes.length > 0) && !opts?.force) {
+    s0.toast(`Importing “${file.name}” replaces the current plan, outline, scale, markers and drawings`, 'warn', 'Replace', () => {
+      void importMapsScreenshot(file, { force: true })
+    })
+    return
+  }
+  const ok = await importFiles([file], opts)
+  if (!ok) return
   const s = useStore.getState()
   if (s.bg.kind === 'raster') {
     s.setNorth(0, 'manual')

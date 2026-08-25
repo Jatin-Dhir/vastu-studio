@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useStore, DEFAULT_COMPASS } from './store'
 import { CanvasStage } from './canvas/CanvasStage'
 import { requestFit } from './canvas/fit'
+import { isGestureActive } from './canvas/gesture'
 import { TopBar } from './ui/TopBar'
 import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
@@ -17,6 +18,7 @@ import { getMostRecent, newProjectId, putProject, requestPersistence } from './d
 import { ProjectsModal } from './ui/ProjectsModal'
 import { ReportView } from './ui/ReportView'
 import { formatLen, formatScale } from './format'
+import { syncNativeChrome } from './native'
 import type { ProjectFile } from './types'
 
 const EMPTY_PROJECT: ProjectFile = {
@@ -64,7 +66,7 @@ function StatusChip() {
 }
 
 export default function App() {
-  const hasContent = useStore((s) => s.bg.kind !== 'none' || s.pts.length > 0)
+  const hasContent = useStore((s) => s.bg.kind !== 'none' || s.pts.length > 0 || s.markers.length > 0 || s.strokes.length > 0 || s.roomShapes.length > 0)
   const mapOpen = useStore((s) => s.mapOpen)
   const projectsOpen = useStore((s) => s.projectsOpen)
   const reportOpen = useStore((s) => s.reportOpen)
@@ -72,11 +74,32 @@ export default function App() {
   const accent = useStore((s) => s.accent)
   const fileRef = useRef<HTMLInputElement>(null)
 
-  /* appearance: theme/accent live as plain data-attributes so pure CSS drives every colour */
+  /* appearance: theme/accent live as plain data-attributes so pure CSS drives every colour;
+     OS chrome (meta theme-color, native status bar) follows the same switch */
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.accent = accent
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'paper' ? '#F3F1EA' : '#0B0C10')
+    void syncNativeChrome(theme)
   }, [theme, accent])
+
+  /* entering the phone breakpoint (rotation/resize) with the sheet fully raised
+     would hide both the guide and the tool dock — drop it back to peek */
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 760px)')
+    const onChange = () => {
+      const s = useStore.getState()
+      if (mq.matches && s.sheetPos === 'full') s.setSheetPos('peek')
+    }
+    onChange()
+    // resize too: occluded/embedded views can swallow the mq change event
+    mq.addEventListener('change', onChange)
+    window.addEventListener('resize', onChange)
+    return () => {
+      mq.removeEventListener('change', onChange)
+      window.removeEventListener('resize', onChange)
+    }
+  }, [])
 
   /* file picker trigger */
   useEffect(() => {
@@ -84,7 +107,7 @@ export default function App() {
     const reset = () => {
       clearAutosave()
       const st = useStore.getState()
-      st.loadProject(EMPTY_PROJECT)
+      st.loadProject({ ...EMPTY_PROJECT, unit: st.unit })
       st.setProjectMeta({ id: null, name: 'Untitled plan' })
       st.toast('Cleared — start with a fresh import', 'ok')
     }
@@ -102,12 +125,20 @@ export default function App() {
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
       const s = useStore.getState()
+      // modal surfaces own the keyboard while open — each closes itself on Escape
+      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
+        // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
+        if (isGestureActive()) return
         if (e.shiftKey) s.redo(); else s.undo()
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') { e.preventDefault(); s.redo(); return }
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+        e.preventDefault()
+        if (!isGestureActive()) s.redo()
+        return
+      }
       if (e.ctrlKey || e.metaKey || e.altKey) return
       switch (e.key) {
         case 'v': case 'V': s.setTool('select'); break
@@ -125,9 +156,9 @@ export default function App() {
           if (s.tool === 'trace' && !s.closed && s.pts.length > 0) { e.preventDefault(); s.popPoint() }
           break
         case 'Escape':
-          if (s.calDialogOpen) s.setCalDialogOpen(false)
-          else if (s.markerEditing) s.setMarkerEditing(false)
-          else if (s.selectedMarker) s.setSelectedMarker(null)
+          if (s.selectedMarker) s.setSelectedMarker(null)
+          else if (s.selectedStroke) s.setSelectedStroke(null)
+          else if (s.selectedRoomShape) s.setSelectedRoomShape(null)
           else if (s.selectedVertex != null || s.selectedEdge != null) s.setSelection({ vertex: null, edge: null })
           else if (s.tool === 'calibrate' && s.calA) s.setCal(null, null)
           else if (s.tool === 'trace' && !s.closed && s.pts.length > 0) s.popPoint()

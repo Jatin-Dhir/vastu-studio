@@ -7,7 +7,7 @@ import { brahmasthanRadius, placementOf, zoneRows } from '../analysis'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
 import { ANALYSIS_DISCLAIMER, GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
-import { evaluateVastu } from '../evaluate'
+import { evaluateVastu, roomShapeAnchor } from '../evaluate'
 import type { Finding, Severity } from '../evaluate'
 import type { Marker, NorthSource, Pt, ScaleSource } from '../types'
 import './report.css'
@@ -124,22 +124,28 @@ export function ReportView() {
   const scaleSource = useStore((s) => s.scaleSource)
   const unit = useStore((s) => s.unit)
   const markers = useStore((s) => s.markers)
+  const roomShapes = useStore((s) => s.roomShapes)
   const projectName = useStore((s) => s.projectName)
   const compass = useStore((s) => s.compass)
 
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [imgBlob, setImgBlob] = useState<Blob | null>(null)
+  const [imgFailed, setImgFailed] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     let url: string | null = null
     void makePlanPng().then((out) => {
-      if (out) {
-        url = URL.createObjectURL(out.blob)
-        setImgBlob(out.blob)
-        setImgUrl(url)
-      }
+      if (!out || cancelled) return
+      url = URL.createObjectURL(out.blob)
+      setImgBlob(out.blob)
+      setImgUrl(url)
+    }).catch(() => {
+      if (cancelled) return
+      setImgFailed(true)
+      useStore.getState().toast('Plan image couldn’t be rendered — the report still prints without it', 'warn')
     })
-    return () => { if (url) URL.revokeObjectURL(url) }
+    return () => { cancelled = true; if (url) URL.revokeObjectURL(url) }
   }, [])
 
   const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
@@ -153,9 +159,17 @@ export function ReportView() {
     () => (closed && center ? brahmasthanRadius(sampled, center, northDeg) * (compass.brahmaPct / 100) : null),
     [closed, center, sampled, northDeg, compass.brahmaPct],
   )
+  // drawn rooms report as pseudo-markers at their bbox centre — same list RightPanel analyses
+  const items = useMemo<Marker[]>(
+    () => [...markers, ...roomShapes.flatMap((r) => {
+      const p = roomShapeAnchor(r)
+      return p ? [{ id: r.id, kind: r.kind, label: r.label, note: r.note, p }] : []
+    })],
+    [markers, roomShapes],
+  )
   const ev = useMemo(
-    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers, brahmaPct: compass.brahmaPct }) : null),
-    [closed, center, sampled, northDeg, markers, compass.brahmaPct],
+    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers: items, brahmaPct: compass.brahmaPct }) : null),
+    [closed, center, sampled, northDeg, items, compass.brahmaPct],
   )
   const sevCounts = useMemo<Record<Severity, number>>(() => {
     const c: Record<Severity, number> = { good: 0, info: 0, warn: 0, bad: 0 }
@@ -164,21 +178,31 @@ export function ReportView() {
   }, [ev])
   const verdictLine = useMemo(() => {
     if (!ev) return null
-    if (ev.findings.length === 0) return 'No entrances or rooms are marked yet — pin them on the plan for this report to generate findings.'
+    if (ev.findings.length === 0) {
+      return items.length === 0
+        ? 'No entrances or rooms are marked yet — pin them on the plan for this report to generate findings.'
+        : 'No strongly favourable or unfavourable signals yet for the items marked.'
+    }
     const { good, warn, bad } = sevCounts
-    if (bad > 0) return `${plural(bad, 'finding')} flagged to address, plus ${plural(warn, 'point')} of caution and ${plural(good, 'favourable point')} noted.`
-    if (warn > 0) return `No serious doshas flagged — ${plural(warn, 'point')} of caution noted alongside ${plural(good, 'favourable point')}.`
+    if (bad > 0) {
+      const extras = [
+        warn > 0 ? `${plural(warn, 'point')} of caution` : null,
+        good > 0 ? plural(good, 'favourable point') : null,
+      ].filter(Boolean).join(' and ')
+      return `${plural(bad, 'finding')} flagged to address${extras ? `, plus ${extras} noted` : ''}.`
+    }
+    if (warn > 0) return `No serious doshas flagged — ${plural(warn, 'point')} of caution noted${good > 0 ? ` alongside ${plural(good, 'favourable point')}` : ''}.`
     if (good > 0) return `A favourable layout overall — ${plural(good, 'favourable point')} noted, nothing flagged for concern.`
     return 'No strongly favourable or unfavourable signals yet for the items marked.'
-  }, [ev, sevCounts])
+  }, [ev, sevCounts, items])
   const shapeFindingByZone = useMemo(() => {
     const map = new Map<number, Finding>()
     ev?.findings.forEach((f) => { if (f.zoneIdx != null) map.set(f.zoneIdx, f) })
     return map
   }, [ev])
 
-  const entrances = markers.filter((m) => m.kind === 'entrance')
-  const others = markers.filter((m) => m.kind !== 'entrance')
+  const entrances = items.filter((m) => m.kind === 'entrance')
+  const others = items.filter((m) => m.kind !== 'entrance')
   const kindsPresent = Array.from(new Set(others.map((m) => m.kind))).filter((k) => PLACEMENT_RULES[k])
   const curvedEdgeCount = bulges.filter((b) => Math.abs(b) > 1e-4).length
   const scaleLabel = scaleSourceLabel(scaleSource)
@@ -214,7 +238,7 @@ export function ReportView() {
           <span className="btn-label-lg">Print / Save PDF</span>
           <span className="btn-label-sm">Print</span>
         </button>
-        <button className="btn-ghost" onClick={() => void share()}><Share2 size={15} /> Share</button>
+        <button className="btn-ghost" disabled={!imgBlob} onClick={() => void share()}><Share2 size={15} /> Share</button>
         <button className="btn-ghost" onClick={() => setReportOpen(false)}><X size={15} /> Close</button>
       </div>
 
@@ -237,12 +261,17 @@ export function ReportView() {
         </header>
 
         <div className="report-meta">
+          {/* .print-value twins: print engines clip form controls to their box, so each
+              field's full text prints from a mirror div while the control hides (report.css) */}
           <label>Client <input value={report.client} placeholder="Client name"
-            onChange={(e) => setReport({ client: e.target.value })} /></label>
+            onChange={(e) => setReport({ client: e.target.value })} />
+            <span className="print-value">{report.client}</span></label>
           <label>Address <input value={report.address} placeholder="Site address"
-            onChange={(e) => setReport({ address: e.target.value })} /></label>
+            onChange={(e) => setReport({ address: e.target.value })} />
+            <span className="print-value">{report.address}</span></label>
           <label>Practitioner <input value={report.practitioner} placeholder="Your name"
-            onChange={(e) => setReport({ practitioner: e.target.value })} /></label>
+            onChange={(e) => setReport({ practitioner: e.target.value })} />
+            <span className="print-value">{report.practitioner}</span></label>
         </div>
 
         {ev && (
@@ -274,7 +303,7 @@ export function ReportView() {
 
         {imgUrl
           ? <img className="report-plan" src={imgUrl} alt="Analysed plan" />
-          : <div className="report-plan report-plan-loading">Rendering plan…</div>}
+          : <div className="report-plan report-plan-loading">{imgFailed ? 'Plan image unavailable' : 'Rendering plan…'}</div>}
 
         <section>
           <h2>Property facts</h2>
@@ -306,7 +335,7 @@ export function ReportView() {
             <h2>Vastu findings</h2>
             <div className="report-findings">
               {ev.findings.map((f, i) => {
-                const ctx = center ? findingContext(f, markers, center, northDeg) : null
+                const ctx = center ? findingContext(f, items, center, northDeg) : null
                 return (
                   <div key={i} className={`report-finding sev-${f.severity}`}>
                     <span className="report-finding-mark">
@@ -449,6 +478,7 @@ export function ReportView() {
           <textarea className="report-notes" rows={6} value={report.notes}
             placeholder="Your overall observations, prescriptions and remedies for this property…"
             onChange={(e) => setReport({ notes: e.target.value })} />
+          <div className="print-value">{report.notes}</div>
         </section>
 
         <footer className="report-foot">

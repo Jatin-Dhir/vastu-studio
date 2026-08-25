@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
@@ -10,6 +11,8 @@ export interface SheetRow {
   disabled?: boolean
   /** custom control rendered at the row's right edge (e.g. a segmented toggle) */
   right?: ReactNode
+  /** keep the sheet open after onTap — for toggles whose new state shows in the row */
+  keepOpen?: boolean
   onTap?: () => void
 }
 
@@ -29,10 +32,16 @@ export function ActionSheet({
   rows: SheetRow[]
   onClose: () => void
 }) {
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
   if (!open) return null
   return (
-    <div className="asheet-scrim" onClick={onClose}>
-      <div className="asheet" role="menu" aria-label={title} onClick={(e) => e.stopPropagation()}>
+    <div className="asheet-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="asheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
         <div className="asheet-head">
           <span>{title}</span>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>
@@ -46,7 +55,7 @@ export function ActionSheet({
             disabled={r.disabled}
             onClick={() => {
               if (r.onTap) {
-                onClose()
+                if (!r.keepOpen) onClose()
                 r.onTap()
               }
             }}

@@ -40,11 +40,23 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
     maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
   }
-  if (center && RS > 0 && s.compass.id !== 'none') {
+  // markers, ink and room shapes render wherever they were placed — include them or they crop
+  // (room rects/ellipses/polygons all span exactly their stored points' bbox)
+  for (const p of [...s.markers.map((m) => m.p), ...s.strokes.flatMap((st) => st.pts), ...s.roomShapes.flatMap((r) => r.pts)]) {
+    minX = Math.min(minX, p.x); minY = Math.min(minY, p.y)
+    maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y)
+  }
+  if (center && RS > 0 && s.compass.id !== 'none' && s.closed) {
     minX = Math.min(minX, center.x - RS * 1.16)
     minY = Math.min(minY, center.y - RS * 1.16)
     maxX = Math.max(maxX, center.x + RS * 1.16)
     maxY = Math.max(maxY, center.y + RS * 1.16)
+  } else if (center && R > 0 && s.markers.some((m) => m.kind === 'entrance')) {
+    // no wheel drawn, but entrance ties still reach the plot circumradius (Scene's tieR fallback)
+    minX = Math.min(minX, center.x - R * 1.08)
+    minY = Math.min(minY, center.y - R * 1.08)
+    maxX = Math.max(maxX, center.x + R * 1.08)
+    maxY = Math.max(maxY, center.y + R * 1.08)
   }
   const pad = (maxX - minX) * 0.02 + 24
   minX -= pad; minY -= pad; maxX += pad; maxY += pad
@@ -57,7 +69,8 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   maxY += bandBottom
   const w = maxX - minX, h = maxY - minY
 
-  const k0 = Math.min(4, Math.max(0.6, 2800 / Math.max(w, h)))
+  // second ceiling keeps either output dimension <= 4000px (area under the ~16.7MP iOS canvas cap)
+  const k0 = Math.min(4, Math.max(0.6, 2800 / Math.max(w, h)), 4000 / Math.max(w, h))
   const outW = Math.round(w * k0), outH = Math.round(h * k0)
 
   const dxf = s.bg.kind === 'dxf' && s.bg.dxfText ? importDxf(s.bg.dxfText) : null
@@ -68,10 +81,13 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
     unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels,
     markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes, idPrefix: 'exp',
+    paper: true,
   })
 
   /* title + footer furniture, drawn in world coordinates */
-  const title = (s.bg.name?.replace(/\.[^.]+$/, '') || 'Vastu plan')
+  const rawTitle = (s.bg.name?.replace(/\.[^.]+$/, '') || 'Vastu plan')
+  // long filenames would run under the right-anchored date — trim before composing
+  const title = rawTitle.length > 40 ? rawTitle.slice(0, 39).trimEnd() + '…' : rawTitle
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
   const t1 = w * 0.024, t2 = w * 0.0145
   const northSourceLabel =

@@ -40,6 +40,11 @@
 /* compact print/PDF label, hidden until the phone breakpoint below shows it */
 .report-actions .btn-label-sm { display: none; }
 
+/* print-only twin of each form control's value (client/address/practitioner inputs and
+   the notes textarea) — hidden on screen, swapped in at print time below, because print
+   engines clip a form control's overflowing text instead of flowing it */
+.print-value { display: none; }
+
 /* -----------------------------------------------------------------------
  * New report sections (content-depth pass). Base (non-phone) report rules
  * normally live in src/index.css, but that file is out of scope for this
@@ -90,7 +95,7 @@
   border: 1px solid #E8E4D8;
 }
 .report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1E2430; }
-.report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #8A94A6; }
+.report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #667080; }
 .report-stat-good .report-stat-num { color: #3E8E52; }
 .report-stat-warn .report-stat-num { color: #B07A1E; }
 .report-stat-bad .report-stat-num { color: #B23A2E; }
@@ -110,8 +115,10 @@
   vertical-align: 1px;
   white-space: nowrap;
 }
-.report-pill-good { background: rgba(62,142,82,0.14); color: #3E8E52; }
-.report-pill-warn { background: rgba(176,122,30,0.14); color: #B07A1E; }
+/* good/warn text darkened from the tint hues so pills hold ~4.5:1 on the paper page
+   (same contrast pass as index.css's #8A6E24 headings / #667080 labels) */
+.report-pill-good { background: rgba(62,142,82,0.14); color: #35794A; }
+.report-pill-warn { background: rgba(176,122,30,0.14); color: #8F6318; }
 .report-pill-bad  { background: rgba(178,58,46,0.14); color: #B23A2E; }
 .report-pill-info { background: rgba(74,124,148,0.14); color: #4A7C94; }
 
@@ -138,13 +145,13 @@
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-size: 10px;
-  color: #8A94A6;
+  color: #667080;
   margin-bottom: 4px;
 }
 .report-rulekey-row { padding: 2px 0; }
 .report-rulekey-row b { color: #1E2430; }
 
-.lbl-balanced { color: #9AA2B0; font-style: italic; }
+.lbl-balanced { color: #667080; font-style: italic; }
 
 /* ----- phone layout, <=760px (matches the app's existing mobile breakpoint) ----- */
 
@@ -239,6 +246,32 @@
   /* never let the phone-only min-width + overflow-x:auto (screen-scoped above,
      but belt-and-suspenders) clip a table column out of the printed page */
   .report-table-wrap { overflow: visible; }
+
+  /* form controls print as clipped boxes — hide them and print their .print-value twin,
+     so notes beyond the textarea's ~6 rows (and long meta values) flow in full */
+  .report-notes,
+  .report-meta input { display: none; }
+  .print-value { display: block; white-space: pre-wrap; }
+
+  /* survive Chrome's default "Background graphics: off" — without this the zone colour
+     key column prints as blank cells and the verdict pills lose their capsules */
+  .report-zonechip,
+  .report-pill,
+  .report-stat {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  /* the plan PNG scales to fit one page instead of being sliced at a page break —
+     max-height clears A4/Letter printable heights with room for the heading above */
+  .report-plan {
+    break-inside: avoid;
+    width: auto;
+    max-width: 100%;
+    max-height: 235mm;
+    margin: 0 auto;
+    display: block;
+  }
 
   /* keep a section heading from printing alone at the bottom of a page */
   .report-page h2 { break-after: avoid-page; }

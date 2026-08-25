@@ -96,17 +96,21 @@ export function ProjectsModal() {
               <input autoFocus className="proj-rename" value={renameVal}
                 onChange={(e) => setRenameVal(e.target.value)}
                 onBlur={() => void rename(r.id)}
-                onKeyDown={(e) => { if (e.key === 'Enter') void rename(r.id); if (e.key === 'Escape') setRenaming(null) }} />
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void rename(r.id)
+                  // stop Escape here or the Dialog's window listener closes the whole modal
+                  if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) }
+                }} />
             ) : (
               <button className="proj-name" onClick={() => void open(r.id)}>
                 <b>{r.name}</b>
                 <span>{r.id === currentProjectId ? 'open now · ' : ''}{ago(r.updatedAt)}</span>
               </button>
             )}
-            <button className="icon-btn" data-tip="Rename"
+            <button className="icon-btn" aria-label="Rename" data-tip="Rename"
               onClick={() => { setRenaming(r.id); setRenameVal(r.name) }}><Pencil size={13} /></button>
-            <button className="icon-btn" data-tip="Duplicate" onClick={() => void duplicate(r.id)}><Copy size={13} /></button>
-            <button className="icon-btn danger" data-tip="Delete" onClick={() => remove(r.id, r.name)}><Trash2 size={13} /></button>
+            <button className="icon-btn" aria-label="Duplicate" data-tip="Duplicate" onClick={() => void duplicate(r.id)}><Copy size={13} /></button>
+            <button className="icon-btn danger" aria-label="Delete" data-tip="Delete" onClick={() => remove(r.id, r.name)}><Trash2 size={13} /></button>
           </div>
         ))}
       </div>

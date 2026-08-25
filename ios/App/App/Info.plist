@@ -68,5 +68,7 @@
 	<string>Pick a floor-plan photo or screenshot to analyse.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Photograph a printed floor plan to analyse.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Centre the map on the plot you are standing on.</string>
 </dict>
 </plist>

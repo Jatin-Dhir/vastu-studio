@@ -183,6 +183,8 @@ export function MapModal() {
   const debounceRef = useRef<number>(0)
   const searchSeq = useRef(0)
   const cancelledRef = useRef(false)
+  /** capture generation — stragglers from a cancelled run must not touch a newer run's state */
+  const capSeq = useRef(0)
   const mountedRef = useRef(true)
   /** the last place the user deliberately navigated to (search hit or GPS) — lets a capture's
    *  recent-chip carry a real name instead of mislabeling a panned-away location. */
@@ -205,6 +207,7 @@ export function MapModal() {
   }
 
   useEffect(() => {
+    mountedRef.current = true // StrictMode's setup→cleanup→setup leaves the ref false otherwise
     if (!mapDiv.current) return
     const mem = loadMem()
     const map = L.map(mapDiv.current, {
@@ -216,7 +219,7 @@ export function MapModal() {
     mapRef.current = map
     L.control.scale({ position: 'bottomleft', metric: true, imperial: true, maxWidth: 110 }).addTo(map)
     map.on('zoomend', () => { setZoomNow(map.getZoom()); updateFootprint() })
-    map.on('dragstart zoomstart', () => { setHits([]); setNoResults(false); setLinkHint(false); setSearchFailed(false) })
+    map.on('dragstart zoomstart', () => { searchSeq.current++; setSearching(false); setHits([]); setNoResults(false); setLinkHint(false); setSearchFailed(false) })
     updateFootprint()
     if (import.meta.env.DEV) (window as any).__vastuMap = map
     return () => {
@@ -259,6 +262,7 @@ export function MapModal() {
       if (capturing) {
         e.stopPropagation()
         cancelledRef.current = true
+        capSeq.current++
         setCapturing(false)
         setCaptureProgress(null)
         return
@@ -301,6 +305,8 @@ export function MapModal() {
     setSearchFailed(false)
     setActiveIndex(-1)
     window.clearTimeout(debounceRef.current)
+    searchSeq.current++ // orphan any in-flight request so it can't repopulate the dropdown
+    setSearching(false)
     // pasted coordinates or a Google/Apple Maps link jump straight there
     const co = parseCoords(text)
     if (co) {
@@ -318,6 +324,8 @@ export function MapModal() {
   const clearSearch = () => {
     setQ(''); setHits([]); setNoResults(false); setLinkHint(false); setSearchFailed(false); setActiveIndex(-1)
     window.clearTimeout(debounceRef.current)
+    searchSeq.current++
+    setSearching(false)
     searchInputRef.current?.focus()
   }
 
@@ -353,6 +361,7 @@ export function MapModal() {
 
   const cancelCapture = () => {
     cancelledRef.current = true
+    capSeq.current++
     setCapturing(false)
     setCaptureProgress(null)
   }
@@ -361,6 +370,7 @@ export function MapModal() {
     const map = mapRef.current
     if (!map || capturing) return
     cancelledRef.current = false
+    const gen = ++capSeq.current
     setCapturing(true)
     setCaptureProgress(null)
     try {
@@ -368,6 +378,9 @@ export function MapModal() {
       const cfg = provider(captureStyle)
       const z = Math.round(map.getZoom())
       const b = map.getBounds()
+      // freeze alongside the bounds — the map can still be navigated mid-stitch (search, locate)
+      const centerAtCapture = map.getCenter()
+      const zoomAtCapture = map.getZoom()
       let tz = Math.min(cfg.native, z + 2)
       let nw = map.project(b.getNorthWest(), tz)
       let se = map.project(b.getSouthEast(), tz)
@@ -398,7 +411,7 @@ export function MapModal() {
               if (settled) return
               settled = true
               done++
-              setCaptureProgress({ done, total })
+              if (gen === capSeq.current) setCaptureProgress({ done, total })
               resolve(ok)
             }
             // a stalled connection must never hang the capture forever
@@ -418,7 +431,7 @@ export function MapModal() {
         }
       }
       const results = await Promise.all(jobs)
-      if (cancelledRef.current || !mountedRef.current) return
+      if (cancelledRef.current || gen !== capSeq.current || !mountedRef.current) return
       const okCount = results.filter(Boolean).length
       if (okCount === 0) throw new Error('Tiles could not be fetched — check the connection, or screenshot the map and paste it instead')
 
@@ -431,22 +444,22 @@ export function MapModal() {
       ctx.fillStyle = 'rgba(255,255,255,0.92)'
       ctx.fillText(credit, w - tw - 9, h - 8)
 
-      const center = map.getCenter()
-      const metersPerPx = (156543.03392 * Math.cos((center.lat * Math.PI) / 180)) / Math.pow(2, tz)
+      const metersPerPx = (156543.03392 * Math.cos((centerAtCapture.lat * Math.PI) / 180)) / Math.pow(2, tz)
       // street tiles are crisp text/lines (PNG suits them); imagery stays JPEG for size
       const mime: 'image/jpeg' | 'image/png' = captureStyle === 'osm' ? 'image/png' : 'image/jpeg'
       const dataUrl = mime === 'image/jpeg' ? canvas.toDataURL(mime, 0.9) : canvas.toDataURL(mime)
       setPreview({
         dataUrl, w, h, metersPerPx, okCount, total: jobs.length, mime,
-        center: { lat: center.lat, lon: center.lng },
-        zoomAtCapture: map.getZoom(), styleAtCapture: captureStyle,
+        center: { lat: centerAtCapture.lat, lon: centerAtCapture.lng },
+        zoomAtCapture, styleAtCapture: captureStyle,
       })
     } catch (err) {
-      if (!cancelledRef.current && mountedRef.current) {
+      if (!cancelledRef.current && gen === capSeq.current && mountedRef.current) {
         useStore.getState().toast(err instanceof Error ? err.message : 'Capture failed', 'warn')
       }
     } finally {
-      if (mountedRef.current) { setCapturing(false); setCaptureProgress(null) }
+      // a cancelled/superseded run's state was already reset, or is owned by the newer run
+      if (gen === capSeq.current && mountedRef.current) { setCapturing(false); setCaptureProgress(null) }
     }
   }
 
@@ -454,6 +467,8 @@ export function MapModal() {
    *  unreadable capture. Each concern is a toast-with-action the user must actively confirm. */
   const attemptCapture = (opts?: { skipReplace?: boolean; skipZoom?: boolean }) => {
     if (capturing || preview) return
+    // toast actions fire against a stale render's closure — read zoom from the live map
+    const shNow = sharpness(mapRef.current?.getZoom() ?? zoomNow)
     const s = useStore.getState()
     if (s.locked) { s.toast('Plan is locked — tap the padlock to edit', 'warn'); return }
     if (!opts?.skipReplace && s.pts.length >= 3) {
@@ -461,7 +476,7 @@ export function MapModal() {
         () => attemptCapture({ skipReplace: true }))
       return
     }
-    if (!opts?.skipZoom && !sh.good) {
+    if (!opts?.skipZoom && !shNow.good) {
       s.toast('Zoomed out too far for a sharp trace — capture anyway?', 'warn', 'Capture anyway',
         () => attemptCapture({ skipReplace: true, skipZoom: true }))
       return
@@ -559,7 +574,7 @@ export function MapModal() {
                 setActiveIndex((i) => (i + 1) % hits.length)
               } else if (e.key === 'ArrowUp' && hits.length > 0) {
                 e.preventDefault()
-                setActiveIndex((i) => (i - 1 + hits.length) % hits.length)
+                setActiveIndex((i) => (i <= 0 ? hits.length - 1 : i - 1))
               } else if (e.key === 'Enter') {
                 if (hits.length > 0) { goto(hits[activeIndex >= 0 ? activeIndex : 0]) }
                 else if (q.trim().length >= 3) { window.clearTimeout(debounceRef.current); void runSearch(q) }
@@ -624,7 +639,7 @@ export function MapModal() {
       <div className="map-holder">
         <div ref={mapDiv} className="map-container" />
         {!preview && <div className="map-attrib">{provider().credit}</div>}
-        {!preview && (
+        {!preview && !capturing && (
           <button className="map-locate" onClick={locateMe} disabled={locating} aria-label="Locate me" title="Go to my location">
             {locating ? <Loader2 size={17} className="spin" /> : <LocateFixed size={17} />}
           </button>

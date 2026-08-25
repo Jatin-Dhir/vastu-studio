@@ -5,19 +5,38 @@ import { dist } from '../geometry'
 import { M_PER_FT, formatScale } from '../format'
 import { haptic } from '../native'
 
+const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
+
 export function Dialog(props: { title: string; onClose: () => void; children: React.ReactNode; width?: number; className?: string }) {
+  const boxRef = useRef<HTMLDivElement>(null)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose() }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+  useEffect(() => {
+    const prev = document.activeElement as HTMLElement | null
+    boxRef.current?.focus()
+    return () => prev?.focus()
+  }, [])
+  // keep Tab inside the dialog — the scrim only blocks pointers, not focus
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== 'Tab' || !boxRef.current) return
+    const items = boxRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)
+    if (items.length === 0) return
+    const first = items[0]
+    const last = items[items.length - 1]
+    if (e.shiftKey && (e.target === first || e.target === boxRef.current)) { e.preventDefault(); last.focus() }
+    else if (!e.shiftKey && e.target === last) { e.preventDefault(); first.focus() }
+  }
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) props.onClose() }}>
-      <div className={`dialog ${props.className ?? ''}`} style={props.width ? { width: props.width, maxWidth: 'calc(100vw - 20px)' } : undefined}>
+      <div ref={boxRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={props.title} onKeyDown={trapTab}
+        className={`dialog ${props.className ?? ''}`} style={props.width ? { width: props.width, maxWidth: 'calc(100vw - 20px)' } : undefined}>
         <div className="dialog-head">
           <h3>{props.title}</h3>
-          <button className="icon-btn" onClick={props.onClose}><X size={15} /></button>
+          <button className="icon-btn" aria-label="Close" onClick={props.onClose}><X size={15} /></button>
         </div>
         {props.children}
       </div>
@@ -70,6 +89,7 @@ export function CalibrateDialog() {
     const next = s.pts.length === 0 ? ' Now trace the boundary.' : ''
     s.toast(`Scale set (${formatScale(metersPerPx, s.unit)}).${next}`, 'ok')
     if (s.pts.length === 0) s.setTool('trace')
+    else s.setTool('select')
   }
 
   return (
@@ -138,7 +158,8 @@ export function MarkerDialog() {
       </div>
       <div className="cal-row">
         <input type="text" value={label} placeholder="Name (e.g. Main door)"
-          onChange={(e) => setLabel(e.target.value)} />
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
         <textarea className="marker-note" value={note} rows={3}
           placeholder="Notes / remedy (goes into the report)…"
           onChange={(e) => setNote(e.target.value)} />
@@ -184,7 +205,8 @@ export function RoomShapeDialog() {
       </div>
       <div className="cal-row">
         <input type="text" value={label} placeholder="Name (e.g. Bedroom 2)"
-          onChange={(e) => setLabel(e.target.value)} />
+          onChange={(e) => setLabel(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
         <textarea className="marker-note" value={note} rows={3}
           placeholder="Notes / remedy (goes into the report)…"
           onChange={(e) => setNote(e.target.value)} />
@@ -199,6 +221,7 @@ export function RoomShapeDialog() {
 
 const SHORTCUTS: [string, string][] = [
   ['V', 'Select · pan'], ['T', 'Trace outline'], ['R', 'Draw a room or area'], ['P', 'Mark doors & objects'],
+  ['D', 'Draw on the plan — pen & lines'],
   ['C', 'Set scale'], ['N', 'Align north'], ['M', 'Pin centre'],
   ['F', 'Fit view'], ['Enter', 'Close outline'], ['Esc / Backspace', 'Undo last point · dismiss'],
   ['Ctrl+Z / Ctrl+Y', 'Undo · redo'], ['Double-click edge', 'Insert point'], ['Right-click point', 'Delete point'],

@@ -10,7 +10,7 @@
      changed file gets a new URL, so a cached hit is NEVER stale. Cache-first
      is correct and fast for these, no revalidation needed. */
 const CACHE = 'vastu-shell-v2'
-const isHashedAsset = (url) => /\/assets\/.+-[\w-]{8,}\.(js|css|woff2?)$/.test(url.pathname)
+const isHashedAsset = (url) => /\/assets\/.+-[\w-]{8,}\.(m?js|css|woff2?)$/.test(url.pathname)
 
 self.addEventListener('install', () => {
   self.skipWaiting()
@@ -45,7 +45,8 @@ self.addEventListener('fetch', (e) => {
   // shell/navigation: network-first so a deploy reaches returning users on
   // their very next load, not the one after — cache is the offline fallback only
   e.respondWith(
-    fetch(e.request)
+    // no-cache: skip the host's 10-min HTTP cache and revalidate (a 304 when unchanged)
+    fetch(e.request, { cache: 'no-cache' })
       .then((res) => {
         if (res.ok) caches.open(CACHE).then((cache) => cache.put(e.request, res.clone()))
         return res

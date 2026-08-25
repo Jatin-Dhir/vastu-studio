@@ -44,8 +44,10 @@ function encodePng(w, h, rgba) {
   ])
 }
 
-/** Signed distance helpers, all in [0..1] unit space. */
-function renderIcon(size) {
+/** Signed distance helpers, all in [0..1] unit space.
+    maskable: full-bleed opaque square (no rounded cutout) with the glyph shrunk
+    into the 80% safe zone, per the maskable-icon spec. */
+function renderIcon(size, maskable = false) {
   const img = Buffer.alloc(size * size * 4)
   const bg = [11, 12, 16], gold = [217, 180, 91], cream = [243, 229, 192]
   const put = (i, c, a) => {
@@ -57,28 +59,29 @@ function renderIcon(size) {
   }
   const S = size
   const corner = S * 0.22
+  const g = maskable ? 0.8 : 1 // glyph scale — safe-zone inset for maskable
   const aa = 1.2 // px anti-alias band
   const smooth = (d) => Math.max(0, Math.min(1, 0.5 - d / aa))
   for (let y = 0; y < S; y++) {
     for (let x = 0; x < S; x++) {
       const i = (y * S + x) * 4
-      // rounded-square background
+      // rounded-square background (full bleed when maskable)
       const qx = Math.abs(x - S / 2) - (S / 2 - corner)
       const qy = Math.abs(y - S / 2) - (S / 2 - corner)
       const dRect = Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - corner
-      const aBg = smooth(dRect)
+      const aBg = maskable ? 1 : smooth(dRect)
       if (aBg <= 0) continue
       put(i, bg, aBg)
       // diamond band (manhattan ring)
       const m = Math.abs(x - S / 2) + Math.abs(y - S / 2)
-      const rOuter = S * 0.34, band = S * 0.028
+      const rOuter = S * 0.34 * g, band = S * 0.028 * g
       const dBand = Math.abs(m - rOuter) - band
       put(i, gold, smooth(dBand) * aBg)
       // inner diamond, faint
-      const dBand2 = Math.abs(m - S * 0.21) - S * 0.012
+      const dBand2 = Math.abs(m - S * 0.21 * g) - S * 0.012 * g
       put(i, [140, 118, 66], smooth(dBand2) * aBg)
       // centre dot
-      const dDot = Math.hypot(x - S / 2, y - S / 2) - S * 0.055
+      const dDot = Math.hypot(x - S / 2, y - S / 2) - S * 0.055 * g
       put(i, cream, smooth(dDot) * aBg)
     }
   }
@@ -91,3 +94,5 @@ for (const s of [512, 192, 180]) {
   writeFileSync(join(out, `icon-${s}.png`), renderIcon(s))
   console.log(`icon-${s}.png`)
 }
+writeFileSync(join(out, 'icon-512-maskable.png'), renderIcon(512, true))
+console.log('icon-512-maskable.png')

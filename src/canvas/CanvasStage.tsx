@@ -2,20 +2,18 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD, strokePathD } from './Scene'
 import { importDxf, type DxfImport } from '../importers/dxf'
-import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgePoint, nearestOnEdge, polar, sampledPolygon, simplifyPath } from '../geometry'
+import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgeLength, edgePoint, nearestOnEdge, polar, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import { haptic } from '../native'
+import { setGestureBusy } from './gesture'
 import { markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
 const CLOSE_PX = COARSE ? 20 : 13
 const HIT_PX = COARSE ? 18 : 12
-const pushHistory = () =>
-  useStore.setState((s) => ({
-    undoStack: [...s.undoStack, { pts: s.pts, closed: s.closed, bulges: s.bulges, markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes }].slice(-100),
-    redoStack: [],
-  }))
+const TAP_SLOP = COARSE ? 9 : 4
+const pushHistory = () => useStore.getState().pushHistory()
 
 /** One hint per session when geometry edits happen while the centre is pinned. */
 let warnedPinnedCenter = false
@@ -40,6 +38,7 @@ interface DragState {
   mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape'
   idx: number
   markerId: string | null
+  rsid: string | null
   startX: number
   startY: number
   lastX: number
@@ -94,7 +93,7 @@ export function CanvasStage() {
   const activeInkRef = useRef<SVGPathElement>(null)
   const snapDotsRef = useRef<SVGGElement>(null)
   const penCursorRef = useRef<Pt | null>(null)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
@@ -224,8 +223,8 @@ export function CanvasStage() {
     ].map((p) => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos }))
     const rminX = Math.min(...corners.map((p) => p.x)), rmaxX = Math.max(...corners.map((p) => p.x))
     const rminY = Math.min(...corners.map((p) => p.y)), rmaxY = Math.max(...corners.map((p) => p.y))
-    const rw = rmaxX - rminX, rh = rmaxY - rminY
-    const k = Math.min(availW / rw, availH / rh) * 0.95
+    const rw = Math.max(rmaxX - rminX, 1), rh = Math.max(rmaxY - rminY, 1)
+    const k = Math.min(60, Math.max(0.02, Math.min(availW / rw, availH / rh) * 0.95))
     const tx = padL + (availW - rw * k) / 2 - rminX * k
     const ty = padT + (availH - rh * k) / 2 - rminY * k
     setViewLive({ tx, ty, k, rot })
@@ -283,8 +282,19 @@ export function CanvasStage() {
     const svg = svgRef.current!
     try { svg.setPointerCapture(e.pointerId) } catch { /* synthetic or stale pointer */ }
     pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
-    if (pointers.current.size === 2) {
-      drag.current.mode = 'idle'
+    setGestureBusy(true)
+    if (pointers.current.size >= 2) {
+      // another finger aborts any in-flight gesture — clear its live preview too, not just its mode
+      const dd = drag.current
+      if (dd.mode === 'room-shape') setActiveRoom(null)
+      else if (dd.mode === 'drawing') {
+        activeStrokeRef.current = []
+        penCursorRef.current = null
+        activeInkRef.current?.setAttribute('d', '')
+        setSnapDot(0, null)
+        setSnapDot(1, null)
+      }
+      dd.mode = 'idle'
       lastPinch.current = null
       return
     }
@@ -299,7 +309,7 @@ export function CanvasStage() {
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY
     d.lastX = e.clientX; d.lastY = e.clientY
-    d.moved = false; d.pushed = false; d.markerId = null
+    d.moved = false; d.pushed = false; d.markerId = null; d.rsid = null
     d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true); setDragIdx({ mode: 'vertex', idx: d.idx }) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true); setDragIdx({ mode: 'bulge', idx: d.idx }) }
@@ -311,10 +321,18 @@ export function CanvasStage() {
       return
     }
     else if (rsid != null) {
-      useStore.getState().setSelectedRoomShape(
-        useStore.getState().selectedRoomShape === rsid ? null : rsid)
-      d.mode = 'idle'
-      return
+      const s0 = useStore.getState()
+      if (s0.tool === 'room' && !s0.locked && e.button === 0) {
+        // room tool: a press on an existing room starts a new shape on top of it —
+        // a press that stays a tap still selects, on release
+        d.mode = 'room-shape'
+        d.rsid = rsid
+        setActiveRoom([d.grabbed!, d.grabbed!])
+      } else {
+        s0.setSelectedRoomShape(s0.selectedRoomShape === rsid ? null : rsid)
+        d.mode = 'idle'
+        return
+      }
     }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
@@ -362,7 +380,7 @@ export function CanvasStage() {
       pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
     }
     // pinch: zoom + pan + (after intent) twist-to-rotate — all direct to the DOM
-    if (pointers.current.size === 2) {
+    if (pointers.current.size >= 2) {
       const [p1, p2] = [...pointers.current.values()]
       const dpx = Math.hypot(p2.x - p1.x, p2.y - p1.y)
       const angNow = (Math.atan2(p2.y - p1.y, p2.x - p1.x) * 180) / Math.PI
@@ -393,7 +411,7 @@ export function CanvasStage() {
     if (needCursor) setCursor(world)
     if (d.mode === 'idle') return
     const movedPx = Math.hypot(e.clientX - d.startX, e.clientY - d.startY)
-    if (movedPx > 4) d.moved = true
+    if (movedPx > TAP_SLOP) d.moved = true
 
     if (d.mode === 'maybe-pan' && d.moved) d.mode = 'pan'
     if (d.mode === 'pan') {
@@ -403,7 +421,7 @@ export function CanvasStage() {
       return
     }
     d.lastX = e.clientX; d.lastY = e.clientY
-    if (d.mode === 'vertex' && d.moved) {
+    if (d.mode === 'vertex' && d.moved && !s.locked) {
       if (!d.pushed) {
         pushHistory(); d.pushed = true
         if (s.centerOverride && !warnedPinnedCenter) {
@@ -419,7 +437,7 @@ export function CanvasStage() {
       s.movePoint(d.idx, p)
       return
     }
-    if (d.mode === 'center' && d.moved) {
+    if (d.mode === 'center' && d.moved && !s.locked) {
       s.setCenterOverride(world)
       return
     }
@@ -464,18 +482,18 @@ export function CanvasStage() {
       setActiveRoom([d.grabbed, p2])
       return
     }
-    if ((d.mode === 'calA' || d.mode === 'calB') && d.moved) {
+    if ((d.mode === 'calA' || d.mode === 'calB') && d.moved && !s.locked) {
       if (d.mode === 'calA') s.setCal(world, s.calB)
       else s.setCal(s.calA, world)
       return
     }
-    if (d.mode === 'calLine' && d.moved && d.grabbed && s.calA && s.calB) {
+    if (d.mode === 'calLine' && d.moved && d.grabbed && s.calA && s.calB && !s.locked) {
       const dx = world.x - d.grabbed.x, dy = world.y - d.grabbed.y
       d.grabbed = world
       s.setCal({ x: s.calA.x + dx, y: s.calA.y + dy }, { x: s.calB.x + dx, y: s.calB.y + dy })
       return
     }
-    if (d.mode === 'bulge' && d.moved) {
+    if (d.mode === 'bulge' && d.moved && !s.locked) {
       if (!d.pushed) {
         pushHistory(); d.pushed = true
         if (s.centerOverride && !warnedPinnedCenter) {
@@ -497,6 +515,9 @@ export function CanvasStage() {
 
   const onPointerUp = (e: React.PointerEvent<SVGSVGElement>) => {
     pointers.current.delete(e.pointerId)
+    if (pointers.current.size === 0) setGestureBusy(false)
+    // 3+ fingers: when one lifts, drop the stale pair so the survivors re-seed on their next move
+    if (pointers.current.size >= 2) lastPinch.current = null
     if (pointers.current.size < 2 && lastPinch.current) {
       // pinch ended: settle a near-right-angle tilt onto the nearest 90° (not just level)
       lastPinch.current = null
@@ -548,6 +569,9 @@ export function CanvasStage() {
         if (big) {
           haptic('light')
           s0.addRoomShape(s0.roomDrawMode, [p1, p2])
+        } else if (d.rsid) {
+          // the press began on an existing room and stayed a tap — select it
+          s0.setSelectedRoomShape(s0.selectedRoomShape === d.rsid ? null : d.rsid)
         }
       }
       return
@@ -592,7 +616,7 @@ export function CanvasStage() {
         }
         lastTap.current = { t: now, x: e.clientX, y: e.clientY }
       }
-      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); s.setSelectedStroke(null); return
+      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); s.setSelectedStroke(null); s.setSelectedRoomShape(null); return
     }
     if (s.locked) return
 
@@ -632,7 +656,10 @@ export function CanvasStage() {
         // snap a new corner onto an already-placed one, or onto an edge it's crossing —
         // catches the "close a notch" / "align with the wall I just drew" cases
         const snap = snapToOutline(world)
-        if (snap.snapped) {
+        // …but never back onto the corner just placed — that would append a coincident duplicate
+        const lastPt = s.pts[s.pts.length - 1]
+        const dupSnap = snap.snapped && lastPt != null && dist(snap.p, lastPt) < 1e-9
+        if (snap.snapped && !dupSnap) {
           p = snap.p
           haptic('light')
           if (snapDotsRef.current) {
@@ -841,14 +868,14 @@ export function CanvasStage() {
               const p1 = pts[prevI], p2 = pts[idx]
               if (p1 && p2) {
                 const mid = edgePoint(p1, p2, bulges[prevI] ?? 0, 0.5)
-                labels.push(<DragLabel key="prev" at={{ x: mid.x, y: mid.y - 14 / k }} text={formatLen(dist(p1, p2) * metersPerPx, unit)} />)
+                labels.push(<DragLabel key="prev" at={{ x: mid.x, y: mid.y - 14 / k }} text={formatLen(edgeLength(p1, p2, bulges[prevI] ?? 0) * metersPerPx, unit)} />)
               }
             }
             if (closed || idx < n - 1) {
               const p1 = pts[idx], p2 = pts[nextI]
               if (p1 && p2 && nextI !== prevI) {
                 const mid = edgePoint(p1, p2, bulges[idx] ?? 0, 0.5)
-                labels.push(<DragLabel key="next" at={{ x: mid.x, y: mid.y - 14 / k }} text={formatLen(dist(p1, p2) * metersPerPx, unit)} />)
+                labels.push(<DragLabel key="next" at={{ x: mid.x, y: mid.y - 14 / k }} text={formatLen(edgeLength(p1, p2, bulges[idx] ?? 0) * metersPerPx, unit)} />)
               }
             }
             return <g>{labels}</g>
@@ -978,8 +1005,12 @@ export function CanvasStage() {
               <circle cx={m.p.x} cy={m.p.y} r={13 / k} fill="none" stroke={GOLD}
                 strokeWidth={1.6 / k} opacity={0.9} />
             )}
-            <circle data-mkid={m.id} cx={m.p.x} cy={m.p.y} r={(COARSE ? 20 : 13) / k}
-              fill="rgba(0,0,0,0)" style={{ cursor: 'grab' }} />
+            {/* hit circle only in the tools that mean to touch markers — drawing/tracing
+                near a pin must not silently drag it */}
+            {(tool === 'select' || tool === 'marker') && (
+              <circle data-mkid={m.id} cx={m.p.x} cy={m.p.y} r={(COARSE ? 20 : 13) / k}
+                fill="rgba(0,0,0,0)" style={{ cursor: 'grab' }} />
+            )}
           </g>
         ))}
 

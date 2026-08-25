@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { ArrowRight, Check, Compass, MapPin, MousePointerClick, X } from 'lucide-react'
 import { useStore } from '../store'
 import { formatScale } from '../format'
-import { goToStep, markReportSeen, useGuide } from './steps'
+import { goToStep, useGuide } from './steps'
 
 const HIDE_KEY = 'vastu.guide.hidden'
 
@@ -58,7 +58,7 @@ export function GuideCard() {
             label: `Use ${suggestion.label}`,
             primary: true,
             onTap: () => {
-              s.setMetersPerPx(suggestion.metersPerPx, 'pdf')
+              s.setMetersPerPx(suggestion.metersPerPx, suggestion.source)
               s.toast(`Scale set — ${formatScale(suggestion.metersPerPx, unit)}`, 'ok')
             },
           },
@@ -77,7 +77,7 @@ export function GuideCard() {
         label: 'Up is north',
         icon: Check,
         onTap: () => {
-          s.setNorth(s.northDeg, 'manual')
+          s.setNorth(0, 'manual')
           s.toast('North confirmed straight up', 'ok')
         },
       },
@@ -110,10 +110,7 @@ export function GuideCard() {
       label: 'Open the report',
       icon: ArrowRight,
       primary: true,
-      onTap: () => {
-        s.setReportOpen(true)
-        markReportSeen()
-      },
+      onTap: () => s.setReportOpen(true),
     }]
   }
 

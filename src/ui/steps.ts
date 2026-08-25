@@ -12,15 +12,6 @@ export interface TrackStep {
   skipped?: boolean
 }
 
-const REPORT_SEEN_KEY = 'vastu.reportSeen.v1'
-
-export function markReportSeen(): void {
-  try { localStorage.setItem(REPORT_SEEN_KEY, '1') } catch { /* private mode */ }
-}
-export function reportSeen(): boolean {
-  try { return localStorage.getItem(REPORT_SEEN_KEY) === '1' } catch { return false }
-}
-
 /**
  * One derived truth for the whole journey — the stepper, the mobile chip and
  * the guide card all read this. Map captures auto-complete scale and north,
@@ -35,13 +26,14 @@ export function useGuide(): { track: TrackStep[]; active: number; step: GuideSte
   const north = useStore((s) => s.northSource != null)
   const compassOn = useStore((s) => s.compass.id !== 'none')
   const nMarkers = useStore((s) => s.markers.length)
+  const reportOpened = useStore((s) => s.reportOpened)
 
   const track: TrackStep[] = [
     { id: 'import', label: 'Import', done: bg },
     { id: 'outline', label: 'Outline', done: closed },
     { id: 'scale', label: 'Scale', done: scaled, skipped: !scaled && scaleSkipped },
     { id: 'north', label: 'North', done: north },
-    { id: 'report', label: 'Report', done: closed && compassOn && reportSeen() },
+    { id: 'report', label: 'Report', done: closed && compassOn && reportOpened },
   ]
   const active = track.findIndex((s) => !s.done && !s.skipped)
 
@@ -52,7 +44,7 @@ export function useGuide(): { track: TrackStep[]; active: number; step: GuideSte
   else if (!north) step = 'north'
   else if (!compassOn) step = 'analyse'
   else if (nMarkers === 0) step = 'mark'
-  else if (!reportSeen()) step = 'report'
+  else if (!reportOpened) step = 'report'
   void nPts
   return { track, active, step }
 }
@@ -81,6 +73,5 @@ export function goToStep(id: TrackStep['id']): void {
     }
     if (s.compass.id === 'none') s.setCompass({ id: 'zones16' })
     s.setReportOpen(true)
-    markReportSeen()
   }
 }

@@ -53,6 +53,7 @@ export function ToolRail() {
               disabled={!hasBg && id !== 'select'}
               onClick={need(() => setTool(id))}
               data-tip={`${label}  ·  ${kbd}`}
+              aria-label={label}
             >
               <Icon size={17} />
               <span className="rail-label">{short}</span>
@@ -61,18 +62,19 @@ export function ToolRail() {
         </Fragment>
       ))}
       <div className="hsep" />
-      <button className="rail-btn hide-mobile" data-tip="Import PDF / DXF / image"
+      <button className="rail-btn hide-mobile" data-tip="Import PDF / DXF / image" aria-label="Import PDF / DXF / image"
         onClick={() => window.dispatchEvent(new CustomEvent('vastu:open-file'))}>
         <Upload size={17} />
         <span className="rail-label">Import</span>
       </button>
-      <button className="rail-btn hide-mobile" data-tip="Import from Maps"
+      <button className="rail-btn hide-mobile" data-tip="Import from Maps" aria-label="Import from Maps"
         onClick={() => setMapOpen(true)}>
         <MapIcon size={17} />
         <span className="rail-label">Maps</span>
       </button>
       <div className="hsep hide-mobile" />
       <button className="rail-btn danger hide-mobile" data-tip="Start fresh — clears plan, outline & scale"
+        aria-label="Start fresh — clears plan, outline & scale"
         onClick={() => {
           useStore.getState().toast('Clear the plan, outline and scale?', 'warn', 'Clear everything', () => {
             window.dispatchEvent(new CustomEvent('vastu:reset'))

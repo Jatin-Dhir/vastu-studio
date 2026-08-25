@@ -1,4 +1,3 @@
-import { useState } from 'react'
 import {
   Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
   MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Square as SquareIcon, Trash2, Undo2, Upload,
@@ -27,9 +26,12 @@ export function TopBar() {
   const hasRoomShapes = useStore((s) => s.roomShapes.length > 0)
   const hasOutline = useStore((s) => s.pts.length > 0)
   const { track, active } = useGuide()
-  const [moreOpen, setMoreOpen] = useState(false)
-  const [clearOpen, setClearOpen] = useState(false)
-  const [appearanceOpen, setAppearanceOpen] = useState(false)
+  const moreOpen = useStore((s) => s.moreOpen)
+  const setMoreOpen = useStore((s) => s.setMoreOpen)
+  const clearOpen = useStore((s) => s.clearOpen)
+  const setClearOpen = useStore((s) => s.setClearOpen)
+  const appearanceOpen = useStore((s) => s.appearanceOpen)
+  const setAppearanceOpen = useStore((s) => s.setAppearanceOpen)
 
   const clearRows: SheetRow[] = [
     {
@@ -79,6 +81,8 @@ export function TopBar() {
       icon: Ruler,
       label: 'Units',
       sub: unit === 'ft' ? 'Feet & inches' : 'Metres',
+      keepOpen: true,
+      onTap: () => setUnit(unit === 'ft' ? 'm' : 'ft'),
       right: (
         <span className="seg" onClick={(e) => e.stopPropagation()}>
           <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>
@@ -126,8 +130,13 @@ export function TopBar() {
       <button
         className="step-now"
         onClick={() => {
-          if (active === -1) goToStep('report')
-          else window.dispatchEvent(new CustomEvent('vastu:show-guide'))
+          if (active === -1) { goToStep('report'); return }
+          // the guide only renders with the select tool armed and the sheet at peek —
+          // clear both so the summon can't silently no-op
+          const st = useStore.getState()
+          st.setTool('select')
+          if (window.innerWidth <= 760) st.setSheetPos('peek')
+          window.dispatchEvent(new CustomEvent('vastu:show-guide'))
         }}
       >
         <span className="step-num">{active === -1 ? <Check size={11} strokeWidth={3.5} /> : active + 1}</span>
@@ -136,6 +145,7 @@ export function TopBar() {
 
       <div className="topbar-right">
         <button className={`icon-btn lock-btn hide-mobile ${locked ? 'locked' : ''}`} onClick={() => setLocked(!locked)}
+          aria-label={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}
           data-tip={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}>
           {locked ? <Lock size={15} /> : <LockOpen size={15} />}
         </button>
@@ -143,35 +153,39 @@ export function TopBar() {
           <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>
           <button className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>m</button>
         </div>
-        <button className="icon-btn hide-mobile" disabled={undoLen === 0} onClick={undo} data-tip="Undo (Ctrl+Z)">
+        <button className="icon-btn hide-mobile" disabled={undoLen === 0 || locked} onClick={undo}
+          aria-label="Undo" data-tip="Undo (Ctrl+Z)">
           <Undo2 size={16} />
         </button>
-        <button className="icon-btn hide-mobile" disabled={redoLen === 0} onClick={redo} data-tip="Redo (Ctrl+Y)">
+        <button className="icon-btn hide-mobile" disabled={redoLen === 0 || locked} onClick={redo}
+          aria-label="Redo" data-tip="Redo (Ctrl+Y)">
           <Redo2 size={16} />
         </button>
-        <button className="icon-btn hide-mobile" onClick={requestFit} data-tip="Fit view (F)">
+        <button className="icon-btn hide-mobile" onClick={requestFit} aria-label="Fit view" data-tip="Fit view (F)">
           <Maximize2 size={16} />
         </button>
         <div className="vsep hide-mobile" />
         <button className="icon-btn hide-mobile" onClick={() => useStore.getState().setProjectsOpen(true)}
-          data-tip="Projects — open, rename, back up">
+          aria-label="Projects" data-tip="Projects — open, rename, back up">
           <FolderOpen size={16} />
         </button>
-        <button className="icon-btn hide-mobile" onClick={saveProjectFile} data-tip="Save project (.vastu)">
+        <button className="icon-btn hide-mobile" onClick={saveProjectFile}
+          aria-label="Save project file" data-tip="Save project (.vastu)">
           <Save size={16} />
         </button>
         <button className="icon-btn hide-mobile" onClick={() => useStore.getState().setShortcutsOpen(true)}
-          data-tip="Help & shortcuts (?)">
+          aria-label="Help & shortcuts" data-tip="Help & shortcuts (?)">
           <HelpCircle size={16} />
         </button>
         <button className="icon-btn" disabled={!closed} onClick={() => useStore.getState().setReportOpen(true)}
+          aria-label="Client report"
           data-tip={closed ? 'Client report — print / share' : 'Close the outline to build a report'}>
           <FileText size={16} />
         </button>
-        <button className="btn-primary" onClick={() => void exportPng()}>
+        <button className="btn-primary" aria-label="Export PNG" onClick={() => void exportPng()}>
           <Download size={15} /> <span className="hide-mobile">Export PNG</span>
         </button>
-        <button className="icon-btn show-mobile" aria-label="More" onClick={() => setMoreOpen(true)}>
+        <button className="icon-btn" aria-label="More" onClick={() => setMoreOpen(true)}>
           <MoreHorizontal size={18} />
         </button>
       </div>

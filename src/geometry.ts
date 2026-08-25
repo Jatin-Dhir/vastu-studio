@@ -254,11 +254,3 @@ export function boundsOf(pts: Pt[]) {
   }
   return { minX, minY, maxX, maxY }
 }
-
-/** Rotate p around c by deg (positive = clockwise on screen). */
-export function rotateAround(p: Pt, c: Pt, deg: number): Pt {
-  const r = (deg * Math.PI) / 180
-  const cos = Math.cos(r), sin = Math.sin(r)
-  const x = p.x - c.x, y = p.y - c.y
-  return { x: c.x + x * cos - y * sin, y: c.y + x * sin + y * cos }
-}

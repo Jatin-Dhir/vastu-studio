@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Check } from 'lucide-react'
 import { useStore, type AccentId, type ThemeMode } from '../store'
 
@@ -26,9 +27,15 @@ export function AppearanceSheet({ open, onClose }: { open: boolean; onClose: () 
   const setTheme = useStore((s) => s.setTheme)
   const setAccent = useStore((s) => s.setAccent)
 
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [open, onClose])
   if (!open) return null
   return (
-    <div className="asheet-scrim" onClick={onClose}>
+    <div className="asheet-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
       <div className="asheet" role="dialog" aria-label="Appearance" onClick={(e) => e.stopPropagation()}>
         <div className="asheet-head">
           <span>Appearance</span>

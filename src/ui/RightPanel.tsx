@@ -4,12 +4,12 @@ import { useStore } from '../store'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { placementOf, zoneRows } from '../analysis'
 import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
-import { evaluateVastu } from '../evaluate'
+import { evaluateVastu, roomShapeAnchor } from '../evaluate'
 import { processCompassImage } from '../imageTools'
 import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
-import type { CompassId, Pt, Tool } from '../types'
+import type { CompassId, Marker, Pt, Tool } from '../types'
 import { detectPdfScaleRatio, hasPdfOpen, renderPdfPage } from '../importers/pdf'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
@@ -35,7 +35,7 @@ function Slider(props: {
 
 function Toggle(props: { label: string; on: boolean; onChange: (v: boolean) => void }) {
   return (
-    <button className={`toggle ${props.on ? 'on' : ''}`} onClick={() => props.onChange(!props.on)}>
+    <button className={`toggle ${props.on ? 'on' : ''}`} aria-pressed={props.on} onClick={() => props.onChange(!props.on)}>
       <span className="knob" />
       {props.label}
     </button>
@@ -137,6 +137,8 @@ function NorthSourceLine() {
 function NorthRow() {
   const northDeg = useStore((s) => s.northDeg)
   const setNorth = useStore((s) => s.setNorth)
+  // string draft while typing, so clearing / '-' / '315.' doesn't commit 0 and snap the compass
+  const [draft, setDraft] = useState<string | null>(null)
 
   return (
     <div className="north-row">
@@ -145,8 +147,14 @@ function NorthRow() {
         <label className="field">
           <span>North</span>
           <div className="num-wrap">
-            <input type="number" value={northDeg} step={0.5}
-              onChange={(e) => setNorth(parseFloat(e.target.value) || 0)} />
+            <input type="number" value={draft ?? northDeg} step={0.5}
+              onChange={(e) => {
+                const v = e.target.value
+                setDraft(v)
+                const n = parseFloat(v)
+                if (Number.isFinite(n)) setNorth(n)
+              }}
+              onBlur={() => setDraft(null)} />
             <em>°</em>
           </div>
         </label>
@@ -246,18 +254,38 @@ export function RightPanel() {
   const setCompass = useStore((s) => s.setCompass)
   const setTool = useStore((s) => s.setTool)
   // arming a canvas tool from a sheet button must get the sheet OUT of the way —
-  // otherwise the thing the user is told to tap is hidden behind the sheet
+  // otherwise the thing the user is told to tap is hidden behind the sheet.
+  // setTool refuses while locked (with its own toast), so report whether it armed
   const armTool = (t: Tool) => {
     setTool(t)
-    if (window.innerWidth <= 760) useStore.getState().setSheetPos('peek')
+    const armed = useStore.getState().tool === t
+    if (armed && window.innerWidth <= 760) useStore.getState().setSheetPos('peek')
+    return armed
   }
   const angleSnap = useStore((s) => s.angleSnap)
   const setAngleSnap = useStore((s) => s.setAngleSnap)
   const markers = useStore((s) => s.markers)
+  const roomShapes = useStore((s) => s.roomShapes)
   const showEdgeLabels = useStore((s) => s.showEdgeLabels)
   const setShowEdgeLabels = useStore((s) => s.setShowEdgeLabels)
   const customFileRef = useRef<HTMLInputElement>(null)
   const [pageBusy, setPageBusy] = useState(false)
+
+  // drawn rooms join the marker analysis as pseudo-markers at their bbox centre,
+  // the exact verdict types.ts promises an area
+  const items = useMemo<Marker[]>(
+    () => [...markers, ...roomShapes.flatMap((r) => {
+      const p = roomShapeAnchor(r)
+      return p ? [{ id: r.id, kind: r.kind, label: r.label, note: r.note, p }] : []
+    })],
+    [markers, roomShapes],
+  )
+  // panel list rows may carry a room-shape id — route selection to the right store slice
+  const selectItem = (id: string) => {
+    const st = useStore.getState()
+    if (st.roomShapes.some((r) => r.id === id)) st.setSelectedRoomShape(id)
+    else st.setSelectedMarker(id)
+  }
 
   const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
   const center = useMemo<Pt | null>(
@@ -325,14 +353,20 @@ export function RightPanel() {
   const saveAsPreset = async () => {
     const cs = useStore.getState().compass
     if (!cs.customUrl) return
-    const id = (crypto as any).randomUUID ? crypto.randomUUID() : `cp${Math.floor(performance.now() * 1000)}`
-    await putPreset({ id, name: `My chakra ${presets.length + 1}`, dataUrl: cs.customUrl, aspect: cs.customAspect ?? 1, createdAt: Date.now() })
-    setPresets(await listPresets())
-    useStore.getState().toast('Saved — it now lives in your compass picker on this device', 'ok')
+    try {
+      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `cp${Math.floor(performance.now() * 1000)}`
+      await putPreset({ id, name: `My chakra ${presets.length + 1}`, dataUrl: cs.customUrl, aspect: cs.customAspect ?? 1, createdAt: Date.now() })
+      setPresets(await listPresets())
+      useStore.getState().toast('Saved — it now lives in your compass picker on this device', 'ok')
+    } catch {
+      useStore.getState().toast('Could not save the preset on this device — storage may be full or blocked', 'warn')
+    }
   }
   const removePreset = (id: string) => {
     useStore.getState().toast('Delete this chakra preset?', 'warn', 'Delete', () => {
-      void deletePreset(id).then(async () => setPresets(await listPresets()))
+      void deletePreset(id)
+        .then(async () => setPresets(await listPresets()))
+        .catch(() => useStore.getState().toast('Could not delete the preset', 'warn'))
     })
   }
 
@@ -354,7 +388,10 @@ export function RightPanel() {
     const h = sheetH()
     if (pos === 'full') return 0
     if (pos === 'half') return Math.max(0, h - Math.min(h, window.innerHeight * 0.42))
-    return Math.max(0, h - 54)
+    // CSS rests peek at translateY(calc(100% - 54px - env(safe-area-inset-bottom))); the mobile
+    // sheet's padding-bottom is calc(10px + env(...)) (index.css .panel), so recover the inset from it
+    const safe = asideRef.current ? Math.max(0, parseFloat(getComputedStyle(asideRef.current).paddingBottom || '0') - 10) : 0
+    return Math.max(0, h - 54 - safe)
   }
   const onHandleDown = (e: React.PointerEvent) => {
     if (window.innerWidth > 760) return
@@ -481,7 +518,10 @@ export function RightPanel() {
 
         <div className="toggle-row">
           <Toggle label="Angle snap" on={angleSnap} onChange={setAngleSnap} />
-          <Toggle label="Lengths" on={showEdgeLabels} onChange={setShowEdgeLabels} />
+          <Toggle label="Lengths" on={showEdgeLabels} onChange={(v) => {
+            setShowEdgeLabels(v)
+            if (v && !metersPerPx) useStore.getState().toast('Set the scale to see edge lengths', 'info')
+          }} />
         </div>
 
         <div className="btn-row">
@@ -510,6 +550,7 @@ export function RightPanel() {
             <button
               key={m.id}
               className={`compass-card ${compass.id === m.id ? 'on' : ''}`}
+              aria-pressed={compass.id === m.id}
               disabled={!closed}
               onClick={() => {
                 if (m.id === 'custom' && !compass.customUrl) customFileRef.current?.click()
@@ -533,6 +574,7 @@ export function RightPanel() {
                 <div key={p.id} className="compass-card-wrap">
                   <button
                     className={`compass-card preset ${compass.id === 'custom' && compass.customUrl === p.dataUrl ? 'on' : ''}`}
+                    aria-pressed={compass.id === 'custom' && compass.customUrl === p.dataUrl}
                     disabled={!closed}
                     onClick={() => setCompass({ id: 'custom', customUrl: p.dataUrl, customAspect: p.aspect })}>
                     <span className="compass-thumb"><img src={p.dataUrl} alt={p.name} /></span>
@@ -597,8 +639,7 @@ export function RightPanel() {
         <NorthRow />
         <NorthSourceLine />
         <button className="btn-ghost wide" onClick={() => {
-          armTool('north')
-          useStore.getState().toast('Tap the TAIL of the plan’s north arrow, then its TIP', 'info')
+          if (armTool('north')) useStore.getState().toast('Tap the TAIL of the plan’s north arrow, then its TIP', 'info')
         }}>
           <Navigation size={14} /> Align north from plan arrow
         </button>
@@ -618,27 +659,28 @@ export function RightPanel() {
       </section>
 
       {/* -------- Markers -------- */}
-      {markers.length > 0 && center && closed && (
+      {items.length > 0 && center && closed && (
         <section className="card">
           <header className="card-head"><h2>Rooms & objects</h2></header>
-          {markers.filter((m) => m.kind === 'entrance').map((m) => {
+          {items.filter((m) => m.kind === 'entrance').map((m) => {
             const pl = placementOf(m.p, center, northDeg)
             return (
-              <div key={m.id} className="entrance-card"
-                onClick={() => useStore.getState().setSelectedMarker(m.id)}>
+              <button key={m.id} type="button" className="entrance-card"
+                style={{ width: '100%', textAlign: 'left' }}
+                onClick={() => selectItem(m.id)}>
                 <span className="entrance-title">{m.label}</span>
                 <b>{pl.pada.code} · {pl.pada.devta}</b>
                 <span className="lbl dim">{pl.zone.key} zone · {pl.bearing.toFixed(1)}° from centre</span>
-              </div>
+              </button>
             )
           })}
           <div className="marker-list">
-            {markers.filter((m) => m.kind !== 'entrance').map((m) => {
+            {items.filter((m) => m.kind !== 'entrance').map((m) => {
               const pl = placementOf(m.p, center, northDeg)
               const meta = markerKindMeta(m.kind)
               return (
                 <button key={m.id} className="marker-row"
-                  onClick={() => useStore.getState().setSelectedMarker(m.id)}>
+                  onClick={() => selectItem(m.id)}>
                   <span className="kind-dot" style={{ background: meta.color }} />
                   <span className="marker-name">{m.label}</span>
                   <span className="marker-zone" style={{ color: pl.zone.color }}>{pl.zone.key}</span>
@@ -647,7 +689,7 @@ export function RightPanel() {
               )
             })}
           </div>
-          {markers.some((m) => m.note) && (
+          {items.some((m) => m.note) && (
             <div className="zone-note">Notes on markers appear in the report.</div>
           )}
         </section>
@@ -655,7 +697,7 @@ export function RightPanel() {
 
       {/* -------- Vastu analysis -------- */}
       {closed && center && pts.length >= 3 && (() => {
-        const ev = evaluateVastu({ sampled, center, northDeg, markers, brahmaPct: compass.brahmaPct })
+        const ev = evaluateVastu({ sampled, center, northDeg, markers: items, brahmaPct: compass.brahmaPct })
         return (
           <section className="card">
             <header className="card-head">
@@ -669,7 +711,7 @@ export function RightPanel() {
             <div className="finding-list">
               {ev.findings.map((f, i) => (
                 <button key={i} className={`finding-row sev-${f.severity}`} onClick={() => {
-                  if (f.markerId) useStore.getState().setSelectedMarker(f.markerId)
+                  if (f.markerId) selectItem(f.markerId)
                   else if (f.zoneIdx != null) {
                     useStore.getState().setHighlightZone(f.zoneIdx)
                     if (window.innerWidth <= 760) useStore.getState().setSheetPos('half')

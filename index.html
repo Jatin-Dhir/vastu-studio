@@ -10,7 +10,8 @@
     <meta name="theme-color" content="#0B0C10" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <style>html,body{margin:0;background:#0B0C10}</style>
+    <script>try{var p=JSON.parse(localStorage.getItem('vastu-studio.theme.v1')||'{}');if(p.theme)document.documentElement.dataset.theme=p.theme;if(p.accent)document.documentElement.dataset.accent=p.accent}catch(e){}</script>
+    <style>html,body{margin:0;background:#0B0C10}html[data-theme='paper'],html[data-theme='paper'] body{background:#F3F1EA}</style>
   </head>
   <body>
     <div id="root"></div>

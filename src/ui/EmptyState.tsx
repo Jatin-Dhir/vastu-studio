@@ -28,7 +28,9 @@ export function EmptyState() {
           entrances are located for you — measured, centred, and to scale.
         </p>
 
-        <div className="empty-drop" onClick={() => window.dispatchEvent(new CustomEvent('vastu:open-file'))}>
+        {/* width inline: buttons shrink-wrap to fit-content, unlike the div this replaced */}
+        <button type="button" className="empty-drop" style={{ width: '100%' }}
+          onClick={() => window.dispatchEvent(new CustomEvent('vastu:open-file'))}>
           <FileUp size={20} />
           <div>
             <b>{typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -36,7 +38,7 @@ export function EmptyState() {
               : 'Drop a file here or click to browse'}</b>
             <span>PDF · DXF (AutoCAD) · PNG / JPG · .vastu project</span>
           </div>
-        </div>
+        </button>
 
         <div className="empty-actions">
           <button className="btn-ghost" onClick={() => setMapOpen(true)}>

@@ -1,7 +1,7 @@
 // Native shell glue (Capacitor). Every entry point no-ops on the plain web,
 // so the site keeps working untouched — the app just gains platform manners:
 // a styled status bar, a sane Android back button, and share-sheet exports.
-import { useStore } from './store'
+import { useStore, type ThemeMode } from './store'
 
 let native: boolean | null = null
 
@@ -13,26 +13,43 @@ export function isNative(): boolean {
   return native
 }
 
-export async function initNative(): Promise<void> {
+/** Keep the OS status bar in step with the app chrome theme (canvas stays dark either way). */
+export async function syncNativeChrome(theme: ThemeMode): Promise<void> {
   if (!isNative()) return
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar')
-    await StatusBar.setStyle({ style: Style.Dark })
-    await StatusBar.setBackgroundColor({ color: '#0B0C10' }).catch(() => { /* iOS has no bg */ })
+    await StatusBar.setStyle({ style: theme === 'paper' ? Style.Light : Style.Dark })
+    await StatusBar.setBackgroundColor({ color: theme === 'paper' ? '#F3F1EA' : '#0B0C10' }).catch(() => { /* iOS has no bg */ })
   } catch { /* plugin missing */ }
+}
+
+export async function initNative(): Promise<void> {
+  if (!isNative()) return
+  await syncNativeChrome(useStore.getState().theme)
   try {
     const { App } = await import('@capacitor/app')
     await App.addListener('backButton', () => {
       // peel one layer per press: dialogs → modals → selections → armed tool → home
       const s = useStore.getState()
+      if (s.appearanceOpen) return s.setAppearanceOpen(false)
+      if (s.clearOpen) return s.setClearOpen(false)
+      if (s.moreOpen) return s.setMoreOpen(false)
       if (s.calDialogOpen) return s.setCalDialogOpen(false)
       if (s.shortcutsOpen) return s.setShortcutsOpen(false)
+      if (s.dwgNotice) return s.setDwgNotice(false)
       if (s.reportOpen) return s.setReportOpen(false)
       if (s.projectsOpen) return s.setProjectsOpen(false)
-      if (s.mapOpen) return s.setMapOpen(false)
+      if (s.mapOpen) {
+        // route through the modal's own Escape cascade (capture → preview → dropdown → close)
+        // — body target + bubbles so its capture-phase handler can stop the Dialog's close
+        document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+        return
+      }
       if (s.markerEditing) return s.setMarkerEditing(false)
+      if (s.roomShapeEditing) return s.setRoomShapeEditing(false)
       if (s.selectedMarker) return s.setSelectedMarker(null)
       if (s.selectedStroke) return s.setSelectedStroke(null)
+      if (s.selectedRoomShape) return s.setSelectedRoomShape(null)
       if (s.selectedVertex != null || s.selectedEdge != null) return s.setSelection({ vertex: null, edge: null })
       if (s.tool !== 'select') return s.setTool('select')
       void App.minimizeApp()

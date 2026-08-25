@@ -33,7 +33,7 @@ export interface RoomShape {
   label: string
   note?: string
   /** rect: [corner1, corner2] axis-aligned in world space
-   *  ellipse: [center, edgePoint] — rx=|dx|, ry=|dy|
+   *  ellipse: [corner1, corner2] of the bounding box — centre = midpoint, rx=|dx|/2, ry=|dy|/2
    *  polygon: the vertices, implicitly closed */
   pts: Pt[]
 }

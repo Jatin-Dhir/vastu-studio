@@ -45,6 +45,8 @@ export interface SceneProps {
   strokes?: Stroke[]
   roomShapes?: RoomShape[]
   selectedRoomShape?: string | null
+  /** light paper ground (PNG export) — swaps the few inks that assume the dark canvas */
+  paper?: boolean
   idPrefix: string
 }
 
@@ -176,7 +178,7 @@ function NorthNeedle({ c, R, north, k }: { c: Pt; R: number; north: number; k: n
 /* Background                                                          */
 /* ------------------------------------------------------------------ */
 
-function Background({ bg, dxf, k }: { bg: BgState; dxf: DxfImport | null; k: number }) {
+function Background({ bg, dxf, k, paper }: { bg: BgState; dxf: DxfImport | null; k: number; paper?: boolean }) {
   if (bg.kind === 'none') return null
   const filters: string[] = []
   if (bg.grayscale) filters.push('grayscale(1)')
@@ -197,11 +199,11 @@ function Background({ bg, dxf, k }: { bg: BgState; dxf: DxfImport | null; k: num
     return (
       <g opacity={bg.opacity} style={filter ? { filter } : undefined}>
         {dxf.paths.map((d, i) => (
-          <path key={i} d={d} fill="none" stroke="#A9B4C9" strokeWidth={1.3 / k}
+          <path key={i} d={d} fill="none" stroke={paper ? '#4A5160' : '#A9B4C9'} strokeWidth={1.3 / k}
             strokeLinecap="round" strokeLinejoin="round" />
         ))}
         {dxf.texts.map((t, i) => (
-          <text key={`t${i}`} x={t.x} y={t.y} fontSize={t.size} fill="#7E8AA0" fontFamily={FONT}
+          <text key={`t${i}`} x={t.x} y={t.y} fontSize={t.size} fill={paper ? '#5A6478' : '#7E8AA0'} fontFamily={FONT}
             transform={t.rotDeg ? `rotate(${t.rotDeg} ${t.x} ${t.y})` : undefined}>
             {t.str}
           </text>
@@ -243,7 +245,7 @@ function Outline(props: {
         strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke="#17181C" strokeWidth={wallW}
         strokeLinejoin="round" strokeLinecap="round" />
-      <path d={d} fill="none" stroke="#C9C6BC" strokeWidth={Math.max(0, wallW - 2.6 / k)}
+      <path d={d} fill="none" stroke="#C9C6BC" strokeWidth={Math.max(1.2 / k, wallW - 2.6 / k)}
         strokeLinejoin="round" strokeLinecap="round" />
       {showEdgeLabels && metersPerPx && edges.map(([a, b, bu], i) => {
         const L = edgeLength(a, b, bu)
@@ -258,7 +260,7 @@ function Outline(props: {
           const toC = { x: center.x - mid.x, y: center.y - mid.y }
           if (nx * toC.x + ny * toC.y > 0) { nx = -nx; ny = -ny }
         }
-        const off = 13 / k
+        const off = wallW / 2 + 9 / k
         const p = { x: mid.x + nx * off, y: mid.y + ny * off }
         return (
           <text key={i} x={p.x} y={p.y} fontSize={11.5 / k} fontWeight={600} fontFamily={FONT}
@@ -281,6 +283,8 @@ interface ChakraProps {
   pts: Pt[]; closed: boolean; idPrefix: string
   /** unscaled, drawing-derived radius — independent of the compass Size slider (scalePct) */
   baseR: number
+  /** light paper ground (PNG export) — the white banding ink flips dark */
+  paper?: boolean
 }
 
 function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number }) {
@@ -325,7 +329,7 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: 
   // clipped fills must reach the plot regardless of the Size slider — use the unscaled
   // radius, not the scaled ring radius, or shrinking the wheel leaves plot corners un-tinted
   const fillR = clip ? baseR * 1.7 : R
-  const fills = (
+  const fills = compass.fillPct > 0 && (
     <g clipPath={clip ? `url(#${clipId})` : undefined}>
       {ZONES16.map((z, i) => {
         const a0 = north - 11.25 + i * 22.5
@@ -385,7 +389,7 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: 
   )
 }
 
-function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
+function Gates32({ c, R, north, compass, k, vr, paper }: ChakraProps) {
   const r0 = R * 0.8
   return (
     <g>
@@ -397,7 +401,7 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
         return (
           <Fragment key={g.code}>
             {i % 2 === 0 && (
-              <path d={ringSectorPath(c, r0, R, a0, a0 + 11.25)} fill="#FFFFFF" fillOpacity={0.045} />
+              <path d={ringSectorPath(c, r0, R, a0, a0 + 11.25)} fill={paper ? '#14151A' : '#FFFFFF'} fillOpacity={0.045} />
             )}
             {qColor && (
               <path d={ringSectorPath(c, r0, R, a0, a0 + 11.25)} fill={qColor} fillOpacity={0.15} />
@@ -435,7 +439,7 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
             <RingLabel c={c} deg={mid} r={R * stagger} size={nameSize} text={g.devta}
               fill="#EFE7D2" weight={600} halo={R * 0.01} vr={vr} />
             <RingLabel c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
-              fill="#B8A26B" weight={700} spacing={R * 0.002} vr={vr} />
+              fill="#B8A26B" weight={700} spacing={R * 0.002} halo={R * 0.008} vr={vr} />
           </Fragment>
         )
       })}
@@ -457,13 +461,13 @@ function Gates32({ c, R, north, compass, k, vr }: ChakraProps) {
   )
 }
 
-function Chakra8({ c, R, north, compass, k, vr }: ChakraProps) {
+function Chakra8({ c, R, north, compass, k, vr, paper }: ChakraProps) {
   return (
     <g>
       {DIRS8.map((_, i) => {
         const a0 = north - 22.5 + i * 45
         return i % 2 === 1 ? (
-          <path key={i} d={wedgePath(c, R, a0, a0 + 45)} fill="#FFFFFF" fillOpacity={0.035} />
+          <path key={i} d={wedgePath(c, R, a0, a0 + 45)} fill={paper ? '#14151A' : '#FFFFFF'} fillOpacity={0.035} />
         ) : null
       })}
       {DIRS8.map((_, i) => {
@@ -501,7 +505,7 @@ function Chakra8({ c, R, north, compass, k, vr }: ChakraProps) {
   )
 }
 
-function Grid9({ c, north, compass, k, vr, pts, closed }: ChakraProps) {
+function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
   const frame = useMemo(() => {
     if (!closed || pts.length < 3) return null
     const rad = (-north * Math.PI) / 180
@@ -537,7 +541,7 @@ function Grid9({ c, north, compass, k, vr, pts, closed }: ChakraProps) {
           fill={GOLD} fillOpacity={0.07} />)
       } else if (name) {
         cells.push(<rect key={`f${row}-${col}`} x={x} y={y} width={cw} height={ch}
-          fill="#FFFFFF" fillOpacity={0.028} />)
+          fill={paper ? '#14151A' : '#FFFFFF'} fillOpacity={0.028} />)
       }
       if (name && compass.devtas) {
         const size = Math.min(Math.min(cw, ch) * 0.24, (cw * 0.9) / (name.length * 0.56))
@@ -874,7 +878,7 @@ export function Scene(props: SceneProps) {
   }, [sampled, pts.length, closed, metersPerPx, unit])
 
   const chakraProps: ChakraProps | null = showCompass && center
-    ? { c: center, R: RS, north: northDeg, compass, k, vr, pts: sampled, closed, idPrefix, baseR: R }
+    ? { c: center, R: RS, north: northDeg, compass, k, vr, pts: sampled, closed, idPrefix, baseR: R, paper: props.paper ?? false }
     : null
 
   // entrance ties reach whichever ring is actually on screen (the scaled wheel radius when a
@@ -890,7 +894,7 @@ export function Scene(props: SceneProps) {
           </clipPath>
         )}
       </defs>
-      <Background bg={bg} dxf={dxf} k={k} />
+      <Background bg={bg} dxf={dxf} k={k} paper={props.paper} />
       <g key={compass.id} className="compass-enter" opacity={compass.opacity}>
         {chakraProps && compass.id === 'custom' && <CustomOverlay {...chakraProps} />}
         {chakraProps && compass.id === 'zones16' && <Zones16 {...chakraProps} />}

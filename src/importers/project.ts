@@ -26,8 +26,11 @@ export function saveProjectFile() {
 }
 
 export function parseProject(text: string): ProjectFile {
-  const p = JSON.parse(text)
-  if (p?.app !== 'vastu-studio' || !Array.isArray(p.pts)) throw new Error('Not a Vastu Studio project file')
+  let p: any
+  try { p = JSON.parse(text) } catch { throw new Error('This .vastu file is damaged or incomplete — re-export it and try again') }
+  if (p?.app !== 'vastu-studio' || !Array.isArray(p.pts) || typeof p.bg?.kind !== 'string') throw new Error('Not a Vastu Studio project file')
+  // > 1 rather than !== 1 so legacy files without a numeric version keep loading
+  if (typeof p.version === 'number' && p.version > 1) throw new Error('Saved by a newer Vastu Studio — update the app to open it')
   return p as ProjectFile
 }
 
@@ -38,7 +41,7 @@ let warnedQuota = false
 /** Autosave into the projects library (IndexedDB — no localStorage size limits). */
 export function autosave() {
   const s = useStore.getState()
-  if (s.bg.kind === 'none' && s.pts.length === 0) return
+  if (s.bg.kind === 'none' && s.pts.length === 0 && s.markers.length === 0 && s.strokes.length === 0 && s.roomShapes.length === 0) return
   let id = s.currentProjectId
   let name = s.projectName
   if (!id) {

@@ -7,7 +7,7 @@ export function Toasts() {
   const busy = useStore((s) => s.busy)
 
   return (
-    <div className="toasts">
+    <div className="toasts" role="status" aria-live="polite">
       {busy && (
         <div className="toast busy">
           <span className="spinner" />

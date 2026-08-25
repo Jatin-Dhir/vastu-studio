@@ -1,7 +1,7 @@
 import { brahmasthanRadius, placementOf, zoneRows } from './analysis'
 import { dist } from './geometry'
-import { GATE_QUALITY, PLACEMENT_RULES, ZONE_SHAPE_NOTES, ZONES16, markerKindMeta } from './vastu'
-import type { Marker, Pt } from './types'
+import { GATE_QUALITY, PLACEMENT_RULES, ZONE_SHAPE_NOTES, markerKindMeta } from './vastu'
+import type { Marker, Pt, RoomShape } from './types'
 
 export type Severity = 'good' | 'info' | 'warn' | 'bad'
 
@@ -19,6 +19,15 @@ export interface Evaluation {
   findings: Finding[]
   favourable: number
   attention: number
+}
+
+/** Where a drawn room/area anchors for analysis: its bounding-box centre — the same point
+ *  Scene labels the shape at (rect, ellipse and polygon alike), so verdicts match the canvas. */
+export function roomShapeAnchor(r: RoomShape): Pt | null {
+  if (r.pts.length < 2) return null
+  const xs = r.pts.map((p) => p.x)
+  const ys = r.pts.map((p) => p.y)
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
 }
 
 /** The interpretive pass: entrances vs the 32 gates, placements vs classical rules,
@@ -120,5 +129,3 @@ export function evaluateVastu(args: {
     attention: findings.filter((f) => f.severity === 'bad' || f.severity === 'warn').length,
   }
 }
-
-export const ZONE_OF = ZONES16

@@ -16,6 +16,8 @@ function ToolHint() {
   const pts = useStore((s) => s.pts.length)
   const closed = useStore((s) => s.closed)
   const bgHint = useStore((s) => s.bgHint)
+  const drawMode = useStore((s) => s.drawMode)
+  const roomDrawMode = useStore((s) => s.roomDrawMode)
 
   let text: string | null = null
   if (tool === 'calibrate') {
@@ -41,11 +43,11 @@ function ToolHint() {
   } else if (tool === 'marker') {
     text = 'Pick a type, then tap the plan to mark it'
   } else if (tool === 'draw') {
-    text = useStore.getState().drawMode === 'line'
+    text = drawMode === 'line'
       ? 'Drag a straight line — ends snap to your outline’s corners & edges'
       : 'Draw freely on the plan — pan with two fingers'
   } else if (tool === 'room') {
-    text = useStore.getState().roomDrawMode === 'ellipse'
+    text = roomDrawMode === 'ellipse'
       ? 'Drag out a circle — hold Shift for a perfect circle'
       : 'Drag out a room — hold Shift for a perfect square'
   }
@@ -72,19 +74,19 @@ function DrawOptionsRow() {
       </button>
       <span className="qsep" />
       {DRAW_COLORS.map((c) => (
-        <button key={c} className={`draw-swatch ${drawColor === c ? 'on' : ''}`}
+        <button key={c} className={`draw-swatch ${drawColor === c ? 'on' : ''}`} aria-label={`Draw colour ${c}`}
           style={{ background: c }} onClick={() => st.setDrawColor(c)} />
       ))}
       <span className="qsep" />
       {[1, 2, 3].map((w) => (
-        <button key={w} className={`draw-width ${drawWidth === w ? 'on' : ''}`} onClick={() => st.setDrawWidth(w)}>
+        <button key={w} className={`draw-width ${drawWidth === w ? 'on' : ''}`} aria-label={`Line width ${w}`} onClick={() => st.setDrawWidth(w)}>
           <span style={{ height: w === 1 ? 2 : w === 2 ? 3.5 : 6 }} />
         </button>
       ))}
       {hasStrokes && (
         <>
           <span className="qsep" />
-          <button className="qpill" onClick={() => {
+          <button className="qpill" aria-label="Clear all drawings" onClick={() => {
             st.toast('Remove all drawings from the plan?', 'warn', 'Clear all', () => useStore.getState().clearStrokes())
           }}>
             <Trash2 size={12} />
@@ -129,8 +131,12 @@ export function RoomShapeChips() {
   const editing = useStore((s) => s.roomShapeEditing)
   const r = roomShapes.find((x) => x.id === selectedRoomShape)
   if (!r || locked || editing) return null
-  const [p1, p2] = r.pts
-  const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
+  // bbox midpoint, not pts[0]/pts[1] — polygon shapes carry more than two points
+  const xs = r.pts.map((p) => p.x), ys = r.pts.map((p) => p.y)
+  const mid = {
+    x: (Math.min(...xs) + Math.max(...xs)) / 2,
+    y: (Math.min(...ys) + Math.max(...ys)) / 2,
+  }
   const rad = (view.rot * Math.PI) / 180
   const cos = Math.cos(rad), sin = Math.sin(rad)
   const sx = view.tx + view.k * (mid.x * cos - mid.y * sin)
@@ -138,16 +144,16 @@ export function RoomShapeChips() {
   const st = useStore.getState()
   return (
     <div className="sel-chips" style={{
-      left: Math.max(8, Math.min(sx - 60, (window.innerWidth || 800) - 220)),
+      left: `max(8px, min(${sx - 60}px, calc(100vw - 220px)))`,
       top: Math.max(60, sy - 30),
     }}>
       <button className="chip" onClick={() => st.setRoomShapeEditing(true)}>
         <Pencil size={12} /> {r.label}
       </button>
-      <button className="chip danger" onClick={() => st.deleteRoomShape(r.id)}>
+      <button className="chip danger" aria-label="Delete" onClick={() => st.deleteRoomShape(r.id)}>
         <Trash2 size={12} />
       </button>
-      <button className="chip" onClick={() => st.setSelectedRoomShape(null)}><X size={12} /></button>
+      <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedRoomShape(null)}><X size={12} /></button>
     </div>
   )
 }
@@ -168,13 +174,13 @@ export function StrokeChips() {
   const st = useStore.getState()
   return (
     <div className="sel-chips" style={{
-      left: Math.max(8, Math.min(sx - 40, (window.innerWidth || 800) - 160)),
+      left: `max(8px, min(${sx - 40}px, calc(100vw - 160px)))`,
       top: Math.max(60, sy - 52),
     }}>
       <button className="chip danger" onClick={() => st.deleteStroke(s2.id)}>
         <Trash2 size={12} /> Delete
       </button>
-      <button className="chip" onClick={() => st.setSelectedStroke(null)}><X size={12} /></button>
+      <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedStroke(null)}><X size={12} /></button>
     </div>
   )
 }
@@ -217,10 +223,13 @@ export function QuickBar() {
   useEffect(() => {
     if (!degOpen) return
     const onDown = (e: PointerEvent) => {
-      if (!popRef.current?.contains(e.target as Node)) setDegOpen(false)
+      if (popRef.current?.contains(e.target as Node)) return
+      // capture phase: a canvas tap should only dismiss, not also fire the armed tool
+      if ((e.target as Element).closest?.('[data-canvas]')) e.stopPropagation()
+      setDegOpen(false)
     }
-    window.addEventListener('pointerdown', onDown)
-    return () => window.removeEventListener('pointerdown', onDown)
+    window.addEventListener('pointerdown', onDown, true)
+    return () => window.removeEventListener('pointerdown', onDown, true)
   }, [degOpen])
 
   const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw' || tool === 'room'
@@ -283,10 +292,13 @@ export function RotateChip() {
   useEffect(() => {
     if (!open) return
     const onDown = (e: PointerEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
+      if (ref.current?.contains(e.target as Node)) return
+      // capture phase: a canvas tap should only dismiss, not also fire the armed tool
+      if ((e.target as Element).closest?.('[data-canvas]')) e.stopPropagation()
+      setOpen(false)
     }
-    window.addEventListener('pointerdown', onDown)
-    return () => window.removeEventListener('pointerdown', onDown)
+    window.addEventListener('pointerdown', onDown, true)
+    return () => window.removeEventListener('pointerdown', onDown, true)
   }, [open])
 
   // the cal-bar takes this exact spot on mobile once both pins are down
@@ -373,21 +385,21 @@ export function MarkerChips() {
 
   return (
     <div className="sel-chips" style={{
-      left: Math.max(8, Math.min(sx - 60, (window.innerWidth || 800) - 250)),
+      left: `max(8px, min(${sx - 60}px, calc(100vw - 250px)))`,
       top: Math.max(60, sy - 58),
     }}>
       {place && <span className="chip place">{place}</span>}
       {!locked && (
         <>
-          <button className="chip" onClick={() => st.setMarkerEditing(true)}>
+          <button className="chip" aria-label="Edit" onClick={() => st.setMarkerEditing(true)}>
             <Pencil size={12} />
           </button>
-          <button className="chip danger" onClick={() => { st.deleteMarker(m.id) }}>
+          <button className="chip danger" aria-label="Delete" onClick={() => { st.deleteMarker(m.id) }}>
             <Trash2 size={12} />
           </button>
         </>
       )}
-      <button className="chip" onClick={() => st.setSelectedMarker(null)}><X size={12} /></button>
+      <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedMarker(null)}><X size={12} /></button>
     </div>
   )
 }
@@ -420,7 +432,7 @@ export function SelectionChips() {
 
   return (
     <div className="sel-chips" style={{
-      left: Math.max(8, Math.min(sx, (window.innerWidth || 800) - 180)),
+      left: `max(8px, min(${sx}px, calc(100vw - 180px)))`,
       top: Math.max(60, sy - 54),
     }}>
       {selectedVertex != null && (
@@ -451,7 +463,7 @@ export function SelectionChips() {
           )}
         </>
       )}
-      <button className="chip" onClick={clear}><X size={12} /></button>
+      <button className="chip" aria-label="Deselect" onClick={clear}><X size={12} /></button>
     </div>
   )
 }

@@ -4,6 +4,12 @@ import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
+// pdfjs fetches the worker lazily, so a PDF imported for the first time offline would fail —
+// warm the service-worker cache once it controls the page (the native shell has no SW; no-op there)
+if (import.meta.env.PROD && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
+  void navigator.serviceWorker.ready.then(() => fetch(workerUrl)).catch(() => {})
+}
+
 let currentDoc: PDFDocumentProxy | null = null
 
 export async function openPdf(data: ArrayBuffer): Promise<number> {

@@ -5,16 +5,27 @@
   --bg-2: #0E1016;
   --panel: rgba(19, 21, 28, 0.78);
   --panel-solid: #14161d;
+  --panel-raised: #1d2029;
+  --bar-bg: linear-gradient(180deg, rgba(22, 24, 32, 0.92), rgba(16, 18, 24, 0.88));
+  --sheet: rgba(15, 17, 23, 0.97);
+  --sheet-2: #171a22;
   --stroke: rgba(255, 255, 255, 0.075);
   --stroke-2: rgba(255, 255, 255, 0.13);
+  --fill-1: rgba(255, 255, 255, 0.07);
+  --fill-2: rgba(255, 255, 255, 0.13);
+  --tick: rgba(255, 255, 255, 0.35);
+  --knob: #cfd4de;
   --text: #E9EBF1;
   --muted: #99A1B3;
-  --dim: #6A7284;
+  --dim: #7E8698;
   --gold: #D9B45B;
   --gold-2: #E8C56B;
   --gold-soft: rgba(217, 180, 91, 0.14);
+  --gold-ink: #221a04;
   --teal: #6FC7CE;
   --danger: #E2574C;
+  --danger-fg: #F09A92;
+  --warn: #E8A54B;
   --ok: #63B56F;
   --radius: 14px;
   --radius-s: 9px;
@@ -41,10 +52,11 @@ input, select { font-family: var(--font); }
 button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-handle {
   touch-action: manipulation;
 }
-.show-mobile { display: none; }
+/* !important: .icon-btn's display:grid would otherwise outrank this by source order */
+@media (min-width: 761px) { .show-mobile { display: none !important; } }
 
 ::-webkit-scrollbar { width: 9px; height: 9px; }
-::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+::-webkit-scrollbar-thumb { background: var(--fill-2); border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: rgba(255,255,255,0.2); }
 ::-webkit-scrollbar-track { background: transparent; }
 
@@ -58,7 +70,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   align-items: center;
   gap: 18px;
   padding: 0 14px 0 16px;
-  background: linear-gradient(180deg, rgba(22,24,32,0.92), rgba(16,18,24,0.88));
+  background: var(--bar-bg);
   border-bottom: 1px solid var(--stroke);
   backdrop-filter: blur(14px);
   z-index: 30;
@@ -94,7 +106,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   color: var(--muted);
 }
 .step.active { color: var(--text); border-color: var(--stroke-2); background: rgba(255,255,255,0.045); }
-.step.active .step-num { background: var(--gold); color: #1a1503; }
+.step.active .step-num { background: var(--gold); color: var(--gold-ink); }
 .step.done { color: var(--muted); }
 .step.done .step-num { background: var(--gold-soft); color: var(--gold); }
 .step.skipped { color: var(--dim); }
@@ -137,13 +149,13 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   display: inline-flex; align-items: center; gap: 7px;
   padding: 7px 14px;
   border-radius: 10px;
-  background: linear-gradient(180deg, var(--gold-2), #C79A3F);
-  color: #221a04;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+  color: var(--gold-ink);
   font-weight: 700; font-size: 12.5px;
-  box-shadow: 0 2px 10px rgba(217,180,91,0.25), inset 0 1px 0 rgba(255,255,255,0.35);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--gold) 25%, transparent), inset 0 1px 0 rgba(255,255,255,0.35);
   transition: transform 0.12s ease, box-shadow 0.15s ease, filter 0.15s ease;
 }
-.btn-primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 16px rgba(217,180,91,0.35), inset 0 1px 0 rgba(255,255,255,0.35); }
+.btn-primary:hover:not(:disabled) { filter: brightness(1.06); box-shadow: 0 4px 16px color-mix(in srgb, var(--gold) 35%, transparent), inset 0 1px 0 rgba(255,255,255,0.35); }
 .btn-primary:active { transform: translateY(1px); }
 
 .btn-ghost {
@@ -157,9 +169,21 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   transition: all 0.15s ease;
 }
 .btn-ghost:hover:not(:disabled) { background: rgba(255,255,255,0.07); border-color: rgba(255,255,255,0.2); }
-.btn-ghost.danger { color: #F09A92; border-color: rgba(226,87,76,0.35); }
+.btn-ghost.danger { color: var(--danger-fg); border-color: rgba(226,87,76,0.35); }
 .btn-ghost.danger:hover:not(:disabled) { background: rgba(226,87,76,0.12); }
 .btn-ghost.wide { width: 100%; }
+
+/* mid-width desktop: the full bar needs ~1115px — shed step labels first, then
+   swap the utility cluster for the More sheet the phone layout already uses */
+@media (min-width: 761px) and (max-width: 1150px) {
+  .step-label { display: none; }
+  .topbar { gap: 10px; }
+}
+@media (min-width: 761px) and (max-width: 1010px) {
+  .btn-primary .hide-mobile { display: none; }
+  .topbar .icon-btn.hide-mobile, .topbar .seg.hide-mobile, .topbar .vsep.hide-mobile { display: none; }
+  .topbar .show-mobile { display: grid !important; }
+}
 
 /* ————— stage ————— */
 
@@ -202,7 +226,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
 }
 .rail-label { display: none; }
 .rail-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
-.rail-btn.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px rgba(217,180,91,0.35); }
+.rail-btn.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
 .hsep { height: 1px; background: var(--stroke); margin: 3px 4px; }
 
 /* tooltips — hover-capable pointers only; touch has no hover and would stick until the next tap */
@@ -215,7 +239,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
     left: 50%;
     transform: translateX(-50%);
     white-space: pre;
-    background: #1d2029;
+    background: var(--panel-raised);
     border: 1px solid var(--stroke-2);
     color: var(--text);
     font-size: 11.5px; font-weight: 550;
@@ -232,6 +256,41 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   }
 }
 @keyframes tipIn { from { opacity: 0; } to { opacity: 1; } }
+/* keyboard parity for the hover tooltips — sighted keyboard users get the same
+   labels, on any device, without the hover-capability gate */
+[data-tip]:focus-visible::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: pre;
+  background: var(--panel-raised);
+  border: 1px solid var(--stroke-2);
+  color: var(--text);
+  font-size: 11.5px; font-weight: 550;
+  padding: 5px 9px;
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.45);
+  z-index: 100;
+  pointer-events: none;
+  animation: tipIn 0.12s ease;
+}
+.rail-btn[data-tip]:focus-visible::after {
+  top: 50%; left: calc(100% + 10px);
+  transform: translateY(-50%);
+}
+
+/* tablets: desktop width but a coarse pointer — hover tooltips never fire there,
+   so the rail gets its dock labels back instead of leaving bare icons */
+@media (pointer: coarse) and (min-width: 761px) {
+  .rail-btn {
+    width: auto; min-width: 52px; height: 48px;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    padding: 0 4px;
+  }
+  .rail-label { display: block; font-size: 10px; font-weight: 650; letter-spacing: 0; line-height: 1; }
+}
 
 /* ————— right panel ————— */
 
@@ -255,6 +314,9 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   animation: cardIn 0.28s cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 @keyframes cardIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+/* variant for elements centred via translateX(-50%) — an animated transform
+   REPLACES the declared one, so the keyframes must carry the -50% themselves */
+@keyframes cardInC { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .card-head h2 {
@@ -328,7 +390,7 @@ input[type='range'] {
   -webkit-appearance: none; appearance: none;
   height: 4px; width: 100%;
   border-radius: 4px;
-  background: rgba(255,255,255,0.12);
+  background: var(--fill-2);
   outline: none;
 }
 input[type='range']::-webkit-slider-thumb {
@@ -342,6 +404,10 @@ input[type='range']::-webkit-slider-thumb {
   transition: transform 0.12s ease;
 }
 input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
+/* focus rings — these controls kill the UA outline, so restore a visible one */
+input[type='range']:focus-visible { outline: 2px solid var(--gold); outline-offset: 4px; }
+.num-wrap:focus-within, .map-search:focus-within { border-color: rgba(217,180,91,0.6); }
+.marker-note:focus { border-color: rgba(217,180,91,0.6); }
 
 /* toggles */
 .toggle-row { display: flex; gap: 7px; }
@@ -359,7 +425,7 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .toggle .knob {
   width: 24px; height: 14px;
   border-radius: 999px;
-  background: rgba(255,255,255,0.14);
+  background: var(--fill-2);
   position: relative;
   transition: background 0.18s ease;
 }
@@ -369,10 +435,10 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
   top: 2px; left: 2px;
   width: 10px; height: 10px;
   border-radius: 50%;
-  background: #cfd4de;
+  background: var(--knob);
   transition: transform 0.18s cubic-bezier(0.3, 1.4, 0.5, 1);
 }
-.toggle.on { color: var(--text); border-color: rgba(217,180,91,0.4); }
+.toggle.on { color: var(--text); border-color: color-mix(in srgb, var(--gold) 40%, transparent); }
 .toggle.on .knob { background: var(--gold); }
 .toggle.on .knob::after { transform: translateX(10px); background: #241d07; }
 
@@ -389,9 +455,9 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
 }
 .compass-card:hover { background: rgba(255,255,255,0.06); border-color: var(--stroke-2); transform: translateY(-1px); }
 .compass-card.on {
-  border-color: rgba(217,180,91,0.55);
+  border-color: color-mix(in srgb, var(--gold) 55%, transparent);
   background: var(--gold-soft);
-  box-shadow: 0 0 0 1px rgba(217,180,91,0.25), 0 4px 14px rgba(217,180,91,0.12);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--gold) 25%, transparent), 0 4px 14px color-mix(in srgb, var(--gold) 12%, transparent);
 }
 .compass-thumb { width: 40px; height: 40px; }
 .compass-thumb svg { width: 100%; height: 100%; }
@@ -446,7 +512,7 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .zone-detail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; }
 .zone-delta { font-size: 10.5px; font-weight: 700; }
 .zone-delta.pos { color: var(--ok); }
-.zone-delta.neg { color: #E8A54B; }
+.zone-delta.neg { color: var(--warn); }
 .zone-detail-theme { font-size: 11.5px; color: var(--gold-2); }
 .zone-detail-stats { font-size: 11px; color: var(--muted); }
 .zone-detail-stats b { color: var(--text); }
@@ -462,7 +528,7 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
 .zone-key { width: 32px; font-size: 10.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.03em; }
 .zone-track {
   flex: 1; height: 6px;
-  background: rgba(255,255,255,0.06);
+  background: var(--fill-1);
   border-radius: 4px;
   position: relative;
   overflow: visible;
@@ -478,7 +544,7 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
   position: absolute;
   top: -2px; bottom: -2px;
   width: 1px;
-  background: rgba(255,255,255,0.35);
+  background: var(--tick);
 }
 .zone-val { width: 40px; text-align: right; font-size: 11px; font-weight: 650; color: var(--text); font-variant-numeric: tabular-nums; }
 .zone-note { font-size: 10.5px; color: var(--dim); margin-top: 5px; line-height: 1.45; }
@@ -511,7 +577,7 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
   font-size: 40px;
   font-weight: 600;
   letter-spacing: 0.01em;
-  background: linear-gradient(180deg, #F3E5C0, var(--gold));
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
@@ -546,7 +612,7 @@ input[type='range']::-webkit-slider-thumb:hover { transform: scale(1.15); }
 kbd {
   font-family: var(--font);
   font-size: 10.5px; font-weight: 700;
-  background: rgba(255,255,255,0.08);
+  background: var(--fill-1);
   border: 1px solid var(--stroke-2);
   border-bottom-width: 2px;
   border-radius: 5px;
@@ -578,6 +644,7 @@ kbd {
 }
 @keyframes toastIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes toastInTop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes toastInC { from { opacity: 0; transform: translate(-50%, 10px) scale(0.97); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 /* the payoff moment: the compass breathes in instead of popping */
 .compass-enter {
@@ -599,7 +666,7 @@ kbd {
 @media (pointer: coarse) {
   input[type='range'] { height: 30px; background: none; }
   input[type='range']::-webkit-slider-runnable-track {
-    height: 4px; border-radius: 4px; background: rgba(255,255,255,0.12);
+    height: 4px; border-radius: 4px; background: var(--fill-2);
   }
   input[type='range']::-webkit-slider-thumb { width: 22px; height: 22px; margin-top: -9px; }
   .chip { padding: 9px 13px; font-size: 12px; }
@@ -612,6 +679,9 @@ kbd {
   .draw-width { width: 40px; height: 34px; }
   .preset-del { width: 32px; height: 32px; font-size: 17px; }
   .marker-row { padding: 10px 8px; }
+  .toast-action { padding: 9px 14px; }
+  /* negative margins keep the visual footprint while the hit area grows */
+  .guide-close { padding: 12px; margin: -8px -8px -8px auto; }
   /* tactile press feedback — buttons visibly respond to the thumb */
   .chip:active, .qpill:active, .rail-btn:active, .btn-ghost:active, .compass-card:active,
   .icon-btn:active, .btn-primary:active, .zone-row:active, .marker-row:active {
@@ -624,7 +694,7 @@ kbd {
 .shortcut-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
 .shortcut-keys { white-space: nowrap; }
 .toast.ok svg { color: var(--ok); }
-.toast.warn svg { color: #E8A54B; }
+.toast.warn svg { color: var(--warn); }
 .toast.info svg { color: var(--teal); }
 .toast-action {
   margin-left: 6px;
@@ -739,7 +809,7 @@ kbd {
 .map-results button { display: flex; flex-direction: column; gap: 1px; }
 .map-results button b { color: var(--text); font-size: 12.5px; }
 .map-results button span { color: var(--dim); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
-.map-quality { font-size: 12px; font-weight: 700; color: #E8A54B; letter-spacing: 0.06em; white-space: nowrap; }
+.map-quality { font-size: 12px; font-weight: 700; color: var(--warn); letter-spacing: 0.06em; white-space: nowrap; }
 .map-quality.good { color: var(--ok); }
 .map-quality em { font-style: normal; font-weight: 600; font-size: 11px; color: var(--muted); letter-spacing: 0; }
 .map-container .leaflet-control-zoom { border: none; box-shadow: 0 4px 14px rgba(0,0,0,0.4); }
@@ -779,8 +849,8 @@ kbd {
 
 /* leaflet dark tweaks */
 .leaflet-container { font-family: var(--font); }
-.leaflet-bar a { background: #1d2029; color: var(--text); border-color: var(--stroke-2); }
-.leaflet-bar a:hover { background: #262a36; }
+.leaflet-bar a { background: var(--panel-raised); color: var(--text); border-color: var(--stroke-2); }
+.leaflet-bar a:hover { background: color-mix(in srgb, var(--text) 8%, var(--panel-raised)); }
 
 /* ————— canvas overlays ————— */
 
@@ -809,9 +879,9 @@ kbd {
   display: inline-flex; align-items: center; gap: 5px;
 }
 .qpill:hover { color: var(--text); background: rgba(255,255,255,0.06); }
-.qpill.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px rgba(217,180,91,0.35); }
+.qpill.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
 .qpill.deg { font-variant-numeric: tabular-nums; }
-.qpill.lockpill.on { background: rgba(226,87,76,0.14); color: #F09A92; box-shadow: inset 0 0 0 1px rgba(226,87,76,0.4); }
+.qpill.lockpill.on { background: rgba(226,87,76,0.14); color: var(--danger-fg); box-shadow: inset 0 0 0 1px rgba(226,87,76,0.4); }
 .qsep { width: 1px; height: 18px; background: var(--stroke); margin: 0 3px; }
 
 .deg-pop {
@@ -833,11 +903,11 @@ kbd {
   display: inline-flex; align-items: center; gap: 8px;
   padding: 10px 18px;
   border-radius: 999px;
-  background: linear-gradient(180deg, var(--gold-2), #C79A3F);
-  color: #221a04;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+  color: var(--gold-ink);
   font-weight: 800; font-size: 13px;
-  box-shadow: 0 6px 22px rgba(217,180,91,0.35), inset 0 1px 0 rgba(255,255,255,0.35);
-  animation: toastIn 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  box-shadow: 0 6px 22px color-mix(in srgb, var(--gold) 35%, transparent), inset 0 1px 0 rgba(255,255,255,0.35);
+  animation: toastInC 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
 }
 .close-chip:hover { filter: brightness(1.06); }
 
@@ -853,10 +923,10 @@ kbd {
   animation: tipIn 0.14s ease;
 }
 .sel-chips .chip { padding: 6px 10px; font-size: 11.5px; }
-.sel-chips .chip.danger { color: #F09A92; border-color: rgba(226,87,76,0.4); }
+.sel-chips .chip.danger { color: var(--danger-fg); border-color: rgba(226,87,76,0.4); }
 .sel-chips .chip.danger:hover { background: rgba(226,87,76,0.12); }
 
-.lock-btn.locked { color: #F09A92; background: rgba(226,87,76,0.12); }
+.lock-btn.locked { color: var(--danger-fg); background: rgba(226,87,76,0.12); }
 
 .rotate-chip {
   position: absolute;
@@ -882,7 +952,7 @@ kbd {
   animation: tipIn 0.14s ease;
 }
 
-.rail-btn.danger:hover { background: rgba(226,87,76,0.14); color: #F09A92; }
+.rail-btn.danger:hover { background: rgba(226,87,76,0.14); color: var(--danger-fg); }
 
 .map-alt {
   margin-top: 10px;
@@ -903,13 +973,13 @@ kbd {
   width: 38px; height: 38px;
   display: grid; place-items: center;
   border-radius: 10px;
-  background: #1d2029;
+  background: var(--panel-raised);
   border: 1px solid var(--stroke-2);
   color: var(--teal);
   box-shadow: 0 4px 14px rgba(0,0,0,0.4);
   transition: all 0.15s ease;
 }
-.map-locate:hover { background: #262a36; }
+.map-locate:hover { background: color-mix(in srgb, var(--text) 8%, var(--panel-raised)); }
 
 /* ————— guide card — the one place that always says what's next ————— */
 .guide-card {
@@ -921,7 +991,7 @@ kbd {
   bottom: 16px;
   transform: translateX(-50%);
   width: min(400px, calc(100vw - 28px));
-  z-index: 19;
+  z-index: 21; /* above the right panel (20) — they overlap below ~1080px */
   display: flex; flex-direction: column; gap: 9px;
   padding: 12px 12px 13px;
   background: var(--panel);
@@ -929,7 +999,7 @@ kbd {
   border-radius: 14px;
   backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
-  animation: cardIn 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
+  animation: cardInC 0.3s cubic-bezier(0.2, 0.8, 0.25, 1);
 }
 .guide-rows { display: flex; align-items: center; gap: 3px; }
 .guide-row {
@@ -945,7 +1015,7 @@ kbd {
   display: grid; place-items: center;
   border-radius: 50%;
   font-size: 9px; font-weight: 800;
-  background: rgba(255,255,255,0.07);
+  background: var(--fill-1);
   color: var(--muted);
   flex: 0 0 auto;
 }
@@ -953,7 +1023,7 @@ kbd {
 .guide-row.done .guide-dot { background: var(--gold-soft); color: var(--gold); }
 .guide-row.skipped .guide-dot { background: rgba(255,255,255,0.05); color: var(--dim); }
 .guide-row.now { color: var(--gold-2); }
-.guide-row.now .guide-dot { background: var(--gold); color: #1a1503; }
+.guide-row.now .guide-dot { background: var(--gold); color: var(--gold-ink); }
 .guide-row .guide-name { display: none; }
 .guide-close { margin-left: auto; color: var(--dim); padding: 4px; flex: 0 0 auto; }
 .guide-close:hover { color: var(--text); }
@@ -963,10 +1033,10 @@ kbd {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 8px 13px;
   border-radius: 10px;
-  background: linear-gradient(180deg, var(--gold-2), #C79A3F);
-  color: #221a04;
+  background: linear-gradient(180deg, var(--gold-2), var(--gold));
+  color: var(--gold-ink);
   font-weight: 700; font-size: 12.5px;
-  box-shadow: 0 2px 10px rgba(217,180,91,0.25);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--gold) 25%, transparent);
 }
 .guide-cta:hover { filter: brightness(1.06); }
 .guide-alt {
@@ -1019,7 +1089,7 @@ kbd {
   transition: background 0.12s ease;
 }
 .asheet-row:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
-.asheet-row.danger { color: #F09A92; }
+.asheet-row.danger { color: var(--danger-fg); }
 .asheet-ic {
   width: 34px; height: 34px; flex: 0 0 auto;
   display: grid; place-items: center;
@@ -1027,7 +1097,7 @@ kbd {
   background: rgba(255,255,255,0.06);
   color: var(--muted);
 }
-.asheet-row.danger .asheet-ic { background: rgba(226,87,76,0.12); color: #F09A92; }
+.asheet-row.danger .asheet-ic { background: rgba(226,87,76,0.12); color: var(--danger-fg); }
 .asheet-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .asheet-text b { font-size: 14px; font-weight: 650; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .asheet-text small { font-size: 11.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1169,8 +1239,8 @@ kbd {
 .finding-row:hover { background: rgba(255,255,255,0.06); }
 .finding-icon { flex: 0 0 auto; margin-top: 1px; }
 .finding-row.sev-good .finding-icon { color: var(--ok); }
-.finding-row.sev-warn .finding-icon { color: #E8A54B; }
-.finding-row.sev-bad .finding-icon { color: #F26B57; }
+.finding-row.sev-warn .finding-icon { color: var(--warn); }
+.finding-row.sev-bad .finding-icon { color: var(--danger); }
 .finding-row.sev-info .finding-icon { color: var(--teal); }
 .finding-row.sev-bad { border-color: rgba(226,87,76,0.35); background: rgba(226,87,76,0.06); }
 .finding-row.sev-warn { border-color: rgba(232,165,75,0.3); }
@@ -1193,7 +1263,7 @@ kbd {
   background: rgba(10,11,15,0.55);
   border-radius: 0 var(--radius-s) 0 8px;
 }
-.preset-del:hover { color: #F09A92; background: rgba(226,87,76,0.18); }
+.preset-del:hover { color: var(--danger-fg); background: rgba(226,87,76,0.18); }
 
 /* report findings */
 .report-findings { display: flex; flex-direction: column; gap: 6px; }
@@ -1229,7 +1299,7 @@ kbd {
   font-size: 13px;
   outline: none;
 }
-.icon-btn.danger:hover { background: rgba(226,87,76,0.14); color: #F09A92; }
+.icon-btn.danger:hover { background: rgba(226,87,76,0.14); color: var(--danger-fg); }
 
 /* ————— report ————— */
 
@@ -1269,10 +1339,10 @@ kbd {
 .report-sub { color: #6A7280; font-size: 13px; margin-top: 4px; }
 .report-page h2 {
   font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase;
-  color: #B8963E; margin: 26px 0 8px; border-bottom: 1px solid #E8E4D8; padding-bottom: 5px;
+  color: #8A6E24; margin: 26px 0 8px; border-bottom: 1px solid #E8E4D8; padding-bottom: 5px;
 }
 .report-meta { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 16px; }
-.report-meta label { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #8A94A6; }
+.report-meta label { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.05em; color: #667080; }
 .report-meta input {
   border: 1px solid #DDD8C9; border-radius: 7px; padding: 7px 9px;
   font-size: 13px; font-family: var(--font); color: #1E2430; outline: none; background: #FDFCF9;
@@ -1284,14 +1354,15 @@ kbd {
 .report-entrance { padding: 8px 0; border-bottom: 1px dashed #E8E4D8; }
 .report-note { color: #6A7280; font-size: 12px; margin-top: 3px; font-style: italic; }
 .report-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-.report-table th { text-align: left; padding: 5px 8px; color: #8A94A6; font-weight: 700; border-bottom: 1.5px solid #DDD8C9; }
+.report-table th { text-align: left; padding: 5px 8px; color: #667080; font-weight: 700; border-bottom: 1.5px solid #DDD8C9; }
 .report-table td { padding: 5px 8px; border-bottom: 1px solid #EFECE1; vertical-align: top; }
 .report-zonechip { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; vertical-align: -1px; }
 .report-notes {
   width: 100%; border: 1px solid #DDD8C9; border-radius: 8px; padding: 10px 12px;
   font-family: var(--font); font-size: 13px; color: #1E2430; background: #FDFCF9; resize: vertical; outline: none;
 }
-.report-foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #E8E4D8; color: #9AA2B0; font-size: 10.5px; }
+.report-meta input:focus, .report-notes:focus { border-color: #B8963E; }
+.report-foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #E8E4D8; color: #667080; font-size: 10.5px; }
 
 @media print {
   body * { visibility: hidden; }
@@ -1324,13 +1395,13 @@ kbd {
   backdrop-filter: blur(16px);
   box-shadow: var(--shadow);
   z-index: 24;
-  animation: toastIn 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
+  animation: toastInC 0.25s cubic-bezier(0.2, 0.9, 0.3, 1.2);
   white-space: nowrap;
 }
 .cal-bar-len {
   font-size: 12.5px;
   font-weight: 700;
-  color: #BFEDF2;
+  color: var(--teal);
   font-variant-numeric: tabular-nums;
   margin-right: 2px;
 }
@@ -1361,7 +1432,7 @@ kbd {
     background: rgba(255,255,255,0.045);
     white-space: nowrap;
   }
-  .step-now .step-num { width: 18px; height: 18px; background: var(--gold); color: #1a1503; }
+  .step-now .step-num { width: 18px; height: 18px; background: var(--gold); color: var(--gold-ink); }
   .topbar-right { gap: 4px; }
   .seg button { padding: 8px 12px; }
   .icon-btn { width: 40px; height: 40px; }
@@ -1376,9 +1447,9 @@ kbd {
     max-height: 72dvh;
     padding: 0 0 calc(10px + env(safe-area-inset-bottom));
     transition: transform 0.3s cubic-bezier(0.3, 0.9, 0.3, 1);
-    background: rgba(15, 17, 23, 0.97);
+    background: var(--sheet);
     backdrop-filter: blur(14px);
-    border-top: 1px solid rgba(217,180,91,0.28);
+    border-top: 1px solid color-mix(in srgb, var(--gold) 28%, transparent);
     border-radius: 18px 18px 0 0;
     touch-action: pan-y; /* content must stay natively scrollable */
     overscroll-behavior: contain;
@@ -1413,7 +1484,7 @@ kbd {
     font-size: 12.5px;
     font-weight: 700;
     letter-spacing: 0.04em;
-    background: linear-gradient(180deg, #171a22, rgba(17, 19, 26, 0.96) 78%, rgba(17, 19, 26, 0));
+    background: linear-gradient(180deg, var(--sheet-2), color-mix(in srgb, var(--sheet-2) 96%, transparent) 78%, transparent);
     border-radius: 18px 18px 0 0;
     cursor: grab;
     touch-action: none;
@@ -1426,7 +1497,7 @@ kbd {
     transform: translateX(-50%);
     width: 44px; height: 4.5px;
     border-radius: 3px;
-    background: rgba(217,180,91,0.5);
+    background: color-mix(in srgb, var(--gold) 50%, transparent);
   }
 
   /* when the sheet is open, hide the floating rail beneath it */
@@ -1466,13 +1537,15 @@ kbd {
     bottom: calc(136px + env(safe-area-inset-bottom));
     max-width: none;
     transform: none;
+    animation-name: toastIn; /* transform is none here — the centred keyframes would fly in from the left */
     white-space: normal;
     flex-wrap: wrap;
     justify-content: center;
   }
   .cal-bar .btn-ghost, .cal-bar .btn-primary { padding: 7px 10px; font-size: 12px; }
 
-  .quickbar { top: calc(8px + env(safe-area-inset-top)); max-width: calc(100vw - 12px); }
+  /* the mobile topbar already absorbs the top inset — adding it here double-counts */
+  .quickbar { top: 8px; max-width: calc(100vw - 12px); }
   .quickbar-row { flex-wrap: nowrap; overflow: visible; max-width: 100%; }
   .qpill { padding: 8px 8px; flex: 0 0 auto; font-size: 11.5px; }
   .qsep { margin: 0 1px; }
@@ -1507,18 +1580,25 @@ kbd {
   .app:has(.guide-card) .sel-chips {
     bottom: calc(420px + env(safe-area-inset-bottom));
   }
+  .app:has(.guide-card) .toasts {
+    bottom: calc(356px + env(safe-area-inset-bottom));
+  }
 
   /* selection/marker/stroke chips: a centred bar above the dock always fits —
-     point-anchoring a ~300px row inside a 360px screen cannot */
+     point-anchoring a ~300px row inside a 360px screen cannot. bottom 188px
+     clears the rotate chip (138 + ~42px) and cal-bar (136 + ~46px) bands, and
+     the bar is bottom-anchored so a wrapped second row grows upward */
   .sel-chips {
     left: 8px !important;
     right: 8px;
     top: auto !important;
-    bottom: calc(146px + env(safe-area-inset-bottom));
+    bottom: calc(188px + env(safe-area-inset-bottom));
     flex-wrap: wrap;
     justify-content: center;
   }
   .sel-chips .chip { padding: 10px 14px; font-size: 12px; }
+  /* like the rail: when the sheet rises above peek it slides over the chip band */
+  .stage-wrap:has(.panel:not(.pos-peek)) .sel-chips { display: none; }
 
   /* the tool rail becomes a labeled bottom dock — no more cryptic icon guessing */
   .tool-rail {
@@ -1548,7 +1628,7 @@ kbd {
 
   /* dialogs: top-align so the keyboard can't occlude the input/actions
      (iOS doesn't shrink the layout viewport when the keyboard opens) */
-  .dialog-backdrop:not(.map-dialog-backdrop) { place-items: start center; }
+  .dialog-backdrop:not(:has(.map-dialog)) { place-items: start center; }
   .dialog:not(.map-dialog) {
     margin-top: max(8dvh, calc(env(safe-area-inset-top) + 8px));
     max-height: calc(100dvh - 24px);
@@ -1566,6 +1646,14 @@ kbd {
   }
   .map-dialog .map-holder { flex: 1; min-height: 0; }
   .map-dialog .map-container { height: 100%; }
+  /* the app draws under the system bars (viewport-fit=cover) — the edge-to-edge
+     map must pad them itself; compound selector outranks the .dialog reset below */
+  .dialog.map-dialog {
+    padding-top: max(14px, env(safe-area-inset-top));
+    padding-right: max(14px, env(safe-area-inset-right));
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+    padding-left: max(14px, env(safe-area-inset-left));
+  }
 
   .empty-card { padding: 26px 20px 18px; border-radius: 18px; }
   .empty-card h1 { font-size: 32px; }
@@ -1595,6 +1683,7 @@ kbd {
     width: auto;
     bottom: calc(150px + env(safe-area-inset-bottom));
     z-index: 19;
+    animation-name: cardIn; /* transform is none here — the centred keyframes would fly in from the left */
   }
 }
 
@@ -1609,6 +1698,8 @@ kbd {
     mask-image: none;
   }
   .rail-label { display: none; }
+  /* even pruned, 8 buttons don't fit a 336px stage — hide the More-menu twins */
+  .tool-rail .hide-mobile { display: none; }
   .panel {
     left: auto; right: 0; top: 0; bottom: 0;
     width: min(320px, 40vw);
@@ -1617,6 +1708,26 @@ kbd {
     padding-bottom: env(safe-area-inset-bottom);
   }
   .panel.pos-peek, .panel.pos-half { transform: none; }
+  /* the sheet grammar doesn't exist here: no drag handle, no peek scroll-lock,
+     and an "open sheet" must not delete the rail or the selection chips */
+  .sheet-handle { display: none; }
+  .panel.pos-peek { overflow-y: auto; }
+  .panel:not(.pos-peek) ~ .tool-rail { display: flex; }
+  .stage-wrap:has(.panel:not(.pos-peek)) .sel-chips { display: flex; }
   .empty-wrap { overflow-y: auto; align-items: flex-start; padding: 12px 0; }
   .guide-card { display: none; }
+  /* the hidden card still matches :has() — undo the ≤760 lifts (which only
+     exist ≤760; at 761-900 the desktop anchors are in effect instead) */
+  @media (max-width: 760px) {
+    .app:has(.guide-card) .rotate-chip { bottom: calc(138px + env(safe-area-inset-bottom)); }
+    .app:has(.guide-card) .sel-chips { bottom: calc(188px + env(safe-area-inset-bottom)); }
+    .app:has(.guide-card) .toasts { bottom: calc(146px + env(safe-area-inset-bottom)); }
+  }
+}
+
+/* short viewports (landscape phones, half-height desktop windows): the vertical
+   rail is ~529px tall and .stage-wrap clips with no scroll fallback */
+@media (max-height: 640px) {
+  .tool-rail { max-height: calc(100% - 16px); overflow-y: auto; scrollbar-width: none; }
+  .tool-rail::-webkit-scrollbar { display: none; }
 }
