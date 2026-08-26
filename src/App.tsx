@@ -10,7 +10,7 @@ import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog, TextDialog } from './ui/Dialogs'
 import { MapModal } from './ui/MapModal'
-import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips } from './ui/CanvasOverlays'
+import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips, ZoneInfoCard } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
@@ -160,6 +160,7 @@ export default function App() {
           else if (s.selectedStroke) s.setSelectedStroke(null)
           else if (s.selectedRoomShape) s.setSelectedRoomShape(null)
           else if (s.selectedText) s.setSelectedText(null)
+          else if (s.highlightZone != null) s.setHighlightZone(null)
           else if (s.roomDraft) s.setRoomDraft(s.roomDraft.length > 1 ? s.roomDraft.slice(0, -1) : null)
           else if (s.selectedVertex != null || s.selectedEdge != null) s.setSelection({ vertex: null, edge: null })
           else if (s.tool === 'calibrate' && s.calA) s.setCal(null, null)
@@ -275,6 +276,7 @@ export default function App() {
       {/* fixed to the real viewport, like Toasts — .stage-wrap clips absolute children
           with overflow:hidden, which was cramping this against the dock on real phones */}
       <GuideCard />
+      <ZoneInfoCard />
       <Toasts />
       <CalibrateDialog />
       <MarkerDialog />

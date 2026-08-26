@@ -51,6 +51,7 @@ export async function initNative(): Promise<void> {
       if (s.selectedMarker) return s.setSelectedMarker(null)
       if (s.selectedStroke) return s.setSelectedStroke(null)
       if (s.selectedRoomShape) return s.setSelectedRoomShape(null)
+      if (s.highlightZone != null) return s.setHighlightZone(null)
       if (s.selectedText) return s.setSelectedText(null)
       if (s.roomDraft) return s.setRoomDraft(s.roomDraft.length > 1 ? s.roomDraft.slice(0, -1) : null)
       if (s.selectedVertex != null || s.selectedEdge != null) return s.setSelection({ vertex: null, edge: null })

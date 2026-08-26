@@ -986,6 +986,61 @@ kbd {
 }
 .map-locate:hover { background: color-mix(in srgb, var(--text) 8%, var(--panel-raised)); }
 
+/* ————— zone detail card — tap a wheel region to read it ————— */
+.zone-card {
+  position: fixed;
+  left: 84px; top: 68px;
+  width: 272px;
+  max-height: calc(100vh - 150px);
+  overflow-y: auto;
+  z-index: 22;
+  padding: 12px 13px 13px;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke-2);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  animation: tipIn 0.16s ease;
+  font-size: 12px;
+  display: flex; flex-direction: column; gap: 7px;
+}
+.zone-card-head { display: flex; align-items: center; gap: 7px; }
+.zone-card-head b { font-size: 14px; }
+.zone-card-name { color: var(--muted); font-weight: 600; flex: 1; min-width: 0; }
+.zone-card-close {
+  width: 26px; height: 26px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  border-radius: 8px; color: var(--muted);
+}
+.zone-card-close:hover { background: var(--fill-1); color: var(--text); }
+.zone-card-theme { color: var(--gold-2); font-weight: 650; }
+.zone-card-stats { color: var(--text); display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; }
+.zone-card-sec {
+  margin-top: 3px;
+  font-size: 10px; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase;
+  color: var(--dim);
+}
+.zone-card-gate { color: var(--text); line-height: 1.45; }
+.zone-card-gate em { font-style: normal; color: var(--muted); }
+.gate-q {
+  display: inline-block; margin-right: 6px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: 0.04em;
+  padding: 1.5px 6px; border-radius: 999px;
+  background: var(--fill-1); color: var(--muted);
+}
+.gate-q.good { background: rgba(99,181,111,0.16); color: var(--ok); }
+.gate-q.caution { background: rgba(232,165,75,0.16); color: var(--warn); }
+.zone-card-rule { line-height: 1.5; }
+.zone-card-rule.good { color: var(--ok); }
+.zone-card-rule.bad { color: var(--danger-fg); }
+.zone-card-here { color: var(--text); font-weight: 600; }
+
+/* a drawing tool, not a document: dragging on the canvas must never smear text
+   selection across labels and chrome. Real text entry opts back in. */
+.app { user-select: none; -webkit-user-select: none; }
+.app input, .app textarea { user-select: text; -webkit-user-select: text; }
+.report-backdrop { user-select: text; -webkit-user-select: text; }
+.stage-wrap { -webkit-touch-callout: none; }
+
 /* ————— guide card — the one place that always says what's next ————— */
 .guide-card {
   position: fixed;
@@ -1590,6 +1645,17 @@ kbd {
   }
 
   .close-chip { bottom: calc(196px + env(safe-area-inset-bottom)); }
+
+  /* zone detail card: the guide-card band above the dock; the guide and rotate chip
+     step aside while it's open — one reader at a time in that slot */
+  .zone-card {
+    left: 8px; right: 8px; top: auto;
+    width: auto;
+    bottom: calc(150px + env(safe-area-inset-bottom));
+    max-height: 46vh;
+  }
+  .app:has(.zone-card) .guide-card { display: none; }
+  .app:has(.zone-card) .rotate-chip { display: none; }
 
   /* rotate chip moves to the bottom-left, out of the quick bar's way; popover opens upward */
   .rotate-chip { top: auto; bottom: calc(138px + env(safe-area-inset-bottom)); left: calc(8px + env(safe-area-inset-left)); flex-direction: column-reverse; }

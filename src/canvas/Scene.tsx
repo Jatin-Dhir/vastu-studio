@@ -249,8 +249,6 @@ function Background({ bg, dxf, k, paper }: { bg: BgState; dxf: DxfImport | null;
   if (bg.kind === 'raster' && bg.dataUrl) {
     return (
       <g opacity={bg.opacity}>
-        <rect x={0} y={0} width={bg.w} height={bg.h} fill="#0E0F14" opacity={0.5}
-          transform={`translate(${10 / k} ${14 / k})`} />
         <image href={bg.dataUrl} x={0} y={0} width={bg.w} height={bg.h}
           preserveAspectRatio="none" style={filter ? { filter } : undefined} />
       </g>

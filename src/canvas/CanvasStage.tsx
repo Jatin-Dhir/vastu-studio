@@ -6,7 +6,7 @@ import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSe
 import { formatLen } from '../format'
 import { haptic } from '../native'
 import { setGestureBusy } from './gesture'
-import { markerKindMeta } from '../vastu'
+import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
 
 const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
@@ -40,6 +40,7 @@ interface DragState {
   markerId: string | null
   rsid: string | null
   txid: string | null
+  zoneIdx: number | null
   startX: number
   startY: number
   lastX: number
@@ -99,7 +100,7 @@ export function CanvasStage() {
   const activeInkRef = useRef<SVGPathElement>(null)
   const snapDotsRef = useRef<SVGGElement>(null)
   const penCursorRef = useRef<Pt | null>(null)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, txid: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, txid: null, zoneIdx: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
@@ -355,18 +356,19 @@ export function CanvasStage() {
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-txid],[data-role]')
+    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-txid],[data-zone],[data-role]')
     const vidx = target?.getAttribute('data-vidx')
     const bidx = target?.getAttribute('data-bidx')
     const mkid = target?.getAttribute('data-mkid')
     const strokeId = target?.getAttribute('data-strokeid')
     const rsid = target?.getAttribute('data-rsid')
     const txid = target?.getAttribute('data-txid')
+    const zone = target?.getAttribute('data-zone')
     const role = target?.getAttribute('data-role')
     const d = drag.current
     d.startX = e.clientX; d.startY = e.clientY
     d.lastX = e.clientX; d.lastY = e.clientY
-    d.moved = false; d.pushed = false; d.markerId = null; d.rsid = null; d.txid = null
+    d.moved = false; d.pushed = false; d.markerId = null; d.rsid = null; d.txid = null; d.zoneIdx = null
     d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true); setDragIdx({ mode: 'vertex', idx: d.idx }) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true); setDragIdx({ mode: 'bulge', idx: d.idx }) }
@@ -398,6 +400,11 @@ export function CanvasStage() {
       // text notes: drag moves, tap toggles selection — mirrors markers
       d.mode = 'text-drag'
       d.txid = txid
+    }
+    else if (zone != null) {
+      // a zone wedge: taps open the zone's detail card, drags still pan
+      d.mode = 'maybe-pan'
+      d.zoneIdx = parseInt(zone, 10)
     }
     else if (role === 'center' || role === 'calA' || role === 'calB' || role === 'calLine') { d.mode = role }
     else if (e.button === 1) { d.mode = 'pan' }
@@ -746,7 +753,10 @@ export function CanvasStage() {
         }
         lastTap.current = { t: now, x: e.clientX, y: e.clientY }
       }
-      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); s.setSelectedStroke(null); s.setSelectedRoomShape(null); return
+      s.setSelection({ vertex: null, edge: null }); s.setSelectedMarker(null); s.setSelectedStroke(null); s.setSelectedRoomShape(null); s.setSelectedText(null)
+      // tapping a wheel zone opens its detail card (same zone again closes); anywhere else clears it
+      s.setHighlightZone(d.zoneIdx != null && d.zoneIdx !== s.highlightZone ? d.zoneIdx : null)
+      return
     }
     if (s.locked) return
 
@@ -859,7 +869,15 @@ export function CanvasStage() {
   const onDblClick = (e: React.MouseEvent<SVGSVGElement>) => {
     if (COARSE) return // touch double-tap zooms; point-insert stays a precise mouse gesture
     const s = useStore.getState()
-    if (s.locked || s.tool !== 'select' || s.pts.length < 2) return
+    if (s.locked || s.tool !== 'select') return
+    // double-click a text note to edit it in place
+    const noteId = (e.target as Element).closest('[data-txid]')?.getAttribute('data-txid')
+    if (noteId) {
+      s.setSelectedText(noteId)
+      s.setTextEditing(true)
+      return
+    }
+    if (s.pts.length < 2) return
     const world = toWorld(e.clientX, e.clientY)
     const k = viewRef.current.k
     const n = s.pts.length
@@ -961,6 +979,20 @@ export function CanvasStage() {
               </text>
             </g>
           )
+        })()}
+
+        {/* zone hit wedges — tap a region of the wheel for its detail card. Rendered FIRST
+            so every other hit surface (markers, rooms, strokes, notes) wins over them */}
+        {tool === 'select' && closed && center && sceneCompass.id !== 'none' && R > 0 && (() => {
+          const RS = R * ((sceneCompass.scalePct ?? 100) / 100)
+          return ZONES16.map((_, i) => {
+            const a0 = northDeg - 11.25 + i * 22.5
+            const p0 = polar(center, a0, RS)
+            const p1 = polar(center, a0 + 22.5, RS)
+            return <path key={`zone-${i}`} data-zone={i}
+              d={`M${center.x} ${center.y}L${p0.x} ${p0.y}A${RS} ${RS} 0 0 1 ${p1.x} ${p1.y}Z`}
+              fill="rgba(0,0,0,0.001)" />
+          })
         })()}
 
         {/* stroke hit paths — tap a stroke in Select mode to manage it */}

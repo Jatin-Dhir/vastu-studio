@@ -1,12 +1,114 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Check, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
-import { M_PER_FT, formatLen } from '../format'
-import { placementOf } from '../analysis'
+import { M_PER_FT, formatArea, formatLen } from '../format'
+import { placementOf, zoneRows } from '../analysis'
 import { NorthDial } from './NorthDial'
-import { GATE_QUALITY, MARKER_KINDS, PLACEMENT_RULES } from '../vastu'
+import { GATES32, GATE_QUALITY, GATE_START_DEG, MARKER_KINDS, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
 import type { MarkerKind } from '../types'
+
+/**
+ * Detail card for a tapped wheel zone — the "what IS this region" answer in one place:
+ * share of the plot, theme, its two entrance gates with their classical quality, what
+ * belongs (and doesn't) here, and what the practitioner has actually placed in it.
+ */
+export function ZoneInfoCard() {
+  const zi = useStore((s) => s.highlightZone)
+  const pts = useStore((s) => s.pts)
+  const bulges = useStore((s) => s.bulges)
+  const closed = useStore((s) => s.closed)
+  const centerOverride = useStore((s) => s.centerOverride)
+  const northDeg = useStore((s) => s.northDeg)
+  const metersPerPx = useStore((s) => s.metersPerPx)
+  const unit = useStore((s) => s.unit)
+  const markers = useStore((s) => s.markers)
+  const roomShapes = useStore((s) => s.roomShapes)
+  const anySel = useStore((s) => !!(s.selectedMarker || s.selectedStroke || s.selectedRoomShape || s.selectedText))
+
+  const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
+  const center = useMemo(() => centerOverride ?? (pts.length >= 3 ? centroid(sampled) : null), [centerOverride, pts.length, sampled])
+  const rows = useMemo(
+    () => (closed && center ? zoneRows(sampled, center, northDeg) : null),
+    [closed, center, sampled, northDeg],
+  )
+
+  if (zi == null || !closed || !center || !rows || anySel) return null
+  const z = ZONES16[zi]
+  const r = rows[zi]
+  const delta = r.pct - 6.25
+
+  const gates = GATES32
+    .map((g, gi) => ({ ...g, gi }))
+    .filter(({ gi }) => {
+      const mid = (GATE_START_DEG + gi * 11.25 + 5.625) % 360
+      return Math.round(mid / 22.5) % 16 === zi
+    })
+
+  const fav: string[] = []
+  const bad: string[] = []
+  for (const [kind, rule] of Object.entries(PLACEMENT_RULES)) {
+    const name = markerKindMeta(kind).name.toLowerCase()
+    if (rule.ideal.includes(z.key)) fav.push(name + ' (ideal)')
+    else if (rule.good.includes(z.key)) fav.push(name)
+    else if (rule.avoid.includes(z.key)) bad.push(name)
+  }
+
+  const here = [
+    ...markers.filter((m) => placementOf(m.p, center, northDeg).zoneIdx === zi).map((m) => m.label),
+    ...roomShapes.filter((rs) => {
+      const xs = rs.pts.map((p) => p.x), ys = rs.pts.map((p) => p.y)
+      const mid = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
+      return placementOf(mid, center, northDeg).zoneIdx === zi
+    }).map((rs) => rs.label),
+  ]
+
+  return (
+    <aside className="zone-card" aria-label={`${z.key} zone details`}>
+      <div className="zone-card-head">
+        <span className="zone-chip" style={{ background: z.color }} />
+        <b>{z.key}</b>
+        <span className="zone-card-name">{z.name}</span>
+        <button className="zone-card-close" aria-label="Close"
+          onClick={() => useStore.getState().setHighlightZone(null)}><X size={13} /></button>
+      </div>
+      <div className="zone-card-theme">{z.theme}</div>
+      <div className="zone-card-stats">
+        <b>{r.pct.toFixed(1)}%</b> of the plot
+        {metersPerPx ? <> · {formatArea(r.areaPx * metersPerPx * metersPerPx, unit)}</> : null}
+        <span className={`zone-delta ${delta >= 0 ? 'pos' : 'neg'}`}>
+          {delta >= 0 ? '+' : ''}{delta.toFixed(1)}% vs even
+        </span>
+      </div>
+      <div className="zone-card-sec">Entrance gates here</div>
+      {gates.map((g) => {
+        const q = GATE_QUALITY[g.code]
+        return (
+          <div key={g.code} className="zone-card-gate">
+            <span className={`gate-q ${q?.v ?? 'neutral'}`}>
+              {q?.v === 'good' ? 'auspicious' : q?.v === 'caution' ? 'challenging' : 'neutral'}
+            </span>
+            {/* the quality note already leads with the devta's name — don't say it twice */}
+            <b>{g.code}</b> {q?.note ?? g.devta}
+          </div>
+        )
+      })}
+      {(fav.length > 0 || bad.length > 0) && (
+        <>
+          <div className="zone-card-sec">Placement guidance</div>
+          {fav.length > 0 && <div className="zone-card-rule good">Favours {fav.join(' · ')}</div>}
+          {bad.length > 0 && <div className="zone-card-rule bad">Avoid {bad.join(' · ')}</div>}
+        </>
+      )}
+      {here.length > 0 && (
+        <>
+          <div className="zone-card-sec">In this zone now</div>
+          <div className="zone-card-here">{here.join(' · ')}</div>
+        </>
+      )}
+    </aside>
+  )
+}
 
 /** Persistent what-do-I-do-now pill — instructions no longer vanish with a toast. */
 function ToolHint() {
