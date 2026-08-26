@@ -1,8 +1,10 @@
 import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
-import { Printer, Share2, X } from 'lucide-react'
+import { FileDown, Printer, Share2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { makePlanPng } from '../export'
+import { buildAssessment } from '../reportText'
+import type { ReportPdfData } from '../reportPdf'
 import { brahmasthanRadius, placementOf, zoneRows } from '../analysis'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
@@ -130,7 +132,9 @@ export function ReportView() {
 
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [imgBlob, setImgBlob] = useState<Blob | null>(null)
+  const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null)
   const [imgFailed, setImgFailed] = useState(false)
+  const [pdfBusy, setPdfBusy] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -139,6 +143,7 @@ export function ReportView() {
       if (!out || cancelled) return
       url = URL.createObjectURL(out.blob)
       setImgBlob(out.blob)
+      setImgDims({ w: out.w, h: out.h })
       setImgUrl(url)
     }).catch(() => {
       if (cancelled) return
@@ -200,6 +205,12 @@ export function ReportView() {
     ev?.findings.forEach((f) => { if (f.zoneIdx != null) map.set(f.zoneIdx, f) })
     return map
   }, [ev])
+  const assessment = useMemo(() => {
+    if (!ev || !center || !closed || !rows) return null
+    const strongest = rows.reduce((a, b) => (b.pct > a.pct ? b : a))
+    const weakest = rows.reduce((a, b) => (b.pct < a.pct ? b : a))
+    return buildAssessment({ items, center, northDeg, findings: ev.findings, strongest, weakest })
+  }, [ev, center, closed, rows, items, northDeg])
 
   const entrances = items.filter((m) => m.kind === 'entrance')
   const others = items.filter((m) => m.kind !== 'entrance')
@@ -214,7 +225,127 @@ export function ReportView() {
       if (typeof window.print !== 'function') throw new Error('print unavailable')
       window.print()
     } catch {
-      useStore.getState().toast('Printing isn’t available here — try Share instead', 'info')
+      useStore.getState().toast('Printing isn’t available here — use Save as PDF instead', 'info')
+    }
+  }
+
+  const doSavePdf = async () => {
+    setPdfBusy(true)
+    try {
+      // the export PNG is device-resolution (huge) — resample to a document-friendly
+      // JPEG before embedding, or the PDF balloons past what email/WhatsApp accepts
+      let plan: ReportPdfData['plan'] = null
+      if (imgBlob && imgDims) {
+        const url = URL.createObjectURL(imgBlob)
+        try {
+          const img = new Image()
+          await new Promise<void>((resolve, reject) => {
+            img.onload = () => resolve()
+            img.onerror = () => reject(new Error('plan decode failed'))
+            img.src = url
+          })
+          const sc = Math.min(1, 1500 / img.width)
+          const c = document.createElement('canvas')
+          c.width = Math.round(img.width * sc)
+          c.height = Math.round(img.height * sc)
+          c.getContext('2d')!.drawImage(img, 0, 0, c.width, c.height)
+          plan = { dataUrl: c.toDataURL('image/jpeg', 0.82), w: c.width, h: c.height }
+        } finally {
+          URL.revokeObjectURL(url)
+        }
+      }
+      const facts: ReportPdfData['facts'] = []
+      if (closed && metersPerPx) {
+        facts.push({ label: 'Area', value: formatArea(polygonArea(sampled) * metersPerPx ** 2, unit) })
+        facts.push({ label: 'Perimeter', value: formatLen(perimeter(sampled, true) * metersPerPx, unit) })
+        if (extents) facts.push({ label: 'Dimensions', value: `≈ ${formatLen(extents.ew * metersPerPx, unit)} E–W × ${formatLen(extents.ns * metersPerPx, unit)} N–S` })
+        if (brahmaRadiusPx != null) facts.push({ label: 'Brahmasthan', value: `${formatLen(brahmaRadiusPx * metersPerPx, unit)} radius from centre` })
+      }
+      facts.push({ label: 'Boundary', value: `${pts.length} vertices${curvedEdgeCount > 0 ? `, ${curvedEdgeCount} curved` : ''}` })
+      facts.push({ label: 'Scale', value: `${formatScale(metersPerPx, unit)}${metersPerPx && scaleLabel ? ` — ${scaleLabel}` : ''}` })
+      facts.push({ label: 'North', value: `${northDeg}° — ${northLabel}` })
+
+      const findingsData: ReportPdfData['findings'] = (ev?.findings ?? []).map((f) => {
+        const ctx = center ? findingContext(f, items, center, northDeg) : null
+        return {
+          severity: f.severity,
+          text: `${f.title}. ${f.detail}.${ctx ? ` ${ctx.zoneLabel} — ${ctx.theme}${ctx.extra ? ` · ${ctx.extra}` : ''}` : ''}`,
+        }
+      })
+
+      const entrancesData: ReportPdfData['entrances'] = center ? entrances.map((m) => {
+        const pl = placementOf(m.p, center, northDeg)
+        const q = GATE_QUALITY[pl.pada.code]
+        const sideGood = GATES32
+          .filter((g) => g.code[0] === pl.pada.code[0] && GATE_QUALITY[g.code]?.v === 'good')
+          .map((g) => g.code)
+        const lines = [
+          `Pada ${pl.pada.code} · ${pl.pada.devta}, in the ${pl.zone.key} zone (${pl.zone.name} — ${pl.zone.theme}), ${pl.bearing.toFixed(1)}° from the centre.`,
+          q?.note ? `${q.note}.` : null,
+          q?.v !== 'good' && sideGood.length ? `More favourable gates on this side: ${sideGood.join(', ')}.` : null,
+          m.note ?? null,
+        ].filter((x): x is string => !!x)
+        return {
+          title: m.label,
+          badge: q?.v === 'good' ? 'Auspicious' : q?.v === 'caution' ? 'Challenging' : 'Neutral',
+          badgeSev: q?.v === 'good' ? 'good' as const : q?.v === 'caution' ? 'warn' as const : 'info' as const,
+          lines,
+        }
+      }) : []
+
+      const roomsData: ReportPdfData['rooms'] = center ? others.map((m) => {
+        const pl = placementOf(m.p, center, northDeg)
+        const { verdict, why } = ruleVerdict(m.kind, pl.zone.key)
+        return {
+          item: m.label,
+          type: markerKindMeta(m.kind).name,
+          zone: `${pl.zone.key} — ${pl.zone.name}`,
+          pada: `${pl.pada.code} ${pl.pada.devta}`,
+          verdict: verdict === 'ideal' ? 'Ideal' : verdict === 'good' ? 'Good' : verdict === 'avoid' ? 'Avoid' : verdict === 'caution' ? 'Caution' : 'Neutral',
+          verdictSev: verdict === 'avoid' ? 'bad' as const : verdict === 'caution' ? 'warn' as const : verdict === 'neutral' ? 'info' as const : 'good' as const,
+          why: why ? `${why}.` : null,
+        }
+      }) : []
+
+      const zonesData: ReportPdfData['zones'] = (rows ?? []).map((r, i) => {
+        const flag = shapeFindingByZone.get(i)
+        const over = flag ? /extended/.test(flag.title) : false
+        return {
+          color: r.color,
+          key: r.key,
+          name: r.name,
+          theme: r.theme,
+          share: `${r.pct.toFixed(1)}%`,
+          area: metersPerPx ? formatArea(r.areaPx * metersPerPx ** 2, unit) : null,
+          status: flag ? (over ? 'Over-occupied' : 'Under-used') : 'Balanced',
+          statusSev: flag ? flag.severity : null,
+        }
+      })
+
+      const { exportReportPdf } = await import('../reportPdf')
+      await exportReportPdf({
+        projectName,
+        date: dateStr,
+        client: report.client,
+        address: report.address,
+        practitioner: report.practitioner,
+        notes: report.notes,
+        disclaimer: ANALYSIS_DISCLAIMER,
+        verdictLine,
+        sevCounts,
+        plan,
+        planCaption: `Scale ${formatScale(metersPerPx, unit)} · North ${northDeg}° · angles measured clockwise from true north`,
+        facts,
+        assessment,
+        findings: findingsData,
+        entrances: entrancesData,
+        rooms: roomsData,
+        zones: zonesData,
+      })
+    } catch {
+      useStore.getState().toast('Could not build the PDF — Print still works', 'warn')
+    } finally {
+      setPdfBusy(false)
     }
   }
 
@@ -233,9 +364,14 @@ export function ReportView() {
   return (
     <div className="report-backdrop">
       <div className="report-actions no-print">
-        <button className="btn-primary" onClick={doPrint}>
+        <button className="btn-primary" disabled={pdfBusy} onClick={() => void doSavePdf()}>
+          <FileDown size={15} />
+          <span className="btn-label-lg">{pdfBusy ? 'Preparing…' : 'Save as PDF'}</span>
+          <span className="btn-label-sm">{pdfBusy ? '…' : 'PDF'}</span>
+        </button>
+        <button className="btn-ghost" onClick={doPrint}>
           <Printer size={15} />
-          <span className="btn-label-lg">Print / Save PDF</span>
+          <span className="btn-label-lg">Print</span>
           <span className="btn-label-sm">Print</span>
         </button>
         <button className="btn-ghost" disabled={!imgBlob} onClick={() => void share()}><Share2 size={15} /> Share</button>
@@ -296,6 +432,37 @@ export function ReportView() {
               </div>
             </div>
             {verdictLine && <p className="report-verdict">{verdictLine}</p>}
+          </section>
+        )}
+
+        {assessment && (
+          <section>
+            <h2>Assessment — what can change, and what cannot</h2>
+            <p className="report-assess-summary">{assessment.summary}</p>
+            {assessment.improvable.length > 0 && (
+              <>
+                <div className="report-assess-h good">Can be improved</div>
+                <div className="report-assess-list">
+                  {assessment.improvable.map((it, i) => (
+                    <div key={i} className="report-assess-item">
+                      <b>{it.title}.</b> {it.detail}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+            {assessment.structural.length > 0 && (
+              <>
+                <div className="report-assess-h info">Fixed characteristics — plan around these</div>
+                <div className="report-assess-list">
+                  {assessment.structural.map((it, i) => (
+                    <div key={i} className="report-assess-item">
+                      <b>{it.title}.</b> {it.detail}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
           </section>
         )}
 
