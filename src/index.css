@@ -32,11 +32,15 @@
   --shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
   --shadow-up: 0 -14px 44px rgba(0, 0, 0, 0.55);
   --shadow-pop: 0 20px 60px rgba(0, 0, 0, 0.6);
-  /* control-chrome fill (ghost buttons, toggles, hints) — a white lift on the dark
-     ground; Paper redefines this to a real white so these read as elevated buttons
-     rather than a near-invisible tint on an already-light page */
+  /* control-chrome fill (ghost buttons, toggles, hints, rows, cards, badges) — a
+     white lift on the dark ground; Paper redefines these to a real white so they
+     read as elevated surfaces rather than a near-invisible tint on an already-light
+     page. surface-2 is the same idea at the next opacity tier up, for chrome that
+     was hand-tuned a bit stronger than the surface-1 baseline (e.g. .chip). */
   --surface-1: rgba(255, 255, 255, 0.03);
   --surface-1-hover: rgba(255, 255, 255, 0.07);
+  --surface-2: rgba(255, 255, 255, 0.05);
+  --surface-2-hover: rgba(255, 255, 255, 0.09);
   --thumb-ring: #2a2410;
   --font: 'Inter Variable', Inter, system-ui, -apple-system, sans-serif;
   --serif: 'Cormorant Garamond', Georgia, serif;
@@ -104,21 +108,21 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   border: 1px solid transparent;
   transition: all 0.18s ease;
 }
-.step:hover { color: var(--muted); background: rgba(255,255,255,0.04); }
+.step:hover { color: var(--muted); background: var(--surface-1); }
 .step-num {
   width: 19px; height: 19px;
   display: grid; place-items: center;
   border-radius: 50%;
   font-size: 10.5px; font-weight: 700;
-  background: rgba(255,255,255,0.07);
+  background: var(--surface-1-hover);
   color: var(--muted);
 }
-.step.active { color: var(--text); border-color: var(--stroke-2); background: rgba(255,255,255,0.045); }
+.step.active { color: var(--text); border-color: var(--stroke-2); background: var(--surface-2); }
 .step.active .step-num { background: var(--gold); color: var(--gold-ink); }
 .step.done { color: var(--muted); }
 .step.done .step-num { background: var(--gold-soft); color: var(--gold); }
 .step.skipped { color: var(--dim); }
-.step.skipped .step-num { background: rgba(255,255,255,0.06); }
+.step.skipped .step-num { background: var(--surface-2); }
 .step:disabled { opacity: 0.4; cursor: default; }
 .step:disabled:hover { background: none; color: var(--dim); }
 
@@ -127,7 +131,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
 
 .seg {
   display: inline-flex;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-2);
   border: 1px solid var(--stroke);
   border-radius: 9px;
   padding: 2px;
@@ -233,7 +237,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   position: relative;
 }
 .rail-label { display: none; }
-.rail-btn:hover { background: rgba(255,255,255,0.06); color: var(--text); }
+.rail-btn:hover { background: var(--surface-1-hover); color: var(--text); }
 .rail-btn.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
 .hsep { height: 1px; background: var(--stroke); margin: 3px 4px; }
 
@@ -339,7 +343,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   max-width: 170px;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 11px; color: var(--muted);
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-2);
   border: 1px solid var(--stroke);
   padding: 3px 8px; border-radius: 7px;
 }
@@ -368,7 +372,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
 .stat-row { display: flex; gap: 8px; }
 .stat {
   flex: 1;
-  background: rgba(255,255,255,0.035);
+  background: var(--surface-1);
   border: 1px solid var(--stroke);
   border-radius: 10px;
   padding: 8px 10px;
@@ -488,10 +492,10 @@ input[type='range']:focus-visible { outline: 2px solid var(--gold); outline-offs
   padding: 9px 4px 8px;
   border-radius: 11px;
   border: 1px solid var(--stroke);
-  background: rgba(255,255,255,0.028);
+  background: var(--surface-1);
   transition: all 0.16s ease;
 }
-.compass-card:hover { background: rgba(255,255,255,0.06); border-color: var(--stroke-2); transform: translateY(-1px); }
+.compass-card:hover { background: var(--surface-1-hover); border-color: var(--stroke-2); transform: translateY(-1px); }
 .compass-card.on {
   border-color: color-mix(in srgb, var(--gold) 55%, transparent);
   background: var(--gold-soft);
@@ -512,7 +516,7 @@ input[type='range']:focus-visible { outline: 2px solid var(--gold); outline-offs
 .field > span { font-size: 12px; color: var(--muted); font-weight: 600; }
 .num-wrap {
   display: flex; align-items: center; gap: 4px;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-2);
   border: 1px solid var(--stroke-2);
   border-radius: 8px;
   padding: 3px 8px;
@@ -532,20 +536,20 @@ input[type='range']:focus-visible { outline: 2px solid var(--gold); outline-offs
   display: inline-flex; align-items: center; gap: 4px;
   font-size: 11px; font-weight: 650;
   color: var(--muted);
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-2);
   border: 1px solid var(--stroke);
   border-radius: 7px;
   padding: 3px 8px;
   transition: all 0.14s ease;
 }
-.chip:hover { color: var(--text); background: rgba(255,255,255,0.09); }
+.chip:hover { color: var(--text); background: var(--surface-2-hover); }
 
 /* zone chart */
 .zone-chart { display: flex; flex-direction: column; gap: 4px; }
 .zone-row-wrap { border-radius: 8px; transition: background 0.15s ease; }
-.zone-row-wrap.open { background: rgba(255,255,255,0.045); padding-bottom: 8px; }
+.zone-row-wrap.open { background: var(--surface-2); padding-bottom: 8px; }
 .zone-row { display: flex; align-items: center; gap: 7px; height: 22px; width: 100%; padding: 0 4px; border-radius: 8px; }
-.zone-row:hover { background: rgba(255,255,255,0.04); }
+.zone-row:hover { background: var(--surface-1); }
 .zone-detail { padding: 2px 10px 2px 26px; display: flex; flex-direction: column; gap: 3px; text-align: left; }
 .zone-detail-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; }
 .zone-delta { font-size: 10.5px; font-weight: 700; }
@@ -557,7 +561,7 @@ input[type='range']:focus-visible { outline: 2px solid var(--gold); outline-offs
 .zone-summary {
   display: flex; justify-content: space-between;
   margin-top: 8px; padding: 7px 10px;
-  background: rgba(255,255,255,0.035);
+  background: var(--surface-1);
   border: 1px solid var(--stroke);
   border-radius: 9px;
   font-size: 11.5px; color: var(--muted);
@@ -790,7 +794,7 @@ kbd {
 .cal-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
 .cal-row input[type='number'] {
   width: 100%;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-2);
   border: 1px solid var(--stroke-2);
   border-radius: 10px;
   padding: 10px 12px;
@@ -807,7 +811,7 @@ kbd {
   position: relative;
   z-index: 1100; /* above Leaflet's panes/controls so the results dropdown is visible */
   display: flex; align-items: center; gap: 9px;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-2);
   border: 1px solid var(--stroke-2);
   border-radius: 10px;
   padding: 8px 12px;
@@ -919,7 +923,7 @@ kbd {
   transition: all 0.15s ease;
   display: inline-flex; align-items: center; gap: 5px;
 }
-.qpill:hover { color: var(--text); background: rgba(255,255,255,0.06); }
+.qpill:hover { color: var(--text); background: var(--surface-1-hover); }
 .qpill.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
 .qpill.deg { font-variant-numeric: tabular-nums; }
 .qpill.lockpill.on { background: rgba(226,87,76,0.14); color: var(--danger-fg); box-shadow: inset 0 0 0 1px rgba(226,87,76,0.4); }
@@ -1117,7 +1121,7 @@ kbd {
 }
 .guide-row.done { color: var(--muted); }
 .guide-row.done .guide-dot { background: var(--gold-soft); color: var(--gold); }
-.guide-row.skipped .guide-dot { background: rgba(255,255,255,0.05); color: var(--dim); }
+.guide-row.skipped .guide-dot { background: var(--surface-2); color: var(--dim); }
 .guide-row.now { color: var(--gold-2); }
 .guide-row.now .guide-dot { background: var(--gold); color: var(--gold-ink); }
 .guide-row .guide-name { display: none; }
@@ -1142,7 +1146,7 @@ kbd {
   color: var(--muted);
   font-weight: 600; font-size: 12.5px;
 }
-.guide-alt:hover { color: var(--text); background: rgba(255,255,255,0.05); }
+.guide-alt:hover { color: var(--text); background: var(--surface-2); }
 
 @media (min-width: 761px) {
   .guide-row .guide-name { display: inline; }
@@ -1184,13 +1188,13 @@ kbd {
   text-align: left;
   transition: background 0.12s ease;
 }
-.asheet-row:hover:not(:disabled) { background: rgba(255,255,255,0.05); }
+.asheet-row:hover:not(:disabled) { background: var(--surface-2); }
 .asheet-row.danger { color: var(--danger-fg); }
 .asheet-ic {
   width: 34px; height: 34px; flex: 0 0 auto;
   display: grid; place-items: center;
   border-radius: 10px;
-  background: rgba(255,255,255,0.06);
+  background: var(--surface-1-hover);
   color: var(--muted);
 }
 .asheet-row.danger .asheet-ic { background: rgba(226,87,76,0.12); color: var(--danger-fg); }
@@ -1233,7 +1237,7 @@ kbd {
 .appearance-note {
   margin: 4px 10px 0;
   padding: 10px 12px;
-  background: rgba(255,255,255,0.04);
+  background: var(--surface-1);
   border: 1px dashed var(--stroke-2);
   border-radius: 10px;
   font-size: 11.5px; line-height: 1.55; color: var(--dim);
@@ -1337,7 +1341,7 @@ kbd {
   font-size: 12.5px;
   transition: background 0.12s ease;
 }
-.marker-row:hover { background: rgba(255,255,255,0.05); }
+.marker-row:hover { background: var(--surface-2); }
 .marker-name { flex: 1; text-align: left; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .marker-zone { font-weight: 800; font-size: 11.5px; }
 
@@ -1362,10 +1366,10 @@ kbd {
   padding: 8px 10px;
   border-radius: 10px;
   border: 1px solid var(--stroke);
-  background: rgba(255,255,255,0.028);
+  background: var(--surface-1);
   transition: background 0.14s ease;
 }
-.finding-row:hover { background: rgba(255,255,255,0.06); }
+.finding-row:hover { background: var(--surface-1-hover); }
 .finding-icon { flex: 0 0 auto; margin-top: 1px; }
 .finding-row.sev-good .finding-icon { color: var(--ok); }
 .finding-row.sev-warn .finding-icon { color: var(--warn); }
@@ -1413,14 +1417,14 @@ kbd {
   border-radius: 10px;
   border: 1px solid transparent;
 }
-.proj-row:hover { background: rgba(255,255,255,0.045); }
+.proj-row:hover { background: var(--surface-2); }
 .proj-row.current { border-color: rgba(217,180,91,0.35); background: rgba(217,180,91,0.06); }
 .proj-name { flex: 1; text-align: left; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .proj-name b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-name span { font-size: 11px; color: var(--dim); }
 .proj-rename {
   flex: 1;
-  background: rgba(255,255,255,0.07);
+  background: var(--surface-1-hover);
   border: 1px solid rgba(217,180,91,0.5);
   border-radius: 8px;
   padding: 6px 9px;
@@ -1558,7 +1562,7 @@ kbd {
     font-weight: 650;
     color: var(--text);
     border: 1px solid var(--stroke-2);
-    background: rgba(255,255,255,0.045);
+    background: var(--surface-2);
     white-space: nowrap;
   }
   .step-now .step-num { width: 18px; height: 18px; background: var(--gold); color: var(--gold-ink); }

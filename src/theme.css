@@ -35,16 +35,25 @@
   --shadow-pop: 0 14px 40px rgba(24, 22, 14, 0.18);
   /* on Ink, control chrome lifts off the dark ground as a translucent white tint —
      the same tint on Paper is nearly invisible against an already-light page, so
-     ghost buttons/toggles/hints read as real white surfaces here instead */
+     ghost buttons/toggles/hints/rows/cards/badges read as real white surfaces here
+     instead. surface-1 and surface-2 collapse to the same white on Paper (the Ink
+     opacity tiers don't matter once it's opaque) — where a resting surface and its
+     own :hover state would otherwise both be that same flat white, the box-shadow
+     rule below gives the hover its lift instead. */
   --surface-1: #FFFFFF;
   --surface-1-hover: #FFFFFF;
+  --surface-2: #FFFFFF;
+  --surface-2-hover: #FFFFFF;
   --thumb-ring: #FFFDF8;
 }
 
 /* white-on-white needs its lift from elevation, not fill contrast */
 :root[data-theme='paper'] .btn-ghost:hover:not(:disabled),
 :root[data-theme='paper'] .toggle:hover,
-:root[data-theme='paper'] .icon-btn:hover:not(:disabled) {
+:root[data-theme='paper'] .icon-btn:hover:not(:disabled),
+:root[data-theme='paper'] .compass-card:hover,
+:root[data-theme='paper'] .chip:hover,
+:root[data-theme='paper'] .finding-row:hover {
   box-shadow: 0 1px 5px rgba(24, 22, 14, 0.14);
 }
 
