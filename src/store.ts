@@ -15,12 +15,15 @@ interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Mark
 export type ThemeMode = 'ink' | 'paper'
 export type AccentId = 'gold' | 'teal' | 'rose' | 'sage'
 const THEME_KEY = 'vastu-studio.theme.v1'
-function loadThemePrefs(): { theme: ThemeMode; accent: AccentId; angleSnap: boolean; showEdgeLabels: boolean } {
+/** Wall render prefs — an app-wide drawing preference (like angle snap), not per-project. */
+const WALL_DEFAULTS = { wallColor: '#C9C6BC', wallWidthM: 0.23, wallOpacity: 1 }
+type WallPrefs = typeof WALL_DEFAULTS
+function loadThemePrefs(): { theme: ThemeMode; accent: AccentId; angleSnap: boolean; showEdgeLabels: boolean } & WallPrefs {
   try {
     const raw = localStorage.getItem(THEME_KEY)
-    if (raw) return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, ...JSON.parse(raw) }
+    if (raw) return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, ...WALL_DEFAULTS, ...JSON.parse(raw) }
   } catch { /* private mode or corrupt value */ }
-  return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true }
+  return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, ...WALL_DEFAULTS }
 }
 
 export interface VastuStore {
@@ -44,6 +47,13 @@ export interface VastuStore {
   calDialogOpen: boolean
   angleSnap: boolean
   showEdgeLabels: boolean
+  /** wall render style — hex fill, real-world thickness in metres, opacity 0..1 */
+  wallColor: string
+  wallWidthM: number
+  wallOpacity: number
+  setWallColor: (c: string) => void
+  setWallWidthM: (m: number) => void
+  setWallOpacity: (o: number) => void
   locked: boolean
   selectedVertex: number | null
   selectedEdge: number | null
@@ -214,8 +224,8 @@ export const useStore = create<VastuStore>()((set, get) => {
   }
 
   const savePrefs = () => {
-    const { theme, accent, angleSnap, showEdgeLabels } = get()
-    try { localStorage.setItem(THEME_KEY, JSON.stringify({ theme, accent, angleSnap, showEdgeLabels })) } catch { /* private mode */ }
+    const { theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity } = get()
+    try { localStorage.setItem(THEME_KEY, JSON.stringify({ theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity })) } catch { /* private mode */ }
   }
 
   return {
@@ -461,6 +471,9 @@ export const useStore = create<VastuStore>()((set, get) => {
     setCalDialogOpen: (calDialogOpen) => set({ calDialogOpen }),
     setAngleSnap: (angleSnap) => { set({ angleSnap }); savePrefs() },
     setShowEdgeLabels: (showEdgeLabels) => { set({ showEdgeLabels }); savePrefs() },
+    setWallColor: (wallColor) => { set({ wallColor }); savePrefs() },
+    setWallWidthM: (wallWidthM) => { set({ wallWidthM }); savePrefs() },
+    setWallOpacity: (wallOpacity) => { set({ wallOpacity }); savePrefs() },
     setLocked: (locked) => {
       set({ locked, selectedVertex: null, selectedEdge: null, ...(locked ? { tool: 'select' as const, calA: null, calB: null, northA: null } : {}) })
       get().toast(locked ? 'Plan locked — analysis only. Nothing can shift by accident.' : 'Plan unlocked — editing enabled', locked ? 'ok' : 'info')

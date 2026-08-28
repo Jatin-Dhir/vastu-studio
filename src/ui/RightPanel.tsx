@@ -14,6 +14,8 @@ import { detectPdfScaleRatio, hasPdfOpen, renderPdfPage } from '../importers/pdf
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
 
+const WALL_COLORS = ['#C9C6BC', '#FFFFFF', '#4A4A4A', '#8FA3B3', '#C98B6B', '#B7C9A8']
+
 /* ---------- small controls ---------- */
 
 function Slider(props: {
@@ -268,6 +270,12 @@ export function RightPanel() {
   const roomShapes = useStore((s) => s.roomShapes)
   const showEdgeLabels = useStore((s) => s.showEdgeLabels)
   const setShowEdgeLabels = useStore((s) => s.setShowEdgeLabels)
+  const wallColor = useStore((s) => s.wallColor)
+  const setWallColor = useStore((s) => s.setWallColor)
+  const wallWidthM = useStore((s) => s.wallWidthM)
+  const setWallWidthM = useStore((s) => s.setWallWidthM)
+  const wallOpacity = useStore((s) => s.wallOpacity)
+  const setWallOpacity = useStore((s) => s.setWallOpacity)
   const customFileRef = useRef<HTMLInputElement>(null)
   const [pageBusy, setPageBusy] = useState(false)
 
@@ -522,6 +530,25 @@ export function RightPanel() {
             setShowEdgeLabels(v)
             if (v && !metersPerPx) useStore.getState().toast('Set the scale to see edge lengths', 'info')
           }} />
+        </div>
+
+        <div className="wall-style">
+          <div className="row-between">
+            <span className="lbl">Wall colour</span>
+            <label className="wall-swatch" style={{ background: wallColor }} title="Custom colour">
+              <input type="color" value={wallColor} onChange={(e) => setWallColor(e.target.value)} />
+            </label>
+          </div>
+          <div className="wall-presets">
+            {WALL_COLORS.map((c) => (
+              <button key={c} className={`wall-preset ${wallColor.toLowerCase() === c.toLowerCase() ? 'on' : ''}`}
+                style={{ background: c }} aria-label={`Wall colour ${c}`} onClick={() => setWallColor(c)} />
+            ))}
+          </div>
+          <Slider label="Wall thickness" value={wallWidthM * 100} min={5} max={60} step={1}
+            onChange={(v) => setWallWidthM(v / 100)} fmt={(v) => `${Math.round(v)} cm`} />
+          <Slider label="Wall opacity" value={wallOpacity * 100} min={20} max={100} step={5}
+            onChange={(v) => setWallOpacity(v / 100)} />
         </div>
 
         <div className="btn-row">

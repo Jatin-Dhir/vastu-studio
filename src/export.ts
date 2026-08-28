@@ -90,6 +90,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
     unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels,
     markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes, texts: s.texts, idPrefix: 'exp',
+    wallColor: s.wallColor, wallWidthM: s.wallWidthM, wallOpacity: s.wallOpacity,
     paper: true,
   })
 

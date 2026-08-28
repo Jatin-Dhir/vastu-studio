@@ -33,6 +33,19 @@
   --shadow: 0 2px 6px rgba(24, 22, 14, 0.08), 0 12px 30px rgba(24, 22, 14, 0.1);
   --shadow-up: 0 -6px 22px rgba(24, 22, 14, 0.12);
   --shadow-pop: 0 14px 40px rgba(24, 22, 14, 0.18);
+  /* on Ink, control chrome lifts off the dark ground as a translucent white tint —
+     the same tint on Paper is nearly invisible against an already-light page, so
+     ghost buttons/toggles/hints read as real white surfaces here instead */
+  --surface-1: #FFFFFF;
+  --surface-1-hover: #FFFFFF;
+  --thumb-ring: #FFFDF8;
+}
+
+/* white-on-white needs its lift from elevation, not fill contrast */
+:root[data-theme='paper'] .btn-ghost:hover:not(:disabled),
+:root[data-theme='paper'] .toggle:hover,
+:root[data-theme='paper'] .icon-btn:hover:not(:disabled) {
+  box-shadow: 0 1px 5px rgba(24, 22, 14, 0.14);
 }
 
 :root[data-theme='paper'] .stage-wrap {

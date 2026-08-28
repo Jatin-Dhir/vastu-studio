@@ -47,6 +47,10 @@ export interface SceneProps {
   selectedRoomShape?: string | null
   texts?: TextNote[]
   selectedText?: string | null
+  /** wall render style — practitioner preference, defaults match the original look */
+  wallColor?: string
+  wallWidthM?: number
+  wallOpacity?: number
   /** light paper ground (PNG export) — swaps the few inks that assume the dark canvas */
   paper?: boolean
   idPrefix: string
@@ -280,31 +284,35 @@ function Background({ bg, dxf, k, paper }: { bg: BgState; dxf: DxfImport | null;
 function Outline(props: {
   pts: Pt[]; bulges: number[]; closed: boolean; k: number; metersPerPx: number | null; unit: Unit
   showEdgeLabels: boolean; center: Pt | null; vr?: number
+  wallColor?: string; wallWidthM?: number; wallOpacity?: number
 }) {
-  const { pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center, vr = 0 } = props
+  const {
+    pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center, vr = 0,
+    wallColor = '#C9C6BC', wallWidthM = 0.23, wallOpacity = 1,
+  } = props
   if (pts.length === 0) return null
   const d = outlinePathD(pts, bulges, closed)
   const n = pts.length
   const edges: [Pt, Pt, number][] = []
   for (let i = 0; i < (closed ? n : n - 1); i++) edges.push([pts[i], pts[(i + 1) % n], bulges[i] ?? 0])
 
-  // real wall thickness once scale is known (23cm / ~9in, the standard interior-wall
-  // convention) — a solid architectural band, not a thin decorative line; before scaling,
-  // a sensible screen-constant stands in so the outline still reads as a wall
-  const wallW = metersPerPx ? 0.23 / metersPerPx : 15 / k
+  // real wall thickness once scale is known (default 23cm / ~9in, the standard interior-wall
+  // convention, practitioner-adjustable) — a solid architectural band, not a thin decorative
+  // line; before scaling, a sensible screen-constant stands in so the outline still reads as a wall
+  const wallW = metersPerPx ? wallWidthM / metersPerPx : 15 / k
 
   return (
-    <g>
+    <g opacity={wallOpacity}>
       {closed && <path d={d} fill={GOLD} fillOpacity={0.03} stroke="none" />}
-      {/* a real architectural wall: a neutral solid band framed by two crisp dark face
-          lines — the convention every floor-plan drawing (and every reference chart the
-          owner sent) actually uses. Gold is the VASTU overlay's colour, not the building's —
-          keeping the wall itself neutral is what makes it read as a real structure. */}
+      {/* a real architectural wall: a solid band framed by a crisp dark face line — the
+          convention every floor-plan drawing (and every reference chart the owner sent)
+          actually uses. The dark casing stays fixed regardless of fill colour: it's what
+          reads as a wall's edge, not the building's own colour choice. */}
       <path d={d} fill="none" stroke="rgba(0,0,0,0.4)" strokeWidth={wallW + 3 / k} opacity={0.45}
         strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke="#17181C" strokeWidth={wallW}
         strokeLinejoin="round" strokeLinecap="round" />
-      <path d={d} fill="none" stroke="#C9C6BC" strokeWidth={Math.max(1.2 / k, wallW - 2.6 / k)}
+      <path d={d} fill="none" stroke={wallColor} strokeWidth={Math.max(1.2 / k, wallW - 2.6 / k)}
         strokeLinejoin="round" strokeLinecap="round" />
       {showEdgeLabels && metersPerPx && edges.map(([a, b, bu], i) => {
         const L = edgeLength(a, b, bu)
@@ -971,7 +979,8 @@ export function Scene(props: SceneProps) {
         )
       })()}
       <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
-        showEdgeLabels={showEdgeLabels} center={center} vr={vr} />
+        showEdgeLabels={showEdgeLabels} center={center} vr={vr}
+        wallColor={props.wallColor} wallWidthM={props.wallWidthM} wallOpacity={props.wallOpacity} />
       <StrokesLayer strokes={props.strokes ?? []} />
       <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} />
       <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} />

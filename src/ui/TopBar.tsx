@@ -62,11 +62,9 @@ export function TopBar() {
     {
       icon: Trash2, label: 'Clear everything', danger: true,
       sub: 'Plan, outline, scale, markers and drawings',
-      onTap: () => {
-        useStore.getState().toast('Clear the plan, outline and scale?', 'warn', 'Clear everything', () => {
-          window.dispatchEvent(new CustomEvent('vastu:reset'))
-        })
-      },
+      // one tap, no re-confirm — it already sits behind the Clear… sheet, and the
+      // reset itself toasts "Cleared" right after, so the outcome is never silent
+      onTap: () => window.dispatchEvent(new CustomEvent('vastu:reset')),
     },
   ]
 

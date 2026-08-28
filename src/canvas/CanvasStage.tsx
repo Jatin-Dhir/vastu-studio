@@ -83,6 +83,9 @@ export function CanvasStage() {
   const roomDrawMode = useStore((s) => s.roomDrawMode)
   const texts = useStore((s) => s.texts)
   const selectedText = useStore((s) => s.selectedText)
+  const wallColor = useStore((s) => s.wallColor)
+  const wallWidthM = useStore((s) => s.wallWidthM)
+  const wallOpacity = useStore((s) => s.wallOpacity)
   const roomDraft = useStore((s) => s.roomDraft)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
@@ -935,7 +938,8 @@ export function CanvasStage() {
           northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes}
           roomShapes={roomShapes} selectedRoomShape={selectedRoomShape}
-          texts={texts} selectedText={selectedText} idPrefix="live"
+          texts={texts} selectedText={selectedText}
+          wallColor={wallColor} wallWidthM={wallWidthM} wallOpacity={wallOpacity} idPrefix="live"
         />
 
         {/* live ink preview + snap rings — attributes set imperatively so drawing/tracing never re-renders */}
