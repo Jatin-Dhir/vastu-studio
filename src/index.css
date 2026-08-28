@@ -1284,7 +1284,7 @@ kbd {
 .chip.on-gold { background: var(--gold-soft); color: var(--gold-2); border-color: rgba(217,180,91,0.5); }
 .marker-note {
   width: 100%;
-  background: rgba(255,255,255,0.05);
+  background: var(--surface-1);
   border: 1px solid var(--stroke-2);
   border-radius: 10px;
   padding: 9px 11px;
@@ -1340,6 +1340,19 @@ kbd {
 .marker-row:hover { background: rgba(255,255,255,0.05); }
 .marker-name { flex: 1; text-align: left; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .marker-zone { font-weight: 800; font-size: 11.5px; }
+
+.kind-select {
+  background: var(--surface-1);
+  border: 1px solid var(--stroke-2);
+  border-radius: 8px;
+  padding: 6px 5px;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11.5px; font-weight: 600;
+  outline: none;
+  flex: 0 0 auto;
+  width: 98px;
+}
 
 /* vastu findings */
 .finding-list { display: flex; flex-direction: column; gap: 5px; }

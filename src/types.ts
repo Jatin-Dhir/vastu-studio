@@ -24,7 +24,10 @@ export interface TextNote {
   size: number
 }
 
-export type MarkerKind = 'entrance' | 'kitchen' | 'toilet' | 'bed' | 'pooja' | 'water' | 'custom'
+export type MarkerKind =
+  | 'entrance' | 'kitchen' | 'toilet' | 'bed' | 'pooja' | 'water'
+  | 'living' | 'dining' | 'study' | 'dressing' | 'store' | 'staircase'
+  | 'custom'
 
 export interface Marker {
   id: string

@@ -9,6 +9,7 @@ import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog, TextDialog } from './ui/Dialogs'
+import { AutoDetectDialog } from './ui/AutoDetectDialog'
 import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips, ZoneInfoCard } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
@@ -284,6 +285,7 @@ export default function App() {
       <RoomShapeDialog />
       <ShortcutsDialog />
       <DwgDialog />
+      <AutoDetectDialog />
       {mapOpen && <MapModal />}
       {projectsOpen && <ProjectsModal />}
       {reportOpen && <ReportView />}

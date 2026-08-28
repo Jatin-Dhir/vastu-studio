@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { splitBulge } from './geometry'
 import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, TextNote, Tool, Unit, ViewState } from './types'
+import type { DetectedRoom } from './roomDetect'
 
 export interface Toast {
   id: number
@@ -168,6 +169,9 @@ export interface VastuStore {
   setMarkerKind: (k: MarkerKind) => void
   markerEditing: boolean
   setMarkerEditing: (on: boolean) => void
+  /** auto-detect rooms: candidates awaiting the practitioner's review (null = closed) */
+  detectedRooms: DetectedRoom[] | null
+  setDetectedRooms: (rooms: DetectedRoom[] | null) => void
   roomShapes: RoomShape[]
   selectedRoomShape: string | null
   roomShapeKind: MarkerKind
@@ -513,6 +517,8 @@ export const useStore = create<VastuStore>()((set, get) => {
     setMarkerKind: (markerKind) => set({ markerKind }),
     markerEditing: false,
     setMarkerEditing: (markerEditing) => set({ markerEditing }),
+    detectedRooms: null,
+    setDetectedRooms: (detectedRooms) => set({ detectedRooms }),
 
     roomShapes: [],
     selectedRoomShape: null,

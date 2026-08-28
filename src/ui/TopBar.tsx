@@ -1,6 +1,6 @@
 import {
   Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
-  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Square as SquareIcon, Trash2, Undo2, Upload,
+  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Square as SquareIcon, Trash2, Undo2, Upload, Wand2,
 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
@@ -9,6 +9,43 @@ import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
 import { AppearanceSheet } from './AppearanceSheet'
 import { goToStep, useGuide } from './steps'
+import type { TextSample } from '../roomDetect'
+
+/** Finds room labels on the current background and hands candidates to AutoDetectDialog
+ *  for review — never commits a marker itself. DXF reads its own exact text layer; a
+ *  raster/PDF background goes through OCR (src/ocr.ts, lands from a parallel task). */
+async function runDetect() {
+  const s = useStore.getState()
+  if (s.bg.kind === 'none') { s.toast('Import a plan first', 'info'); return }
+  s.setBusy('Scanning the plan for room labels…')
+  try {
+    let samples: TextSample[]
+    if (s.bg.kind === 'dxf' && s.bg.dxfText) {
+      const { importDxf } = await import('../importers/dxf')
+      const { textSamplesFromDxf } = await import('../roomDetect')
+      samples = textSamplesFromDxf(importDxf(s.bg.dxfText))
+    } else if (s.bg.kind === 'raster' && s.bg.dataUrl) {
+      const { ocrExtractText } = await import('../ocr')
+      samples = await ocrExtractText(s.bg.dataUrl, s.bg.w, s.bg.h, (pct: number) =>
+        useStore.getState().setBusy(`Scanning the plan for room labels… ${pct}%`))
+    } else {
+      s.toast('This plan has no scannable text', 'info')
+      return
+    }
+    const { detectFromTextSamples } = await import('../roomDetect')
+    const found = detectFromTextSamples(samples)
+    if (found.length === 0) {
+      s.toast('No room labels recognised — mark rooms manually, or try a clearer scan', 'info')
+    } else {
+      useStore.getState().setDetectedRooms(found)
+    }
+  } catch (e) {
+    console.error(e)
+    useStore.getState().toast('Room detection failed — mark rooms manually instead', 'warn')
+  } finally {
+    useStore.getState().setBusy(null)
+  }
+}
 
 export function TopBar() {
   const unit = useStore((s) => s.unit)
@@ -92,6 +129,7 @@ export function TopBar() {
     { icon: Maximize2, label: 'Fit to screen', sub: 'Bring the whole plan into view', onTap: requestFit },
     { icon: Upload, label: 'Import a plan', sub: 'PDF · DXF · photo · .vastu project', onTap: () => window.dispatchEvent(new CustomEvent('vastu:open-file')) },
     { icon: MapIcon, label: 'From Maps', sub: 'Capture the plot from satellite view', onTap: () => useStore.getState().setMapOpen(true) },
+    { icon: Wand2, label: 'Auto-detect rooms', sub: 'Find labelled rooms on this plan', onTap: () => void runDetect() },
     { icon: FolderOpen, label: 'Projects', sub: 'Open, rename, back up', onTap: () => useStore.getState().setProjectsOpen(true) },
     { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', onTap: saveProjectFile },
     { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },

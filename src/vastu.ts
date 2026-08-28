@@ -98,6 +98,12 @@ export const MARKER_KINDS: { kind: string; name: string; color: string; glyph: s
   { kind: 'bed', name: 'Bed', color: '#A9A6CB', glyph: 'B' },
   { kind: 'pooja', name: 'Pooja', color: '#D9B45B', glyph: 'P' },
   { kind: 'water', name: 'Water', color: '#6FC7CE', glyph: 'W' },
+  { kind: 'living', name: 'Living', color: '#E0A23D', glyph: 'L' },
+  { kind: 'dining', name: 'Dining', color: '#C97B4A', glyph: 'D' },
+  { kind: 'study', name: 'Study', color: '#5B8DEF', glyph: 'S' },
+  { kind: 'dressing', name: 'Dressing', color: '#D98BA0', glyph: 'C' },
+  { kind: 'store', name: 'Store', color: '#8B8577', glyph: 'U' },
+  { kind: 'staircase', name: 'Staircase', color: '#6B7280', glyph: 'Z' },
   { kind: 'custom', name: 'Custom', color: '#63B56F', glyph: '•' },
 ]
 
@@ -175,6 +181,62 @@ export const PLACEMENT_RULES: Record<string, PlacementRule> = {
       good: 'supportive water placement',
       caution: 'water here can unsettle the zone — keep it modest',
       avoid: 'water clashing with fire/earth zones is a recognised dosha',
+    },
+  },
+  // Added 2026-08-28 for auto-detection coverage, same classical/MahaVastu convention as
+  // the five rules above but not yet cross-checked against the practitioner's own reference
+  // charts — treat as a reasonable default, ready to be refined against those charts.
+  living: {
+    ideal: ['NW'], good: ['N', 'E', 'NE'], caution: ['S', 'SW'], avoid: [],
+    why: {
+      ideal: 'the guest-facing corner — welcomes and receives well',
+      good: 'open, social directions suited to a living or drawing room',
+      caution: 'workable, though it pulls the household toward the heavier zones',
+    },
+  },
+  dining: {
+    ideal: ['W'], good: ['S', 'E', 'NW'], caution: ['NE'], avoid: [],
+    why: {
+      ideal: 'West is the classical seat for nourishment and family dining',
+      good: 'a settled, supportive dining placement',
+      caution: 'too close to the sattvic North-East for a room meant for eating',
+    },
+  },
+  study: {
+    ideal: ['E', 'NE'], good: ['N', 'W'], caution: ['S'], avoid: ['SW'],
+    why: {
+      ideal: 'the mind corner — sharpens focus and clarity for study',
+      good: 'a steady, workable seat for concentration',
+      caution: 'the fame corner can pull focus outward rather than inward',
+      avoid: 'the stability corner is for rest, not concentration — study drains it',
+    },
+  },
+  dressing: {
+    ideal: ['SW'], good: ['S', 'W'], caution: ['SE'], avoid: ['NE'],
+    why: {
+      ideal: 'a natural extension of the master bedroom’s own stability corner',
+      good: 'a grounded, storage-appropriate placement',
+      caution: 'the fire corner suits it poorly — keep it modest here',
+      avoid: 'clutter and mirrors in the mind corner unsettle it',
+    },
+  },
+  store: {
+    ideal: ['SW'], good: ['S', 'W', 'NW'], caution: ['SE'], avoid: ['NE', 'N'],
+    why: {
+      ideal: 'the heaviest corner is exactly where weight and storage belong',
+      good: 'a sound, out-of-the-way storage seat',
+      caution: 'fire and storage don’t mix well here',
+      avoid: 'clutter in the open, sattvic zones blocks their flow',
+    },
+  },
+  staircase: {
+    ideal: ['S', 'W', 'SW'], good: ['SSW', 'WSW'], caution: ['SE', 'NW'], avoid: ['NE', 'N'],
+    why: {
+      ideal: 'a descending structure sits naturally in the heavier southern and western zones',
+      good: 'an acceptable seat for vertical movement',
+      caution: 'workable, but not the classical seat for a staircase',
+      // the Brahmasthan-occupancy check (evaluate.ts) already flags a centred staircase separately
+      avoid: 'a staircase in the open, sattvic zones blocks their flow',
     },
   },
 }

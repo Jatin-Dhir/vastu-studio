@@ -12,6 +12,17 @@
 const CACHE = 'vastu-shell-v2'
 const isHashedAsset = (url) => /\/assets\/.+-[\w-]{8,}\.(m?js|css|woff2?)$/.test(url.pathname)
 
+// OCR's worker script, wasm core and English trained data (~5MB total, public/tessdata/) are
+// never hashed — auto-detect rooms works offline from a practitioner's very first tap, so warm
+// them into the cache once this SW is in control, the same way src/importers/pdf.ts warms the
+// pdf.worker via serviceWorker.ready — just done from this side since these are plain paths.
+const TESSDATA_ASSETS = [
+  'tessdata/worker.min.js',
+  'tessdata/tesseract-core-simd-lstm.js',
+  'tessdata/tesseract-core-simd-lstm.wasm',
+  'tessdata/eng.traineddata.gz',
+]
+
 self.addEventListener('install', () => {
   self.skipWaiting()
 })
@@ -20,7 +31,14 @@ self.addEventListener('activate', (e) => {
   e.waitUntil(
     caches.keys().then((keys) =>
       Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k))),
-    ).then(() => self.clients.claim()),
+    ).then(() => self.clients.claim())
+      .then(() => caches.open(CACHE))
+      .then((cache) => Promise.all(TESSDATA_ASSETS.map((path) =>
+        cache.match(path).then((hit) => hit || fetch(path).then((res) => {
+          if (res.ok) cache.put(path, res.clone())
+          return res
+        })).catch(() => {}),
+      ))),
   )
 })
 
