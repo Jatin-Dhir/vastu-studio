@@ -298,8 +298,10 @@ function Outline(props: {
 
   // real wall thickness once scale is known (default 23cm / ~9in, the standard interior-wall
   // convention, practitioner-adjustable) — a solid architectural band, not a thin decorative
-  // line; before scaling, a sensible screen-constant stands in so the outline still reads as a wall
-  const wallW = metersPerPx ? wallWidthM / metersPerPx : 15 / k
+  // line; before scaling there's no real-world size to convert, so the practitioner's chosen
+  // thickness is applied as a ratio against the same on-screen baseline the default (23cm)
+  // used to produce — the slider still visibly moves the wall pre-calibration, not just after
+  const wallW = metersPerPx ? wallWidthM / metersPerPx : (15 / k) * (wallWidthM / 0.23)
 
   return (
     <g opacity={wallOpacity}>
@@ -877,8 +879,8 @@ function CenterMarker(props: {
     <g>
       {closed && brahmasthan && brahmaR > 0 && (
         <g>
-          {/* the Brahmasthan circle — exactly one ninth of the plot's area (the mandala's
-              central 3×3 of 81 padas), per analysis.ts's brahmasthanRadius */}
+          {/* the Brahmasthan circle — a quarter of the compass's own radius, per
+              analysis.ts's brahmasthanRadius */}
           <circle cx={c.x} cy={c.y} r={brahmaR}
             fill={GOLD} fillOpacity={0.055} stroke="none" />
           <circle cx={c.x} cy={c.y} r={brahmaR}
