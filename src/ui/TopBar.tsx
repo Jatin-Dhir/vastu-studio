@@ -107,6 +107,18 @@ export function TopBar() {
 
   const moreRows: SheetRow[] = [
     {
+      icon: Undo2, label: 'Undo', keepOpen: true,
+      disabled: undoLen === 0 || locked,
+      sub: locked ? 'Plan is locked' : undoLen > 0 ? `${undoLen} step${undoLen === 1 ? '' : 's'} to undo` : 'Nothing to undo',
+      onTap: undo,
+    },
+    {
+      icon: Redo2, label: 'Redo', keepOpen: true,
+      disabled: redoLen === 0 || locked,
+      sub: locked ? 'Plan is locked' : redoLen > 0 ? `${redoLen} step${redoLen === 1 ? '' : 's'} to redo` : 'Nothing to redo',
+      onTap: redo,
+    },
+    {
       icon: locked ? Lock : LockOpen,
       label: locked ? 'Unlock editing' : 'Lock the plan',
       sub: locked ? 'Outline, scale and centre are frozen' : 'Freeze outline, scale & centre against stray taps',
