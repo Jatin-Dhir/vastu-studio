@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { useStore, DEFAULT_COMPASS } from './store'
+import { useStore, DEFAULT_COMPASS, BOOT_ACTIVE_TAB_ID } from './store'
 import { CanvasStage } from './canvas/CanvasStage'
 import { requestFit } from './canvas/fit'
 import { isGestureActive } from './canvas/gesture'
 import { TopBar } from './ui/TopBar'
+import { TabStrip } from './ui/TabStrip'
 import { ToolRail } from './ui/ToolRail'
 import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
@@ -15,7 +16,7 @@ import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, Rotate
 import { GuideCard } from './ui/GuideCard'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
-import { getMostRecent, newProjectId, putProject, requestPersistence } from './db'
+import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
 import { ProjectsModal } from './ui/ProjectsModal'
 import { ReportView } from './ui/ReportView'
 import { formatLen, formatScale } from './format'
@@ -67,7 +68,7 @@ function StatusChip() {
 }
 
 export default function App() {
-  const hasContent = useStore((s) => s.bg.kind !== 'none' || s.pts.length > 0 || s.markers.length > 0 || s.strokes.length > 0 || s.roomShapes.length > 0)
+  const hasContent = useStore((s) => s.bg.kind !== 'none' || s.pts.length > 0 || s.markers.length > 0 || s.strokes.length > 0 || s.roomShapes.length > 0 || s.texts.length > 0)
   const mapOpen = useStore((s) => s.mapOpen)
   const projectsOpen = useStore((s) => s.projectsOpen)
   const reportOpen = useStore((s) => s.reportOpen)
@@ -219,6 +220,19 @@ export default function App() {
       st.toast('Restored your last session', 'info', 'Start fresh', () => {
         window.dispatchEvent(new CustomEvent('vastu:reset'))
       })
+    } else if (BOOT_ACTIVE_TAB_ID) {
+      // resume whichever tab was active when the tab list was last saved, not just "most recent"
+      void getProject(BOOT_ACTIVE_TAB_ID).then((rec) => {
+        if (!rec) return
+        const s2 = useStore.getState()
+        if (s2.bg.kind !== 'none' || s2.pts.length > 0) return // user already started something
+        s2.loadProject(rec.data)
+        s2.setProjectMeta({ id: rec.id, name: rec.name })
+        setTimeout(requestFit, 120)
+        s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
+          window.dispatchEvent(new CustomEvent('vastu:reset'))
+        })
+      })
     } else {
       void getMostRecent().then((rec) => {
         if (!rec) return
@@ -257,6 +271,7 @@ export default function App() {
   return (
     <div className="app">
       <TopBar />
+      <TabStrip />
       <div className="stage-wrap">
         <CanvasStage />
         <QuickBar />

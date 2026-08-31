@@ -10,6 +10,7 @@ import { Dialog } from './Dialogs'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { importMapsScreenshot } from '../importFile'
+import { prepareForNewContent } from '../importers/project'
 import { M_PER_FT } from '../format'
 
 const SAT = {
@@ -465,22 +466,14 @@ export function MapModal() {
     }
   }
 
-  /** The guard rail: never let a tap silently destroy a traced outline, a locked plan, or an
-   *  unreadable capture. Each concern is a toast-with-action the user must actively confirm. */
-  const attemptCapture = (opts?: { skipReplace?: boolean; skipZoom?: boolean }) => {
+  /** The guard rail: never let a tap through on an unreadable capture without confirming. */
+  const attemptCapture = (opts?: { skipZoom?: boolean }) => {
     if (capturing || preview) return
     // toast actions fire against a stale render's closure — read zoom from the live map
     const shNow = sharpness(mapRef.current?.getZoom() ?? zoomNow)
-    const s = useStore.getState()
-    if (s.locked) { s.toast('Plan is locked — tap the padlock to edit', 'warn'); return }
-    if (!opts?.skipReplace && s.pts.length >= 3) {
-      s.toast('Capturing replaces the current plan, outline and scale', 'warn', 'Replace',
-        () => attemptCapture({ skipReplace: true }))
-      return
-    }
     if (!opts?.skipZoom && !shNow.good) {
-      s.toast('Zoomed out too far for a sharp trace — capture anyway?', 'warn', 'Capture anyway',
-        () => attemptCapture({ skipReplace: true, skipZoom: true }))
+      useStore.getState().toast('Zoomed out too far for a sharp trace — capture anyway?', 'warn', 'Capture anyway',
+        () => attemptCapture({ skipZoom: true }))
       return
     }
     void beginCapture()
@@ -488,6 +481,7 @@ export function MapModal() {
 
   const confirmCapture = () => {
     if (!preview) return
+    prepareForNewContent() // the plan being replaced (if any) is flushed and stays open in its own tab
     const s = useStore.getState()
     const ext = preview.mime === 'image/png' ? 'png' : 'jpg'
     s.replaceBg(

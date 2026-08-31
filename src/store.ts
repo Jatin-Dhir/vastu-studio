@@ -27,6 +27,25 @@ function loadThemePrefs(): { theme: ThemeMode; accent: AccentId; angleSnap: bool
   return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, ...WALL_DEFAULTS }
 }
 
+/** A drawing currently open in a tab — only ever added once it has a real project id
+ *  (see setProjectMeta), so a fresh untouched blank drawing never appears in the list. */
+export interface OpenTab { id: string; name: string }
+const TABS_KEY = 'vastu-studio.tabs.v1'
+function loadTabsState(): { openTabs: OpenTab[]; bootActiveId: string | null } {
+  try {
+    const raw = localStorage.getItem(TABS_KEY)
+    if (raw) {
+      const p = JSON.parse(raw)
+      if (Array.isArray(p.tabs)) return { openTabs: p.tabs, bootActiveId: p.activeId ?? null }
+    }
+  } catch { /* private mode or corrupt value */ }
+  return { openTabs: [], bootActiveId: null }
+}
+const TABS_BOOT = loadTabsState()
+/** The project id that was active when the tab list was last saved — App.tsx's boot
+ *  effect loads this one instead of always falling back to "most recently edited." */
+export const BOOT_ACTIVE_TAB_ID = TABS_BOOT.bootActiveId
+
 export interface VastuStore {
   bg: BgState
   metersPerPx: number | null
@@ -107,6 +126,10 @@ export interface VastuStore {
   currentProjectId: string | null
   projectName: string
   setProjectMeta: (meta: { id: string | null; name?: string }) => void
+  /** drawings currently open in tabs — a subset of the saved-projects library */
+  openTabs: OpenTab[]
+  removeOpenTab: (id: string) => void
+  renameOpenTab: (id: string, name: string) => void
   mapOpen: boolean
   dwgNotice: boolean
   busy: string | null
@@ -232,6 +255,11 @@ export const useStore = create<VastuStore>()((set, get) => {
     try { localStorage.setItem(THEME_KEY, JSON.stringify({ theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity })) } catch { /* private mode */ }
   }
 
+  const saveTabs = () => {
+    const { openTabs, currentProjectId } = get()
+    try { localStorage.setItem(TABS_KEY, JSON.stringify({ tabs: openTabs, activeId: currentProjectId })) } catch { /* private mode */ }
+  }
+
   return {
     bg: DEFAULT_BG,
     metersPerPx: null,
@@ -327,8 +355,29 @@ export const useStore = create<VastuStore>()((set, get) => {
     setAppearanceOpen: (appearanceOpen) => set({ appearanceOpen }),
     currentProjectId: null,
     projectName: 'Untitled plan',
-    setProjectMeta: (meta) =>
-      set((s) => ({ currentProjectId: meta.id, projectName: meta.name ?? s.projectName })),
+    setProjectMeta: (meta) => {
+      set((s) => {
+        const projectName = meta.name ?? s.projectName
+        let openTabs = s.openTabs
+        if (meta.id) {
+          const idx = openTabs.findIndex((t) => t.id === meta.id)
+          if (idx === -1) openTabs = [...openTabs, { id: meta.id, name: projectName }]
+          else if (openTabs[idx].name !== projectName) openTabs = openTabs.map((t, i) => (i === idx ? { ...t, name: projectName } : t))
+        }
+        // only drop pending action-toasts when leaving an established project (to another id,
+        // or detaching to null) — NOT on the very first null→id mint autosave does moments
+        // after a fresh import, which must not kill a just-shown "Apply scale?" toast
+        const leavingRealProject = s.currentProjectId !== null && meta.id !== s.currentProjectId
+        return {
+          currentProjectId: meta.id, projectName, openTabs,
+          ...(leavingRealProject ? { toasts: s.toasts.filter((t) => !t.onAction) } : {}),
+        }
+      })
+      saveTabs()
+    },
+    openTabs: TABS_BOOT.openTabs,
+    removeOpenTab: (id) => { set((s) => ({ openTabs: s.openTabs.filter((t) => t.id !== id) })); saveTabs() },
+    renameOpenTab: (id, name) => { set((s) => ({ openTabs: s.openTabs.map((t) => (t.id === id ? { ...t, name } : t)) })); saveTabs() },
     mapOpen: false,
     dwgNotice: false,
     busy: null,

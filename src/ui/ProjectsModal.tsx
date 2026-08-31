@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Copy, Download, FilePlus2, FolderOpen, Pencil, Trash2 } from 'lucide-react'
+import { Copy, Download, FilePlus2, FolderOpen, Pencil, Trash2, X } from 'lucide-react'
 import { Dialog } from './Dialogs'
 import { useStore } from '../store'
 import { deleteProjectRecord, getProject, listProjects, newProjectId, putProject } from '../db'
-import { saveProjectFile } from '../importers/project'
+import { activateProject, closeTab, prepareForNewContent, saveProjectFile, switchToProject } from '../importers/project'
 import { requestFit } from '../canvas/fit'
 
 interface Row { id: string; name: string; updatedAt: number }
@@ -20,6 +20,7 @@ function ago(ts: number): string {
 export function ProjectsModal() {
   const setProjectsOpen = useStore((s) => s.setProjectsOpen)
   const currentProjectId = useStore((s) => s.currentProjectId)
+  const openTabs = useStore((s) => s.openTabs)
   const [rows, setRows] = useState<Row[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameVal, setRenameVal] = useState('')
@@ -28,14 +29,11 @@ export function ProjectsModal() {
   useEffect(refresh, [])
 
   const open = async (id: string) => {
-    const rec = await getProject(id)
-    if (!rec) return
-    const st = useStore.getState()
-    st.loadProject(rec.data)
-    st.setProjectMeta({ id: rec.id, name: rec.name })
-    st.setProjectsOpen(false)
+    const rec = await switchToProject(id)
+    useStore.getState().setProjectsOpen(false)
+    if (!rec) return // already the open tab — nothing else to do
     setTimeout(requestFit, 120)
-    st.toast(`Opened “${rec.name}”`, 'ok')
+    useStore.getState().toast(`Opened “${rec.name}”`, 'ok')
   }
 
   const duplicate = async (id: string) => {
@@ -48,9 +46,16 @@ export function ProjectsModal() {
 
   const remove = (id: string, name: string) => {
     useStore.getState().toast(`Delete “${name}” permanently?`, 'warn', 'Delete', () => {
-      void deleteProjectRecord(id).then(() => {
-        if (useStore.getState().currentProjectId === id) {
-          useStore.getState().setProjectMeta({ id: null })
+      // delete from IDB FIRST — closeTab/switchToProject both flush the live drawing back to
+      // IDB under its own id, which would silently resurrect it if run before the delete
+      void deleteProjectRecord(id).then(async () => {
+        const st = useStore.getState()
+        const wasCurrent = st.currentProjectId === id
+        st.removeOpenTab(id)
+        if (wasCurrent) {
+          const remaining = useStore.getState().openTabs
+          if (remaining.length > 0) await activateProject(remaining[0].id)
+          else window.dispatchEvent(new CustomEvent('vastu:reset'))
         }
         refresh()
       })
@@ -64,7 +69,9 @@ export function ProjectsModal() {
     const rec = await getProject(id)
     if (!rec) return
     await putProject({ ...rec, name })
-    if (useStore.getState().currentProjectId === id) useStore.getState().setProjectMeta({ id, name })
+    const st = useStore.getState()
+    if (st.currentProjectId === id) st.setProjectMeta({ id, name })
+    else st.renameOpenTab(id, name)
     refresh()
   }
 
@@ -72,6 +79,7 @@ export function ProjectsModal() {
     <Dialog title="Projects" onClose={() => setProjectsOpen(false)} width={460}>
       <div className="proj-toolbar">
         <button className="btn-ghost" onClick={() => {
+          prepareForNewContent()
           window.dispatchEvent(new CustomEvent('vastu:reset'))
           setProjectsOpen(false)
         }}>
@@ -90,29 +98,37 @@ export function ProjectsModal() {
 
       <div className="proj-list">
         {rows.length === 0 && <div className="lbl dim proj-empty">No saved projects yet — everything you work on lands here automatically.</div>}
-        {rows.map((r) => (
-          <div key={r.id} className={`proj-row ${r.id === currentProjectId ? 'current' : ''}`}>
-            {renaming === r.id ? (
-              <input autoFocus className="proj-rename" value={renameVal}
-                onChange={(e) => setRenameVal(e.target.value)}
-                onBlur={() => void rename(r.id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') void rename(r.id)
-                  // stop Escape here or the Dialog's window listener closes the whole modal
-                  if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) }
-                }} />
-            ) : (
-              <button className="proj-name" onClick={() => void open(r.id)}>
-                <b>{r.name}</b>
-                <span>{r.id === currentProjectId ? 'open now · ' : ''}{ago(r.updatedAt)}</span>
-              </button>
-            )}
-            <button className="icon-btn" aria-label="Rename" data-tip="Rename"
-              onClick={() => { setRenaming(r.id); setRenameVal(r.name) }}><Pencil size={13} /></button>
-            <button className="icon-btn" aria-label="Duplicate" data-tip="Duplicate" onClick={() => void duplicate(r.id)}><Copy size={13} /></button>
-            <button className="icon-btn danger" aria-label="Delete" data-tip="Delete" onClick={() => remove(r.id, r.name)}><Trash2 size={13} /></button>
-          </div>
-        ))}
+        {rows.map((r) => {
+          const isCurrent = r.id === currentProjectId
+          const isOpen = isCurrent || openTabs.some((t) => t.id === r.id)
+          return (
+            <div key={r.id} className={`proj-row ${isCurrent ? 'current' : ''}`}>
+              {renaming === r.id ? (
+                <input autoFocus className="proj-rename" value={renameVal}
+                  onChange={(e) => setRenameVal(e.target.value)}
+                  onBlur={() => void rename(r.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void rename(r.id)
+                    // stop Escape here or the Dialog's window listener closes the whole modal
+                    if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) }
+                  }} />
+              ) : (
+                <button className="proj-name" onClick={() => void open(r.id)}>
+                  <b>{r.name}</b>
+                  <span>{isCurrent ? 'open now · ' : isOpen ? 'open · ' : ''}{ago(r.updatedAt)}</span>
+                </button>
+              )}
+              {isOpen && (
+                <button className="icon-btn" aria-label="Close tab" data-tip="Close tab — keeps it saved"
+                  onClick={() => void closeTab(r.id)}><X size={13} /></button>
+              )}
+              <button className="icon-btn" aria-label="Rename" data-tip="Rename"
+                onClick={() => { setRenaming(r.id); setRenameVal(r.name) }}><Pencil size={13} /></button>
+              <button className="icon-btn" aria-label="Duplicate" data-tip="Duplicate" onClick={() => void duplicate(r.id)}><Copy size={13} /></button>
+              <button className="icon-btn danger" aria-label="Delete" data-tip="Delete" onClick={() => remove(r.id, r.name)}><Trash2 size={13} /></button>
+            </div>
+          )
+        })}
       </div>
       <div className="zone-note">Projects live in this browser. For backups or moving devices, use Save .vastu file.</div>
     </Dialog>

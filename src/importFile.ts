@@ -4,7 +4,7 @@ import { importRaster } from './importers/raster'
 import { detectPdfScaleRatio, openPdf, renderPdfPage } from './importers/pdf'
 import { importDxf } from './importers/dxf'
 import { generateDemoPlan } from './importers/demo'
-import { parseProject } from './importers/project'
+import { parseProject, prepareForNewContent } from './importers/project'
 import { requestFit } from './canvas/fit'
 import { formatLen, formatScale } from './format'
 
@@ -13,30 +13,18 @@ function freshBgDefaults() {
 }
 
 /** Returns true only when a file actually landed — callers chaining follow-up steps must check. */
-export async function importFiles(files: FileList | File[] | Blob[], opts?: { force?: boolean; nameHint?: string }): Promise<boolean> {
+export async function importFiles(files: FileList | File[] | Blob[], opts?: { nameHint?: string }): Promise<boolean> {
   const all = Array.from(files as ArrayLike<File>)
   const file = all[0]
   if (!file) return false
   const s = useStore.getState()
   const name = (file as File).name ?? opts?.nameHint ?? 'imported'
   const ext = name.toLowerCase().split('.').pop() ?? ''
-  // opening a project swaps the whole workspace (the lock travels with it) — everything else edits this plan
   const isProject = ext === 'vastu' || (ext === 'json' && name.includes('.vastu'))
-  if (s.locked && !isProject) {
-    s.toast('Plan is locked — tap the padlock to edit', 'warn')
-    return false
-  }
 
   try {
     if (ext === 'dwg') {
       s.setDwgNotice(true)
-      return false
-    }
-    // a traced outline, markers and drawings are real work — never let a stray paste or mis-tap wipe them silently
-    if ((s.pts.length >= 3 || s.markers.length > 0 || s.strokes.length > 0 || s.roomShapes.length > 0) && !opts?.force) {
-      s.toast(`Importing “${name}” replaces the current plan, outline, scale, markers and drawings`, 'warn', 'Replace', () => {
-        void importFiles(all, { force: true })
-      })
       return false
     }
     if (all.length > 1) {
@@ -44,7 +32,8 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
     }
     if (isProject) {
       const text = await (file as File).text()
-      const p = parseProject(text)
+      const p = parseProject(text) // throws on a damaged/foreign file — nothing on screen touched yet
+      prepareForNewContent()
       s.loadProject(p)
       // a file open becomes its own library entry — never autosave over the previously open project's record
       s.setProjectMeta({ id: newProjectId(), name: name.replace(/\.[^.]+$/, '') })
@@ -56,7 +45,8 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
       s.setBusy('Rendering PDF…')
       const data = await file.arrayBuffer()
       const pages = await openPdf(data)
-      const { dataUrl, w, h, pxPerPt } = await renderPdfPage(1)
+      const { dataUrl, w, h, pxPerPt } = await renderPdfPage(1) // decoded successfully — safe to replace now
+      prepareForNewContent()
       s.replaceBg(
         { kind: 'raster', name, dataUrl, w, h, ...freshBgDefaults(), pdfPages: pages, pdfPage: 1 },
         null, null,
@@ -87,7 +77,8 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
     if (ext === 'dxf') {
       s.setBusy('Parsing DXF…')
       const text = await (file as File).text()
-      const dxf = importDxf(text) // validate before storing
+      const dxf = importDxf(text) // validates and throws before anything on screen is touched
+      prepareForNewContent()
       s.replaceBg(
         { kind: 'dxf', name, dxfText: text, w: dxf.w, h: dxf.h, ...freshBgDefaults() },
         dxf.metersPerPx, dxf.metersPerPx ? 'dxf' : null,
@@ -130,7 +121,8 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { fo
     }
     if (file.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'bmp', 'gif', 'heic', 'heif'].includes(ext)) {
       s.setBusy('Loading image…')
-      const { dataUrl, w, h } = await importRaster(file)
+      const { dataUrl, w, h } = await importRaster(file) // decoded successfully — safe to replace now
+      prepareForNewContent()
       s.replaceBg({ kind: 'raster', name, dataUrl, w, h, ...freshBgDefaults() }, null, null)
       requestFit()
       s.toast('Image imported', 'ok')
@@ -163,6 +155,7 @@ function afterImportGuide() {
 export function loadDemo() {
   const s = useStore.getState()
   const demo = generateDemoPlan()
+  prepareForNewContent()
   s.replaceBg(
     { kind: 'raster', name: 'Sample residence.png', dataUrl: demo.dataUrl, w: demo.w, h: demo.h, ...freshBgDefaults() },
     demo.metersPerPx, 'demo',
@@ -192,6 +185,7 @@ export function startBlank() {
     }
   }
   const s = useStore.getState()
+  prepareForNewContent()
   s.replaceBg(
     { kind: 'raster', name: 'Blank sheet.png', dataUrl: c.toDataURL('image/png'), w, h, ...freshBgDefaults() },
     0.01, 'manual',
@@ -203,17 +197,9 @@ export function startBlank() {
 }
 
 /** A screenshot from Google/Apple Maps: north is up by convention; the scale bar calibrates it. */
-export async function importMapsScreenshot(file: File, opts?: { force?: boolean }) {
-  const s0 = useStore.getState()
-  // the replace-confirm lives here, not in importFiles, so an accepted Replace re-runs THIS path
-  // and keeps the north-up + scale-bar guidance (locked plans fall through to importFiles' refusal)
-  if (!s0.locked && (s0.pts.length >= 3 || s0.markers.length > 0 || s0.strokes.length > 0 || s0.roomShapes.length > 0) && !opts?.force) {
-    s0.toast(`Importing “${file.name}” replaces the current plan, outline, scale, markers and drawings`, 'warn', 'Replace', () => {
-      void importMapsScreenshot(file, { force: true })
-    })
-    return
-  }
-  const ok = await importFiles([file], opts)
+export async function importMapsScreenshot(file: File) {
+  // importFiles already opens non-destructively (prepareForNewContent) — nothing to guard here
+  const ok = await importFiles([file])
   if (!ok) return
   const s = useStore.getState()
   if (s.bg.kind === 'raster') {
