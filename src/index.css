@@ -841,7 +841,7 @@ kbd {
 .dialog-list b { color: var(--text); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 6px; }
 .cal-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }
-.cal-row input[type='number'] {
+.cal-row input[type='number'], .cal-row input[type='text'] {
   width: 100%;
   background: var(--surface-2);
   border: 1px solid var(--stroke-2);
@@ -852,7 +852,7 @@ kbd {
   outline: none;
   transition: border-color 0.15s ease;
 }
-.cal-row input[type='number']:focus { border-color: rgba(217,180,91,0.6); }
+.cal-row input[type='number']:focus, .cal-row input[type='text']:focus { border-color: rgba(217,180,91,0.6); }
 
 /* ————— map modal ————— */
 

@@ -107,18 +107,6 @@ export function TopBar() {
 
   const moreRows: SheetRow[] = [
     {
-      icon: Undo2, label: 'Undo', keepOpen: true,
-      disabled: undoLen === 0 || locked,
-      sub: locked ? 'Plan is locked' : undoLen > 0 ? `${undoLen} step${undoLen === 1 ? '' : 's'} to undo` : 'Nothing to undo',
-      onTap: undo,
-    },
-    {
-      icon: Redo2, label: 'Redo', keepOpen: true,
-      disabled: redoLen === 0 || locked,
-      sub: locked ? 'Plan is locked' : redoLen > 0 ? `${redoLen} step${redoLen === 1 ? '' : 's'} to redo` : 'Nothing to redo',
-      onTap: redo,
-    },
-    {
       icon: locked ? Lock : LockOpen,
       label: locked ? 'Unlock editing' : 'Lock the plan',
       sub: locked ? 'Outline, scale and centre are frozen' : 'Freeze outline, scale & centre against stray taps',
@@ -201,11 +189,11 @@ export function TopBar() {
           <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>
           <button className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>m</button>
         </div>
-        <button className="icon-btn hide-mobile" disabled={undoLen === 0 || locked} onClick={undo}
+        <button className="icon-btn" disabled={undoLen === 0 || locked} onClick={undo}
           aria-label="Undo" data-tip="Undo (Ctrl+Z)">
           <Undo2 size={16} />
         </button>
-        <button className="icon-btn hide-mobile" disabled={redoLen === 0 || locked} onClick={redo}
+        <button className="icon-btn" disabled={redoLen === 0 || locked} onClick={redo}
           aria-label="Redo" data-tip="Redo (Ctrl+Y)">
           <Redo2 size={16} />
         </button>
