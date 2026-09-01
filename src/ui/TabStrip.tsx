@@ -9,9 +9,11 @@ import { closeTab, switchToProject } from '../importers/project'
 export function TabStrip() {
   const openTabs = useStore((s) => s.openTabs)
   const currentProjectId = useStore((s) => s.currentProjectId)
-  if (openTabs.length <= 1) return null
+  // always mounted so the height can transition instead of the canvas jumping 40px;
+  // inert keeps the hidden buttons out of the keyboard tab order while collapsed
+  const collapsed = openTabs.length <= 1
   return (
-    <div className="tab-strip">
+    <div className={`tab-strip ${collapsed ? 'collapsed' : ''}`} inert={collapsed}>
       {openTabs.map((t) => (
         <span key={t.id} className={`tab-item ${t.id === currentProjectId ? 'active' : ''}`}>
           <button className="tab-name" onClick={() => { void switchToProject(t.id).then(() => setTimeout(requestFit, 120)) }}>

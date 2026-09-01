@@ -24,6 +24,7 @@ export function ProjectsModal() {
   const [rows, setRows] = useState<Row[]>([])
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameVal, setRenameVal] = useState('')
+  const [confirming, setConfirming] = useState<string | null>(null)
 
   const refresh = () => { void listProjects().then(setRows).catch(() => setRows([])) }
   useEffect(refresh, [])
@@ -44,21 +45,22 @@ export function ProjectsModal() {
     refresh()
   }
 
-  const remove = (id: string, name: string) => {
-    useStore.getState().toast(`Delete “${name}” permanently?`, 'warn', 'Delete', () => {
-      // delete from IDB FIRST — closeTab/switchToProject both flush the live drawing back to
-      // IDB under its own id, which would silently resurrect it if run before the delete
-      void deleteProjectRecord(id).then(async () => {
-        const st = useStore.getState()
-        const wasCurrent = st.currentProjectId === id
-        st.removeOpenTab(id)
-        if (wasCurrent) {
-          const remaining = useStore.getState().openTabs
-          if (remaining.length > 0) await activateProject(remaining[0].id)
-          else window.dispatchEvent(new CustomEvent('vastu:reset'))
-        }
-        refresh()
-      })
+  // confirmation lives INLINE in the row (a toast confirm sat top-right, far from the
+  // action, and auto-dismissed — easy to miss entirely)
+  const doDelete = (id: string) => {
+    setConfirming(null)
+    // delete from IDB FIRST — closeTab/switchToProject both flush the live drawing back to
+    // IDB under its own id, which would silently resurrect it if run before the delete
+    void deleteProjectRecord(id).then(async () => {
+      const st = useStore.getState()
+      const wasCurrent = st.currentProjectId === id
+      st.removeOpenTab(id)
+      if (wasCurrent) {
+        const remaining = useStore.getState().openTabs
+        if (remaining.length > 0) await activateProject(remaining[0].id)
+        else window.dispatchEvent(new CustomEvent('vastu:reset'))
+      }
+      refresh()
     })
   }
 
@@ -101,6 +103,21 @@ export function ProjectsModal() {
         {rows.map((r) => {
           const isCurrent = r.id === currentProjectId
           const isOpen = isCurrent || openTabs.some((t) => t.id === r.id)
+          if (confirming === r.id) {
+            return (
+              <div key={r.id} className="proj-row proj-confirm" role="alertdialog" aria-label={`Delete ${r.name}?`}>
+                <span className="proj-confirm-q">Delete <b>{r.name}</b> permanently?</span>
+                <button className="btn-ghost" autoFocus
+                  onClick={() => setConfirming(null)}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setConfirming(null) } }}>
+                  Cancel
+                </button>
+                <button className="btn-danger" onClick={() => doDelete(r.id)}>
+                  <Trash2 size={13} /> Delete
+                </button>
+              </div>
+            )
+          }
           return (
             <div key={r.id} className={`proj-row ${isCurrent ? 'current' : ''}`}>
               {renaming === r.id ? (
@@ -125,7 +142,7 @@ export function ProjectsModal() {
               <button className="icon-btn" aria-label="Rename" data-tip="Rename"
                 onClick={() => { setRenaming(r.id); setRenameVal(r.name) }}><Pencil size={13} /></button>
               <button className="icon-btn" aria-label="Duplicate" data-tip="Duplicate" onClick={() => void duplicate(r.id)}><Copy size={13} /></button>
-              <button className="icon-btn danger" aria-label="Delete" data-tip="Delete" onClick={() => remove(r.id, r.name)}><Trash2 size={13} /></button>
+              <button className="icon-btn danger" aria-label="Delete" data-tip="Delete" onClick={() => { setRenaming(null); setConfirming(r.id) }}><Trash2 size={13} /></button>
             </div>
           )
         })}

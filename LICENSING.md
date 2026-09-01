@@ -36,7 +36,8 @@ no gate, no locks. Dev builds (`npm run dev`) force it on; the key
 3. In the product's settings, enable **License keys** (set an activation limit,
    e.g. 3 devices; leave expiry "matches subscription").
 4. Copy the product's **Buy link** → paste into `CHECKOUT_URL` in
-   `src/licenseConfig.ts`.
+   `src/licenseConfig.ts`, **and** into `landing.html`'s pricing button (the
+   `<!-- LAUNCH -->` comment marks the spot; add the price to the card copy too).
 5. Copy the **Customer portal** link (Settings → Customer portal) → `PORTAL_URL`.
 6. Note your **Store ID** (Settings → Stores) and the **Product ID** (in the
    product's URL) for step 2 below.

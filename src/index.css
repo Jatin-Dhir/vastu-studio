@@ -181,6 +181,27 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   transition: all 0.15s ease;
 }
 .btn-ghost:hover:not(:disabled) { background: var(--surface-1-hover); border-color: color-mix(in srgb, var(--text) 20%, transparent); }
+
+.btn-danger {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  padding: 7px 12px;
+  border-radius: 10px;
+  border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+  color: var(--danger-fg);
+  font-weight: 650; font-size: 12.5px;
+  transition: background 0.15s ease, transform 0.16s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.btn-danger:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 26%, transparent); }
+.btn-danger:active { transform: scale(0.97); }
+
+/* one focus language app-wide — the gold ring the sliders already use; the UA default
+   ring clashed with the palette. :where() keeps specificity at zero so any component
+   with its own focus treatment still wins. */
+:where(button, a, [role='button']):focus-visible {
+  outline: 2px solid var(--gold);
+  outline-offset: 2px;
+}
 .btn-ghost.danger { color: var(--danger-fg); border-color: rgba(226,87,76,0.35); }
 .btn-ghost.danger:hover:not(:disabled) { background: rgba(226,87,76,0.12); }
 .btn-ghost.wide { width: 100%; }
@@ -257,7 +278,7 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   display: flex; flex-direction: column; gap: 10px;
   animation: actRise 0.45s cubic-bezier(0.23, 1, 0.32, 1) 0.06s backwards;
 }
-.act-head { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.act-head { margin: 0; font-family: var(--serif); font-size: 23px; font-weight: 600; letter-spacing: 0.01em; }
 .act-sub { margin: 0 0 6px; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
 .act-key-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--dim); }
 .act-key {
@@ -342,8 +363,15 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   background: var(--sheet-2);
   border-bottom: 1px solid var(--stroke);
   overflow-x: auto;
+  overflow-y: hidden;
   scrollbar-width: none;
+  /* long tab rows scroll; the edge fade says so (padding keeps resting tabs clear of it) */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent);
+  mask-image: linear-gradient(90deg, transparent 0, #000 12px, #000 calc(100% - 12px), transparent);
+  /* interruptible collapse instead of a 40px layout jump when the 2nd tab opens/last closes */
+  transition: height 0.22s cubic-bezier(0.23, 1, 0.32, 1), border-bottom-color 0.22s ease;
 }
+.tab-strip.collapsed { height: 0; border-bottom-color: transparent; }
 .tab-strip::-webkit-scrollbar { display: none; }
 .tab-item {
   flex: 0 0 auto;
@@ -355,7 +383,11 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   border-radius: 8px;
   background: var(--surface-1);
   max-width: 200px;
+  animation: tabIn 0.2s cubic-bezier(0.23, 1, 0.32, 1);
 }
+@keyframes tabIn { from { opacity: 0; transform: scale(0.95) translateY(2px); } }
+.tab-name, .tab-close { transition: transform 0.16s cubic-bezier(0.23, 1, 0.32, 1); }
+.tab-name:active, .tab-close:active { transform: scale(0.95); }
 .tab-item.active { background: var(--gold-soft); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
 .tab-name {
   font-size: 12px;
@@ -375,7 +407,8 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
    block's own `.toasts { top: auto; ... }` reset (equal-specificity there relies on plain
    source order, which this rule must not disturb) */
 @media (min-width: 761px) {
-  .app:has(.tab-strip) .toasts { top: calc(54px + 40px + 10px + env(safe-area-inset-top)); }
+  /* :not(.collapsed): the strip is always mounted now (so its height can animate) */
+  .app:has(.tab-strip:not(.collapsed)) .toasts { top: calc(54px + 40px + 10px + env(safe-area-inset-top)); }
 }
 
 /* ————— stage ————— */
@@ -512,13 +545,15 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
 @keyframes cardInC { from { opacity: 0; transform: translate(-50%, 6px); } to { opacity: 1; transform: translate(-50%, 0); } }
 
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+/* section titles speak in the app's own serif voice — the same face that signs the
+   wordmark, the report and the activation page. Only the 600 weight ships. */
 .card-head h2 {
   margin: 0;
-  font-size: 11.5px;
-  font-weight: 700;
-  letter-spacing: 0.09em;
-  text-transform: uppercase;
-  color: var(--gold);
+  font-family: var(--serif);
+  font-size: 17.5px;
+  font-weight: 600;
+  letter-spacing: 0.015em;
+  color: var(--gold-2);
 }
 .file-chip {
   max-width: 170px;
@@ -966,7 +1001,7 @@ kbd {
 }
 @keyframes dialogIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
 .dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.dialog-head h3 { margin: 0; font-size: 15.5px; font-weight: 700; }
+.dialog-head h3 { margin: 0; font-family: var(--serif); font-size: 21px; font-weight: 600; letter-spacing: 0.01em; }
 .dialog-sub { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
 .dialog-sub b { color: var(--text); }
 .dialog-list { margin: 0 0 14px; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
@@ -1600,6 +1635,15 @@ kbd {
 }
 .proj-row:hover { background: var(--surface-2); }
 .proj-row.current { border-color: rgba(217,180,91,0.35); background: rgba(217,180,91,0.06); }
+/* delete asks INSIDE the row it deletes — not in a far-away toast */
+.proj-confirm {
+  gap: 8px;
+  background: color-mix(in srgb, var(--danger) 7%, transparent);
+  border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  animation: tabIn 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.proj-confirm:hover { background: color-mix(in srgb, var(--danger) 7%, transparent); }
+.proj-confirm-q { flex: 1; min-width: 0; font-size: 12.5px; line-height: 1.4; overflow-wrap: anywhere; }
 .proj-name { flex: 1; text-align: left; display: flex; flex-direction: column; gap: 1px; min-width: 0; }
 .proj-name b { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proj-name span { font-size: 11px; color: var(--dim); }

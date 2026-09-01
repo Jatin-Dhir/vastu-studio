@@ -229,7 +229,21 @@ export function CanvasStage() {
     const padL = mobile ? 18 : 88
     const padR = mobile ? 18 : hasBg ? 348 : 88
     const padT = mobile ? 60 : 76
-    const padB = mobile ? 150 : 28
+    // fit into the band the user can actually SEE: measure whatever floating chrome is
+    // stacked along the bottom right now (dock, sheet, guide card, calibrate bar) instead
+    // of guessing — the guide card alone can claim ~350px of a phone screen. Capped at
+    // half the stage so a fully-raised sheet still leaves a sane fit, not a sliver.
+    let padB = mobile ? 150 : 28
+    const overlays = mobile ? ['.guide-card', '.cal-bar', '.tool-rail', '.panel'] : ['.guide-card', '.cal-bar']
+    for (const sel of overlays) {
+      const el = document.querySelector(sel)
+      if (!el) continue
+      const r = el.getBoundingClientRect()
+      if (r.height > 0 && r.width > 0 && r.top < rect.bottom) {
+        padB = Math.max(padB, rect.bottom - r.top + 12)
+      }
+    }
+    padB = Math.min(padB, rect.height * 0.5)
     const availW = Math.max(120, rect.width - padL - padR)
     const availH = Math.max(120, rect.height - padT - padB)
     // fit the ROTATED footprint of the content

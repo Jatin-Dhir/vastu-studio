@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0B0C10" />
+  <title>Vastu Studio — the practitioner's drawing board</title>
+  <meta name="description" content="Import a floor plan, trace its boundary, and read zones, gates and the Brahmasthan — measured, centred, and to scale. Works offline, on any device." />
+  <link rel="icon" href="./icons/icon-192.png" />
+  <script type="module" src="/src/landing.ts"></script>
+</head>
+<body class="landing">
+
+  <!-- ———— hero: the instrument is the thesis ———— -->
+  <header class="hero">
+    <nav class="hero-nav">
+      <span class="nav-mark" aria-hidden>
+        <svg width="24" height="24" viewBox="0 0 32 32"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="#D9B45B" stroke-width="2"/><circle cx="16" cy="16" r="2.6" fill="#D9B45B"/></svg>
+        Vastu <em>Studio</em>
+      </span>
+      <a class="nav-open" href="./">Open the studio</a>
+    </nav>
+
+    <div class="hero-body">
+      <div class="hero-copy">
+        <p class="eyebrow rise">16 zones · 32 gates · 81 padas</p>
+        <h1 class="rise d1">Vastu <em>Studio</em></h1>
+        <p class="hero-sub rise d2">The practitioner’s drawing board. Import any floor plan, trace its
+          boundary, and read zones, gates and the Brahmasthan — measured, centred, and to scale.</p>
+        <div class="hero-ctas rise d3">
+          <a class="cta" href="./">Open the studio</a>
+          <a class="cta-alt" href="#how">See how it works</a>
+        </div>
+        <p class="hero-note rise d4">Free for 14 days on every device — no sign-up, no card.</p>
+      </div>
+      <div class="hero-dial rise d2" aria-hidden>
+        <svg viewBox="0 0 200 200">
+          <circle cx="100" cy="100" r="88" fill="none" stroke="rgba(255,255,255,0.35)" stroke-width="1" opacity="0.7"/>
+          <circle cx="100" cy="100" r="64" fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>
+          <g class="dial-spin">
+            <g id="ticks"></g>
+            <circle cx="100" cy="100" r="26" fill="#0B0C10" stroke="#D9B45B" stroke-width="1.2"/>
+          </g>
+          <circle cx="100" cy="100" r="3" fill="#D9B45B"/>
+          <text x="100" y="5.5" text-anchor="middle" fill="#D9B45B" font-size="10" font-weight="700">N</text>
+          <text x="196.5" y="104" text-anchor="middle" fill="#7E8698" font-size="10" font-weight="700">E</text>
+          <text x="100" y="199.5" text-anchor="middle" fill="#7E8698" font-size="10" font-weight="700">S</text>
+          <text x="3.5" y="104" text-anchor="middle" fill="#7E8698" font-size="10" font-weight="700">W</text>
+        </svg>
+      </div>
+    </div>
+  </header>
+
+  <!-- ———— how it works: the paper act — plans live on paper ———— -->
+  <section class="paper" id="how">
+    <div class="wrap">
+      <h2 class="sec-title">Three moves, one reading</h2>
+      <div class="steps">
+        <article class="step reveal">
+          <svg class="step-art" viewBox="0 0 96 96" aria-hidden>
+            <path d="M18 12h44l16 16v56H18z" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M62 12v16h16" fill="none" stroke="currentColor" stroke-width="2"/>
+            <path d="M30 44h36M30 56h36M30 68h22" stroke="currentColor" stroke-width="2" opacity="0.45"/>
+          </svg>
+          <h3><span>01</span> Import the plan</h3>
+          <p>A PDF, an AutoCAD DXF, a photo — or capture the plot straight from satellite view.
+            Printed scales are read off the drawing automatically.</p>
+        </article>
+        <article class="step reveal d1">
+          <svg class="step-art" viewBox="0 0 96 96" aria-hidden>
+            <path d="M20 70 20 26 48 18 76 30 76 70 58 78 Z" fill="none" stroke="currentColor" stroke-width="2"/>
+            <g fill="#A9782E"><circle cx="20" cy="70" r="4"/><circle cx="20" cy="26" r="4"/><circle cx="48" cy="18" r="4"/><circle cx="76" cy="30" r="4"/><circle cx="76" cy="70" r="4"/><circle cx="58" cy="78" r="4"/></g>
+          </svg>
+          <h3><span>02</span> Trace the boundary</h3>
+          <p>Tap the corners; the outline snaps to your walls, and curved walls bend with them.
+            The centre and every zone come from your boundary — not a guess.</p>
+        </article>
+        <article class="step reveal d2">
+          <svg class="step-art" viewBox="0 0 96 96" aria-hidden>
+            <g fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="48" cy="52" r="34"/>
+              <path d="M48 52 48 18 A34 34 0 0 1 77.4 35Z" fill="rgba(169,120,46,0.18)"/>
+              <path d="M48 52 24 28M48 52 72 76M48 52 24 76M48 52 72 28" opacity="0.4"/>
+            </g>
+            <circle cx="48" cy="52" r="3.5" fill="#A9782E"/>
+          </svg>
+          <h3><span>03</span> Read the chart</h3>
+          <p>Sixteen zones, thirty-two entrance gates and the Brahmasthan, laid over the plan to
+            scale. Mark the rooms — each one gets its verdict on the spot.</p>
+        </article>
+      </div>
+    </div>
+  </section>
+
+  <!-- ———— what the studio holds ———— -->
+  <section class="holds">
+    <div class="wrap">
+      <h2 class="sec-title">What the studio holds</h2>
+      <ul class="facts">
+        <li class="reveal">The classical grid — 16 zones, 32 gates, the 81-pada mandala — drawn to your boundary, never a stamped overlay</li>
+        <li class="reveal">Real measurements: calibrate once and every wall, room and area reads in feet or metres</li>
+        <li class="reveal d1">Gate-by-gate entrance readings, with room placements judged against classical seats</li>
+        <li class="reveal d1">A written assessment and a client-ready PDF report, built from your own markings</li>
+        <li class="reveal d2">Auto-detect rooms from the plan’s own labels — fully on-device, even from a scan</li>
+        <li class="reveal d2">Several drawings open at once, switchable in tabs</li>
+        <li class="reveal d3">Works offline once loaded — on the web, and as an Android or iOS app</li>
+        <li class="reveal d3">Your plans never leave your device</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- ———— pricing ———— -->
+  <section class="pricing">
+    <div class="wrap">
+      <div class="price-card reveal">
+        <h2>One subscription.<br/>The whole studio.</h2>
+        <p class="price-sub">Every compass, every reading, exports, client reports and all updates —
+          on your devices, for as long as you subscribe.</p>
+        <!-- LAUNCH: point this at the Lemon Squeezy checkout link (see LICENSING.md) -->
+        <a class="cta" href="./">Start the free 14-day trial</a>
+        <p class="price-note">The trial is the full workflow — importing, tracing, the complete
+          compass analysis. Exports and reports unlock with a licence key.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p>Interpretations follow classical texts and MahaVastu-published conventions — schools differ;
+      apply your own tradition’s judgement.</p>
+    <p class="foot-line">Vastu Studio · plans stay on your device · works offline</p>
+  </footer>
+
+</body>
+</html>
