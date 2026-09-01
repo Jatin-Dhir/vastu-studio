@@ -1,10 +1,11 @@
 import {
-  Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
+  Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, KeyRound, Lock, LockOpen, Map as MapIcon,
   MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Square as SquareIcon, Trash2, Undo2, Upload, Wand2,
 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { exportPng } from '../export'
+import { requireLicense } from '../license'
 import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
 import { AppearanceSheet } from './AppearanceSheet'
@@ -69,6 +70,9 @@ export function TopBar() {
   const setClearOpen = useStore((s) => s.setClearOpen)
   const appearanceOpen = useStore((s) => s.appearanceOpen)
   const setAppearanceOpen = useStore((s) => s.setAppearanceOpen)
+  const license = useStore((s) => s.license)
+
+  const savePortable = () => { if (requireLicense()) saveProjectFile() }
 
   const clearRows: SheetRow[] = [
     {
@@ -131,7 +135,15 @@ export function TopBar() {
     { icon: MapIcon, label: 'From Maps', sub: 'Capture the plot from satellite view', onTap: () => useStore.getState().setMapOpen(true) },
     { icon: Wand2, label: 'Auto-detect rooms', sub: 'Find labelled rooms on this plan', onTap: () => void runDetect() },
     { icon: FolderOpen, label: 'Projects', sub: 'Open, rename, back up', onTap: () => useStore.getState().setProjectsOpen(true) },
-    { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', onTap: saveProjectFile },
+    { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', onTap: savePortable },
+    ...(license.status !== 'unconfigured' ? [{
+      icon: KeyRound,
+      label: 'Licence & activation',
+      sub: license.status === 'active' ? `Licensed · ${license.plan}`
+        : license.status === 'expired' ? 'Subscription ended — renew to keep exporting'
+        : 'Trial mode — exports and reports are locked',
+      onTap: () => useStore.getState().setActivationOpen(true),
+    }] : []),
     { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },
     { icon: Eraser, label: 'Clear…', sub: 'Remove just the background, markers, drawings or outline', onTap: () => setClearOpen(true) },
   ]
@@ -180,6 +192,13 @@ export function TopBar() {
       </button>
 
       <div className="topbar-right">
+        {(license.status === 'trial' || license.status === 'expired') && (
+          <button className={`trial-pill hide-mobile ${license.status === 'expired' ? 'ended' : ''}`}
+            onClick={() => useStore.getState().setActivationOpen(true)}>
+            <KeyRound size={12} strokeWidth={2.2} />
+            {license.status === 'expired' ? 'Renew' : 'Trial — activate'}
+          </button>
+        )}
         <button className={`icon-btn lock-btn hide-mobile ${locked ? 'locked' : ''}`} onClick={() => setLocked(!locked)}
           aria-label={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}
           data-tip={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}>
@@ -205,7 +224,7 @@ export function TopBar() {
           aria-label="Projects" data-tip="Projects — open, rename, back up">
           <FolderOpen size={16} />
         </button>
-        <button className="icon-btn hide-mobile" onClick={saveProjectFile}
+        <button className="icon-btn hide-mobile" onClick={savePortable}
           aria-label="Save project file" data-tip="Save project (.vastu)">
           <Save size={16} />
         </button>
@@ -218,7 +237,7 @@ export function TopBar() {
           data-tip={closed ? 'Client report — print / share' : 'Close the outline to build a report'}>
           <FileText size={16} />
         </button>
-        <button className="btn-primary" aria-label="Export PNG" onClick={() => void exportPng()}>
+        <button className="btn-primary" aria-label="Export PNG" onClick={() => { if (requireLicense()) void exportPng() }}>
           <Download size={15} /> <span className="hide-mobile">Export PNG</span>
         </button>
         <button className="icon-btn" aria-label="More" onClick={() => setMoreOpen(true)}>

@@ -19,6 +19,8 @@ import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
 import { ProjectsModal } from './ui/ProjectsModal'
 import { ReportView } from './ui/ReportView'
+import { ActivationPage } from './ui/ActivationPage'
+import { initLicensing } from './license'
 import { formatLen, formatScale } from './format'
 import { syncNativeChrome } from './native'
 import type { ProjectFile } from './types'
@@ -128,7 +130,7 @@ export default function App() {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
       const s = useStore.getState()
       // modal surfaces own the keyboard while open — each closes itself on Escape
-      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
+      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen || s.activationOpen) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
@@ -208,6 +210,7 @@ export default function App() {
   /* autosave + restore: legacy localStorage migrates into the IndexedDB library once */
   useEffect(() => {
     requestPersistence()
+    initLicensing()
     const st = useStore.getState()
     const legacy = loadAutosave()
     if (legacy && (legacy.bg.kind !== 'none' || legacy.pts.length > 0)) {
@@ -304,6 +307,7 @@ export default function App() {
       {mapOpen && <MapModal />}
       {projectsOpen && <ProjectsModal />}
       {reportOpen && <ReportView />}
+      <ActivationPage />
       <input
         ref={fileRef}
         type="file"

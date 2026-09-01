@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import { FileDown, Printer, Share2, X } from 'lucide-react'
 import { useStore } from '../store'
+import { requireLicense } from '../license'
 import { makePlanPng } from '../export'
 import { buildAssessment } from '../reportText'
 import type { ReportPdfData } from '../reportPdf'
@@ -221,6 +222,7 @@ export function ReportView() {
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
   const doPrint = () => {
+    if (!requireLicense()) return
     try {
       if (typeof window.print !== 'function') throw new Error('print unavailable')
       window.print()
@@ -230,6 +232,7 @@ export function ReportView() {
   }
 
   const doSavePdf = async () => {
+    if (!requireLicense()) return
     setPdfBusy(true)
     try {
       // the export PNG is device-resolution (huge) — resample to a document-friendly
@@ -350,6 +353,7 @@ export function ReportView() {
   }
 
   const share = async () => {
+    if (!requireLicense()) return
     if (!imgBlob) return
     const file = new File([imgBlob], `${projectName}-vastu.png`, { type: 'image/png' })
     try {

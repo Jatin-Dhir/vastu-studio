@@ -52,6 +52,14 @@ export interface RoomShape {
   pts: Pt[]
 }
 
+/** What the UI needs to know about licensing — the full record (key, instance id)
+ *  stays inside src/license.ts and its localStorage store, never in app state. */
+export type LicenseSnapshot =
+  | { status: 'unconfigured' } // licensing switched off — the app behaves exactly as before
+  | { status: 'trial' }
+  | { status: 'active'; plan: string; renewsAt: string | null; keyTail: string }
+  | { status: 'expired'; keyTail: string }
+
 export interface ReportMeta {
   client: string
   address: string

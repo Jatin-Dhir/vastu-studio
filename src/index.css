@@ -197,6 +197,135 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
   .topbar .show-mobile { display: grid !important; }
 }
 
+/* ————— activation — the licensed front door ————— */
+/* z 88: above every working surface incl. the report (86), below toasts (90) */
+
+.activation {
+  position: fixed; inset: 0;
+  z-index: 88;
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  align-items: center;
+  background:
+    radial-gradient(1100px 640px at 30% 40%, rgba(217, 180, 91, 0.05), transparent 62%),
+    radial-gradient(circle at 0 0, rgba(255, 255, 255, 0.03) 1px, transparent 1.4px),
+    var(--bg);
+  background-size: auto, 26px 26px, auto;
+  animation: actIn 0.32s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes actIn { from { opacity: 0; } }
+
+.act-identity {
+  justify-self: center;
+  display: flex; flex-direction: column; align-items: center; gap: 14px;
+  text-align: center;
+  max-width: 380px;
+  padding: 24px;
+  animation: actRise 0.45s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@keyframes actRise { from { opacity: 0; transform: translateY(10px); } }
+
+.act-dial { width: 190px; height: 190px; overflow: visible; }
+.act-dial-spokes { transform-origin: 100px 100px; animation: actSpin 120s linear infinite; }
+@keyframes actSpin { to { transform: rotate(360deg); } }
+.act-dial.pulse .act-dial-core { animation: actPulse 0.9s cubic-bezier(0.23, 1, 0.32, 1); }
+@keyframes actPulse { 30% { stroke-width: 5; } }
+
+/* the gate is self-contained (errors show inline) — boot/status toasts under it are noise */
+.app:has(.activation) .toasts { display: none; }
+
+.act-wordmark {
+  font-family: var(--serif);
+  font-size: 40px; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--text);
+}
+.act-wordmark em { font-style: italic; color: var(--gold); }
+.act-tag { margin: 0; font-size: 13px; line-height: 1.55; color: var(--muted); }
+
+.act-card {
+  justify-self: start;
+  width: min(400px, calc(100vw - 48px));
+  background: var(--panel);
+  border: 1px solid var(--stroke-2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(14px);
+  padding: 26px 26px 22px;
+  display: flex; flex-direction: column; gap: 10px;
+  animation: actRise 0.45s cubic-bezier(0.23, 1, 0.32, 1) 0.06s backwards;
+}
+.act-head { margin: 0; font-size: 19px; font-weight: 700; letter-spacing: -0.01em; }
+.act-sub { margin: 0 0 6px; font-size: 12.5px; line-height: 1.55; color: var(--muted); }
+.act-key-label { font-size: 11px; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--dim); }
+.act-key {
+  width: 100%;
+  background: var(--surface-2);
+  border: 1px solid var(--stroke-2);
+  border-radius: 10px;
+  padding: 11px 13px;
+  color: var(--text);
+  font-size: 15px; font-weight: 650; letter-spacing: 0.06em;
+  font-variant-numeric: tabular-nums;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+.act-key:focus { border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+.act-key::placeholder { color: var(--dim); letter-spacing: 0.1em; }
+.act-error { font-size: 12px; line-height: 1.5; color: var(--danger-fg); }
+.act-cta { justify-content: center; width: 100%; padding: 11px 16px; font-size: 13.5px; }
+.act-subscribe {
+  display: inline-flex; align-items: center; gap: 5px;
+  align-self: center;
+  font-size: 12px; font-weight: 600;
+  color: var(--gold-2); text-decoration: none;
+  padding: 4px 6px;
+}
+.act-subscribe:hover { text-decoration: underline; }
+.act-divider { height: 1px; background: var(--stroke); margin: 6px 0 2px; }
+.act-trial { justify-content: center; width: 100%; }
+.act-trial-note { margin: 0; font-size: 11.5px; line-height: 1.55; color: var(--dim); text-align: center; }
+
+.act-licensed {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 15px; font-weight: 700; color: var(--gold-2);
+}
+.act-plan-row { display: flex; flex-direction: column; gap: 2px; margin-bottom: 8px; }
+.act-plan-row span { font-size: 13.5px; font-weight: 650; }
+.act-plan-row small { font-size: 11.5px; color: var(--dim); }
+.act-manage { display: flex; gap: 8px; flex-wrap: wrap; }
+.act-manage .btn-ghost, .act-manage a.btn-ghost { text-decoration: none; }
+.act-danger { color: var(--danger-fg); }
+
+/* topbar pill — visible while the trial is running (desktop; phones use the More sheet) */
+.trial-pill {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 11px;
+  border-radius: 999px;
+  background: var(--gold-soft);
+  color: var(--gold-2);
+  font-size: 11.5px; font-weight: 700; letter-spacing: 0.02em;
+  white-space: nowrap;
+  transition: filter 0.15s ease;
+}
+.trial-pill:hover { filter: brightness(1.15); }
+.trial-pill.ended { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger-fg); }
+
+@media (max-width: 900px) {
+  .activation {
+    grid-template-columns: 1fr;
+    align-content: start;
+    justify-items: center;
+    gap: 4px;
+    overflow-y: auto;
+    padding: max(26px, env(safe-area-inset-top)) 0 max(26px, env(safe-area-inset-bottom));
+  }
+  .act-identity { padding: 12px 24px 6px; gap: 10px; }
+  .act-dial { width: 130px; height: 130px; }
+  .act-wordmark { font-size: 32px; }
+  .act-tag { font-size: 12px; }
+  .act-card { justify-self: center; }
+}
+
 /* ————— tab strip: switch between drawings open at once ————— */
 /* normal flow, not a floating overlay — .stage-wrap (flex:1) absorbs the height on its own */
 
