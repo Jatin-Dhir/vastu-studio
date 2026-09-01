@@ -234,6 +234,9 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
 /* the gate is self-contained (errors show inline) — boot/status toasts under it are noise */
 .app:has(.activation) .toasts { display: none; }
 
+/* the post-trial panel card's single call to action */
+.panel-activate { justify-content: center; width: 100%; margin-top: 4px; }
+
 .act-wordmark {
   font-family: var(--serif);
   font-size: 40px; font-weight: 600; letter-spacing: 0.01em;

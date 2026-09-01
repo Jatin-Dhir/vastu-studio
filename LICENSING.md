@@ -5,11 +5,14 @@ keys are all handled by **Lemon Squeezy** (a merchant of record — you never bu
 or run a payment backend). The app checks keys through a tiny serverless function
 that deploys automatically with the site on Cloudflare Pages.
 
-**Trial model (already built in):** without a licence, everything works — import,
-tracing, scale, compass, analysis — but **Export PNG, the report's PDF/Print/Share,
-and Save project file** open the activation page instead. A licence key unlocks
-them on that device. Keys stop working automatically when a subscription lapses
-(the app re-checks every 3 days when online, with a 14-day offline grace window).
+**Trial model (already built in):** each device gets a **14-day trial** with the
+full workflow — import, tracing, scale, compass, analysis — while **Export PNG,
+the report's PDF/Print/Share, and Save project file** stay locked (they open the
+activation page). When the 14 days end, the compass, zone readings, findings and
+report lock too — plans and tracings stay viewable and editable, so nobody's work
+is ever held hostage. A licence key unlocks everything on that device. Keys stop
+working automatically when a subscription lapses (the app re-checks every 3 days
+when online, with a 14-day offline grace window).
 
 ## The moving parts (all in this repo)
 

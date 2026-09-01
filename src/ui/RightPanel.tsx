@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, Navigation, RotateCcw, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, KeyRound, LocateFixed, Navigation, RotateCcw, XCircle } from 'lucide-react'
 import { useStore } from '../store'
+import { analysisAllowed, requireAnalysis } from '../license'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { placementOf, zoneRows } from '../analysis'
 import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
@@ -253,6 +254,7 @@ export function RightPanel() {
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
+  const analysisOk = analysisAllowed(useStore((s) => s.license))
   const setCompass = useStore((s) => s.setCompass)
   const setTool = useStore((s) => s.setTool)
   // arming a canvas tool from a sheet button must get the sheet OUT of the way —
@@ -580,6 +582,7 @@ export function RightPanel() {
               aria-pressed={compass.id === m.id}
               disabled={!closed}
               onClick={() => {
+                if (!requireAnalysis()) return
                 if (m.id === 'custom' && !compass.customUrl) customFileRef.current?.click()
                 else setCompass({ id: compass.id === m.id ? 'none' : (m.id as CompassId) })
               }}
@@ -603,7 +606,7 @@ export function RightPanel() {
                     className={`compass-card preset ${compass.id === 'custom' && compass.customUrl === p.dataUrl ? 'on' : ''}`}
                     aria-pressed={compass.id === 'custom' && compass.customUrl === p.dataUrl}
                     disabled={!closed}
-                    onClick={() => setCompass({ id: 'custom', customUrl: p.dataUrl, customAspect: p.aspect })}>
+                    onClick={() => { if (requireAnalysis()) setCompass({ id: 'custom', customUrl: p.dataUrl, customAspect: p.aspect }) }}>
                     <span className="compass-thumb"><img src={p.dataUrl} alt={p.name} /></span>
                     <span className="compass-label">{p.name}</span>
                   </button>
@@ -615,7 +618,7 @@ export function RightPanel() {
           </>
         )}
 
-        {closed && compass.id !== 'none' && (
+        {analysisOk && closed && compass.id !== 'none' && (
           <>
             <Slider label="Size" value={compass.scalePct} min={40} max={400}
               onChange={(v) => setCompass({ scalePct: v })} />
@@ -685,8 +688,20 @@ export function RightPanel() {
         </div>
       </section>
 
+      {/* -------- Analysis lock: after the trial, the readings are the paid part -------- */}
+      {!analysisOk && closed && (
+        <section className="card">
+          <header className="card-head"><h2>Vastu analysis</h2></header>
+          <p className="hint">Your trial has ended — the compass overlay, zone readings and findings
+            are part of the full version. Your plans and tracings are untouched.</p>
+          <button className="btn-primary panel-activate" onClick={() => useStore.getState().setActivationOpen(true)}>
+            <KeyRound size={14} /> Activate Vastu Studio
+          </button>
+        </section>
+      )}
+
       {/* -------- Markers -------- */}
-      {items.length > 0 && center && closed && (
+      {analysisOk && items.length > 0 && center && closed && (
         <section className="card">
           <header className="card-head"><h2>Rooms & objects</h2></header>
           {items.filter((m) => m.kind === 'entrance').map((m) => {
@@ -723,7 +738,7 @@ export function RightPanel() {
       )}
 
       {/* -------- Vastu analysis -------- */}
-      {closed && center && pts.length >= 3 && (() => {
+      {analysisOk && closed && center && pts.length >= 3 && (() => {
         const ev = evaluateVastu({ sampled, center, northDeg, markers: items, brahmaPct: compass.brahmaPct })
         return (
           <section className="card">
@@ -762,7 +777,7 @@ export function RightPanel() {
       })()}
 
       {/* -------- Zone balance -------- */}
-      {closed && center && pts.length >= 3 && (
+      {analysisOk && closed && center && pts.length >= 3 && (
         <section className="card">
           <header className="card-head">
             <h2>Zone balance</h2>

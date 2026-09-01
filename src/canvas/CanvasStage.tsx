@@ -5,6 +5,7 @@ import { importDxf, type DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgeLength, edgePoint, nearestOnEdge, polar, polygonArea, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import { haptic } from '../native'
+import { analysisAllowed } from '../license'
 import { setGestureBusy } from './gesture'
 import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
@@ -63,6 +64,7 @@ export function CanvasStage() {
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
+  const license = useStore((s) => s.license)
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
   const tool = useStore((s) => s.tool)
@@ -908,11 +910,16 @@ export function CanvasStage() {
 
   /* ---------- render helpers ---------- */
   const { k, rot } = view
-  // the compass steps aside while the outline itself is being drawn or reshaped
+  // the compass steps aside while the outline itself is being drawn or reshaped —
+  // and stays away entirely once the trial has ended (the analysis is the paid insight;
+  // the Brahmasthan ring renders independently of the compass id, so silence it too)
   const editingOutline = tool === 'trace' || editDragging
-  const sceneCompass = editingOutline && compass.id !== 'none'
-    ? { ...compass, id: 'none' as const }
-    : compass
+  const analysisOk = analysisAllowed(license)
+  const sceneCompass = !analysisOk
+    ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
+    : editingOutline && compass.id !== 'none'
+      ? { ...compass, id: 'none' as const }
+      : compass
   const tracing = tool === 'trace' && !closed
   const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < CLOSE_PX / k
   const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
@@ -933,7 +940,7 @@ export function CanvasStage() {
     >
       <g id="world" ref={worldRef}>
         <Scene
-          bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={center} R={R}
+          bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={analysisOk ? center : null} R={R}
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
           northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes}

@@ -77,6 +77,8 @@ export function ActivationPage() {
 
   const active = license.status === 'active'
   const expired = license.status === 'expired'
+  const trialOver = license.status === 'trial-ended'
+  const daysLeft = license.status === 'trial' ? license.daysLeft : 0
 
   return (
     <div className="activation" role="dialog" aria-modal="true" aria-label="Vastu Studio activation">
@@ -113,10 +115,14 @@ export function ActivationPage() {
           </>
         ) : (
           <>
-            <h2 className="act-head">{expired ? 'Subscription ended' : 'Activate Vastu Studio'}</h2>
+            <h2 className="act-head">
+              {expired ? 'Subscription ended' : trialOver ? 'Your trial has ended' : 'Activate Vastu Studio'}
+            </h2>
             <p className="act-sub">
               {expired
                 ? `Key ····${license.status === 'expired' ? license.keyTail : ''} is no longer active. Renew your subscription, or enter a new key.`
+                : trialOver
+                ? 'The 14-day trial is over on this device. Your plans and tracings are safe — a licence key brings back the compass, analysis, reports and exports.'
                 : 'Enter the licence key from your purchase email to unlock exports, reports and project files on this device.'}
             </p>
             <label className="act-key-label" htmlFor="act-key">Licence key</label>
@@ -138,9 +144,14 @@ export function ActivationPage() {
             )}
             <div className="act-divider" />
             <button className="btn-ghost act-trial" onClick={() => setOpen(false)}>
-              Continue in trial mode
+              {trialOver || expired ? 'Not now — just view my plans' : 'Continue in trial mode'}
             </button>
-            <p className="act-trial-note">Everything works in the trial — importing, tracing, the full compass analysis. Exports, client reports and project files wait for a licence.</p>
+            {!trialOver && !expired && (
+              <p className="act-trial-note">
+                {daysLeft} {daysLeft === 1 ? 'day' : 'days'} left in your trial — importing, tracing and the full
+                compass analysis all work. Exports, client reports and project files wait for a licence.
+              </p>
+            )}
           </>
         )}
       </div>

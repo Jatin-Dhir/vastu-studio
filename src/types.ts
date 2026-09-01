@@ -56,7 +56,8 @@ export interface RoomShape {
  *  stays inside src/license.ts and its localStorage store, never in app state. */
 export type LicenseSnapshot =
   | { status: 'unconfigured' } // licensing switched off — the app behaves exactly as before
-  | { status: 'trial' }
+  | { status: 'trial'; daysLeft: number }
+  | { status: 'trial-ended' }
   | { status: 'active'; plan: string; renewsAt: string | null; keyTail: string }
   | { status: 'expired'; keyTail: string }
 

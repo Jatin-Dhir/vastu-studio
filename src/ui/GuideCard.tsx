@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Check, Compass, MapPin, MousePointerClick, X } from 'lucide-react'
 import { useStore } from '../store'
+import { requireAnalysis } from '../license'
 import { formatScale } from '../format'
 import { goToStep, useGuide } from './steps'
 
@@ -89,6 +90,7 @@ export function GuideCard() {
       icon: Compass,
       primary: true,
       onTap: () => {
+        if (!requireAnalysis()) return
         s.setCompass({ id: 'zones16' })
         if (window.innerWidth <= 760) s.setSheetPos('half')
       },
@@ -110,7 +112,7 @@ export function GuideCard() {
       label: 'Open the report',
       icon: ArrowRight,
       primary: true,
-      onTap: () => s.setReportOpen(true),
+      onTap: () => { if (requireAnalysis()) s.setReportOpen(true) },
     }]
   }
 

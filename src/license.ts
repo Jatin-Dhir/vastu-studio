@@ -16,6 +16,8 @@ interface StoredLicense {
 
 const STORE_KEY = 'vastu-studio.license.v1'
 const GATE_SEEN_KEY = 'vastu-studio.gate-seen.v1'
+const TRIAL_KEY = 'vastu-studio.trial.v1'
+export const TRIAL_DAYS = 14
 /** Dev-only key that activates without a store, so the whole flow is testable
  *  before Lemon Squeezy exists. Compiled out of production builds entirely. */
 const DEV_KEY = 'TEST-TEST-TEST-TEST'
@@ -36,12 +38,39 @@ function saveStored(rec: StoredLicense | null) {
   } catch { /* private mode */ }
 }
 
+/** Whole days of trial remaining. The clock starts the first time this runs on a
+ *  device; in private browsing (nothing persists) stay generous rather than lock. */
+function trialDaysLeft(): number {
+  try {
+    let raw = localStorage.getItem(TRIAL_KEY)
+    if (!raw) { raw = String(Date.now()); localStorage.setItem(TRIAL_KEY, raw) }
+    const started = Number(raw) || Date.now()
+    return Math.max(0, Math.ceil((TRIAL_DAYS * 86400000 - (Date.now() - started)) / 86400000))
+  } catch { return TRIAL_DAYS }
+}
+
 function toSnapshot(rec: StoredLicense | null): LicenseSnapshot {
   if (!LICENSING_ENABLED) return { status: 'unconfigured' }
-  if (!rec) return { status: 'trial' }
+  if (!rec) {
+    const daysLeft = trialDaysLeft()
+    return daysLeft > 0 ? { status: 'trial', daysLeft } : { status: 'trial-ended' }
+  }
   const keyTail = rec.key.slice(-4)
   if (rec.expired) return { status: 'expired', keyTail }
   return { status: 'active', plan: rec.plan, renewsAt: rec.renewsAt, keyTail }
+}
+
+/** The compass, zones and findings are the paid insight. Free while the trial
+ *  runs; locked once it ends or a subscription lapses. */
+export function analysisAllowed(lic: LicenseSnapshot): boolean {
+  return lic.status === 'unconfigured' || lic.status === 'active' || lic.status === 'trial'
+}
+
+/** Gate for analysis surfaces once the trial is over. True = proceed. */
+export function requireAnalysis(): boolean {
+  if (analysisAllowed(useStore.getState().license)) return true
+  useStore.getState().setActivationOpen(true)
+  return false
 }
 
 function publish(rec: StoredLicense | null) {

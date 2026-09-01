@@ -5,7 +5,7 @@ import {
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { exportPng } from '../export'
-import { requireLicense } from '../license'
+import { requireAnalysis, requireLicense } from '../license'
 import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
 import { AppearanceSheet } from './AppearanceSheet'
@@ -140,8 +140,10 @@ export function TopBar() {
       icon: KeyRound,
       label: 'Licence & activation',
       sub: license.status === 'active' ? `Licensed · ${license.plan}`
-        : license.status === 'expired' ? 'Subscription ended — renew to keep exporting'
-        : 'Trial mode — exports and reports are locked',
+        : license.status === 'expired' ? 'Subscription ended — renew to keep working'
+        : license.status === 'trial-ended' ? 'Trial ended — activate to keep analysing'
+        : license.status === 'trial' ? `Trial — ${license.daysLeft} ${license.daysLeft === 1 ? 'day' : 'days'} left · exports locked`
+        : 'Trial mode',
       onTap: () => useStore.getState().setActivationOpen(true),
     }] : []),
     { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },
@@ -192,11 +194,13 @@ export function TopBar() {
       </button>
 
       <div className="topbar-right">
-        {(license.status === 'trial' || license.status === 'expired') && (
-          <button className={`trial-pill hide-mobile ${license.status === 'expired' ? 'ended' : ''}`}
+        {(license.status === 'trial' || license.status === 'trial-ended' || license.status === 'expired') && (
+          <button className={`trial-pill hide-mobile ${license.status !== 'trial' ? 'ended' : ''}`}
             onClick={() => useStore.getState().setActivationOpen(true)}>
             <KeyRound size={12} strokeWidth={2.2} />
-            {license.status === 'expired' ? 'Renew' : 'Trial — activate'}
+            {license.status === 'expired' ? 'Renew'
+              : license.status === 'trial-ended' ? 'Trial ended — activate'
+              : `Trial — ${license.daysLeft} ${license.daysLeft === 1 ? 'day' : 'days'} left`}
           </button>
         )}
         <button className={`icon-btn lock-btn hide-mobile ${locked ? 'locked' : ''}`} onClick={() => setLocked(!locked)}
@@ -232,7 +236,7 @@ export function TopBar() {
           aria-label="Help & shortcuts" data-tip="Help & shortcuts (?)">
           <HelpCircle size={16} />
         </button>
-        <button className="icon-btn" disabled={!closed} onClick={() => useStore.getState().setReportOpen(true)}
+        <button className="icon-btn" disabled={!closed} onClick={() => { if (requireAnalysis()) useStore.getState().setReportOpen(true) }}
           aria-label="Client report"
           data-tip={closed ? 'Client report — print / share' : 'Close the outline to build a report'}>
           <FileText size={16} />
