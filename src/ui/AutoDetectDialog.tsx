@@ -4,6 +4,7 @@ import { Dialog } from './Dialogs'
 import { useStore } from '../store'
 import { centroid, sampledPolygon } from '../geometry'
 import { placementOf } from '../analysis'
+import { detectRoomExtents } from '../roomExtent'
 import { MARKER_KINDS, markerKindMeta } from '../vastu'
 import type { MarkerKind, Pt } from '../types'
 import type { DetectedRoom } from '../roomDetect'
@@ -16,10 +17,12 @@ interface ReviewRow {
   p: Pt
   sourceText: string
   confidence: number
+  /** the room's footprint read from the walls around the label — null = not readable */
+  rect: [Pt, Pt] | null
 }
 
 const toRow = (r: DetectedRoom): ReviewRow => ({
-  id: r.id, included: true, label: r.label, kind: r.kind, p: r.p, sourceText: r.sourceText, confidence: r.confidence,
+  id: r.id, included: true, label: r.label, kind: r.kind, p: r.p, sourceText: r.sourceText, confidence: r.confidence, rect: null,
 })
 
 /**
@@ -35,9 +38,27 @@ export function AutoDetectDialog() {
   const northDeg = useStore((s) => s.northDeg)
   const theme = useStore((s) => s.theme)
   const [rows, setRows] = useState<ReviewRow[]>([])
+  const [asAreas, setAsAreas] = useState(true)
+  const [sizing, setSizing] = useState(false)
 
   useEffect(() => {
-    if (detected) setRows(detected.map(toRow))
+    if (!detected) return
+    setRows(detected.map(toRow))
+    // grow each label point into the room around it (raster plans only — a DXF
+    // background has no pixels to fill; its rows simply stay point markers)
+    const bg = useStore.getState().bg
+    if (bg.kind !== 'raster' || !bg.dataUrl || detected.length === 0) return
+    let stale = false
+    setSizing(true)
+    void detectRoomExtents(bg.dataUrl, detected.map((d) => d.p)).then((rects) => {
+      if (stale) return
+      setRows((rs) => rs.map((r) => {
+        const i = detected.findIndex((d) => d.id === r.id)
+        return i >= 0 ? { ...r, rect: rects[i] } : r
+      }))
+      setSizing(false)
+    })
+    return () => { stale = true }
   }, [detected])
 
   // the plot's centre, only once the outline is closed — an open outline has no
@@ -60,11 +81,22 @@ export function AutoDetectDialog() {
     let added = 0
     for (const row of rows) {
       if (!row.included) continue
-      // setMarkerKind THEN addMarker — addMarker reads the currently-armed kind,
-      // it takes no kind argument (see CLAUDE.md's CRITICAL store API trap)
-      s.setMarkerKind(row.kind)
-      const id = s.addMarker(row.p)
-      s.updateMarker(id, { label: row.label.trim() || markerKindMeta(row.kind).name })
+      const label = row.label.trim() || markerKindMeta(row.kind).name
+      // an entrance is a door — a point on the boundary, never an area (and the
+      // entrance-analysis pipeline reads point markers specifically)
+      if (asAreas && row.rect && row.kind !== 'entrance') {
+        // setRoomShapeKind THEN addRoomShape — same store API shape as markers:
+        // the add reads the currently-armed kind, it takes no kind argument
+        s.setRoomShapeKind(row.kind)
+        const id = s.addRoomShape('rect', row.rect)
+        s.updateRoomShape(id, { label })
+      } else {
+        // setMarkerKind THEN addMarker — addMarker reads the currently-armed kind,
+        // it takes no kind argument (see CLAUDE.md's CRITICAL store API trap)
+        s.setMarkerKind(row.kind)
+        const id = s.addMarker(row.p)
+        s.updateMarker(id, { label })
+      }
       added++
     }
     useStore.getState().setDetectedRooms(null)
@@ -90,6 +122,22 @@ export function AutoDetectDialog() {
           </button>
         </span>
       </div>
+
+      {(sizing || rows.some((r) => r.rect)) && (
+        <div className="row-between" style={{ marginBottom: 10 }}>
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button type="button" className={`toggle ${asAreas ? 'on' : ''}`} aria-pressed={asAreas}
+              aria-label="Mark whole room areas instead of points"
+              onClick={() => setAsAreas(!asAreas)} style={{ padding: 3, flex: '0 0 auto' }}>
+              <span className="knob" />
+            </button>
+            <span className="lbl" style={{ fontWeight: 650 }}>Mark whole room areas</span>
+          </span>
+          <span className="lbl dim">
+            {sizing ? 'reading sizes from the walls…' : `${rows.filter((r) => r.rect).length} of ${rows.length} sized`}
+          </span>
+        </div>
+      )}
 
       <div className="proj-list">
         {rows.map((row) => {
@@ -118,9 +166,14 @@ export function AutoDetectDialog() {
                   {MARKER_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.name}</option>)}
                 </select>
               </div>
-              {(zone || lowConf) && (
+              {(zone || lowConf || row.rect) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingLeft: 41 }}>
                   {zone && <span className="marker-zone" style={{ color: zone.color }}>{zone.key}</span>}
+                  {row.rect && (
+                    <span className="lbl dim">
+                      {asAreas && row.kind !== 'entrance' ? 'whole room' : 'point'}
+                    </span>
+                  )}
                   {lowConf && (
                     <span className="chip" style={{ color: 'var(--warn)', borderColor: 'rgba(232,165,75,0.4)' }}>
                       <AlertTriangle size={10} /> low confidence
@@ -136,7 +189,7 @@ export function AutoDetectDialog() {
       <div className="dialog-actions">
         <button className="btn-ghost" onClick={close}>Cancel</button>
         <button className="btn-primary" disabled={checkedCount === 0} onClick={commit}>
-          Add {checkedCount} marker{checkedCount === 1 ? '' : 's'}
+          Add {checkedCount} room{checkedCount === 1 ? '' : 's'}
         </button>
       </div>
     </Dialog>

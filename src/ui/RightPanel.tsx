@@ -150,7 +150,12 @@ function NorthRow() {
         <label className="field">
           <span>North</span>
           <div className="num-wrap">
-            <input type="number" value={draft ?? northDeg} step={0.5}
+            <input type="text" inputMode="decimal" value={draft ?? northDeg}
+              // tap → the whole value is selected, so typing REPLACES the 0 instead of
+              // appending to it. type=text, not number: Chromium quietly ignores
+              // select() on number inputs. Immediate call + rAF retry: iOS drops the
+              // select() issued during the focus event itself, Android honours it
+              onFocus={(e) => { const t = e.currentTarget; t.select(); requestAnimationFrame(() => t.select()) }}
               onChange={(e) => {
                 const v = e.target.value
                 setDraft(v)
