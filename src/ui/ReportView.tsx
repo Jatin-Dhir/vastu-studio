@@ -9,7 +9,7 @@ import type { ReportPdfData } from '../reportPdf'
 import { brahmasthanRadius, placementOf, zoneRows } from '../analysis'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
-import { ANALYSIS_DISCLAIMER, GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
+import { GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
 import { evaluateVastu, roomShapeAnchor } from '../evaluate'
 import type { Finding, Severity } from '../evaluate'
 import type { Marker, NorthSource, Pt, ScaleSource } from '../types'
@@ -333,7 +333,6 @@ export function ReportView() {
         address: report.address,
         practitioner: report.practitioner,
         notes: report.notes,
-        disclaimer: ANALYSIS_DISCLAIMER,
         verdictLine,
         sevCounts,
         plan,
@@ -470,7 +469,6 @@ export function ReportView() {
           </section>
         )}
 
-        <div className="report-disclaimer">{ANALYSIS_DISCLAIMER}</div>
 
         {imgUrl
           ? <img className="report-plan" src={imgUrl} alt="Analysed plan" />

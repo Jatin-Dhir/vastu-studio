@@ -71,15 +71,29 @@ export async function ocrExtractText(
     // SPARSE_TEXT keeps same-row labels from being stitched into one long merged line
     await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT })
 
-    const { data } = await worker.recognize(imageDataUrl, {}, { text: false, blocks: true })
+    // MEASURED (2026-09-04, synthetic hard plan: tints + vignette + dimension clutter):
+    // tesseract's own binarization handles tinted/shadowed plans fine — raw recognition
+    // ran 0.6s with 95%+ label confidence, while a flatten+re-encode "cleanup" pass
+    // ballooned the same image to minutes (sparse-text chokes on re-encoded noise).
+    // So: NO filtering here. The only preprocessing that earns its keep is upscaling
+    // a genuinely small image (tiny text OCRs poorly), losslessly, as PNG.
+    const { url: sourceUrl, scale: ocrScale } = await upscaleIfSmall(imageDataUrl, imgW, imgH)
+
+    // a pathological image must never strand the busy state — give recognition a
+    // hard ceiling and surface a real error instead
+    const { data } = await Promise.race([
+      worker.recognize(sourceUrl, {}, { text: false, blocks: true }),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('Text scan timed out — try a cleaner or smaller image')), 120_000)),
+    ])
     const samples: TextSample[] = []
     for (const block of data.blocks ?? []) {
       for (const para of block.paragraphs) {
         for (const line of para.lines) {
           const text = line.text.trim().replace(/\s+/g, ' ')
           if (text.length < MIN_CHARS || line.confidence < MIN_CONFIDENCE) continue
-          const x = Math.min(imgW, Math.max(0, (line.bbox.x0 + line.bbox.x1) / 2))
-          const y = Math.min(imgH, Math.max(0, (line.bbox.y0 + line.bbox.y1) / 2))
+          const x = Math.min(imgW, Math.max(0, (line.bbox.x0 + line.bbox.x1) / 2 / ocrScale))
+          const y = Math.min(imgH, Math.max(0, (line.bbox.y0 + line.bbox.y1) / 2 / ocrScale))
           samples.push({ text, p: { x, y }, confidence: line.confidence / 100 })
         }
       }
@@ -87,5 +101,29 @@ export async function ocrExtractText(
     return samples
   } finally {
     if (worker) await worker.terminate().catch(() => {})
+  }
+}
+
+/** 2× upscale for genuinely small plans only (label text under ~15px reads poorly).
+ *  Lossless PNG — a lossy re-encode measurably wrecks sparse-text recognition. */
+async function upscaleIfSmall(
+  dataUrl: string, imgW: number, imgH: number,
+): Promise<{ url: string; scale: number }> {
+  try {
+    if (Math.max(imgW, imgH) >= 1200) return { url: dataUrl, scale: 1 }
+    const scale = 2
+    // onload, not decode() — decode() stalls indefinitely in hidden tabs
+    const img = new Image()
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = dataUrl })
+    const c = document.createElement('canvas')
+    c.width = Math.round(imgW * scale)
+    c.height = Math.round(imgH * scale)
+    const ctx = c.getContext('2d')
+    if (!ctx) return { url: dataUrl, scale: 1 }
+    ctx.imageSmoothingQuality = 'high'
+    ctx.drawImage(img, 0, 0, c.width, c.height)
+    return { url: c.toDataURL('image/png'), scale }
+  } catch {
+    return { url: dataUrl, scale: 1 }
   }
 }

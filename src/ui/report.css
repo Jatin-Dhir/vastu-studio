@@ -64,18 +64,6 @@
 }
 .report-coverline b { color: #1E2430; margin-right: 3px; }
 
-/* methodology callout — kept prominent and separate from the muted
-   .report-note treatment so it can't be mistaken for fine print */
-.report-disclaimer {
-  margin: 14px 0 20px;
-  padding: 10px 14px;
-  border-left: 3px solid #B8963E;
-  background: #FBF7EC;
-  color: #6A5A2E;
-  font-size: 12px;
-  line-height: 1.5;
-  border-radius: 0 6px 6px 0;
-}
 
 /* at-a-glance verdict scoreboard */
 .report-scoreboard {
@@ -188,7 +176,6 @@
 
   .report-coverline { font-size: 11px; gap: 3px 10px; }
 
-  .report-disclaimer { font-size: 12.5px; padding: 9px 12px; }
 
   /* 4 stat tiles are too cramped on a phone-width page — two rows of two instead */
   .report-scoreboard { grid-template-columns: repeat(2, 1fr); gap: 6px; }
@@ -312,7 +299,6 @@
   /* keep a finding/entrance/table row from splitting across a page break */
   .report-finding,
   .report-entrance,
-  .report-disclaimer,
   .report-stat,
   .report-subrow,
   .report-rulekey-row,
@@ -333,7 +319,6 @@
   .report-page h2 { font-size: 13px; margin: 12px 0 6px; }
   .report-page section { margin: 0 0 10px; }
   .report-coverline { margin-top: 4px; font-size: 10px; }
-  .report-disclaimer { margin: 8px 0 10px; padding: 6px 10px; font-size: 10px; }
   .report-scoreboard { gap: 6px; margin: 6px 0; }
   .report-stat { padding: 6px 10px; }
   .report-stat-num { font-size: 17px; }

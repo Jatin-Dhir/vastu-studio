@@ -17,7 +17,6 @@ export interface ReportPdfData {
   address: string
   practitioner: string
   notes: string
-  disclaimer: string
   verdictLine: string | null
   sevCounts: Record<Severity, number>
   plan: { dataUrl: string; w: number; h: number } | null
@@ -120,7 +119,6 @@ export async function exportReportPdf(data: ReportPdfData): Promise<void> {
     y += 10
     text(data.verdictLine, { size: 10.5, bold: true, gap: 4 })
   }
-  text(data.disclaimer, { size: 8, italic: true, color: MUTED, gap: 2 })
 
   /* ---- plan image ---- */
   if (data.plan) {

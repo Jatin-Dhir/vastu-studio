@@ -20,14 +20,16 @@ import type { Pt } from './types'
  */
 
 const WORK_MAX = 1000 // px — plans downscale to this for the fill
-// erosion radii (work px), LARGEST first: a heavily-eroded core is guaranteed to be
-// one room (doors cut at any r ≥ their half-width) but hugs the room's middle; each
-// smaller r recovers more of the true extent — until the region suddenly JUMPS in
-// size, which is the moment it merged with the neighbouring room through a doorway.
-// The answer is the last size before that jump (measured on the demo plan: a room
-// grows ≤ ~1.3× per rung while honest, then ×1.7+ the rung it merges).
+// erosion radii (work px), LARGEST first. A room announces itself as a PLATEAU:
+// descending r, the grown box grows while pockets merge and alcoves join (the
+// label's own lettering splits large-r cores into fragments, so early growth is
+// legitimate), then sits STABLE across consecutive rungs once the whole room is
+// recovered — until some rung slips through a doorway and the box explodes or
+// trips the size caps. The answer is the deepest stable pair before that
+// (measured on a cluttered plan: rungs 40/32/24 returned the identical true
+// room box; every stop-on-first-jump heuristic froze on a text pocket instead).
 const R_LADDER = [64, 56, 48, 40, 32, 24, 16]
-const MERGE_JUMP = 1.5 // grown-bbox area growing past this ×best = merged, stop
+const PLATEAU_TOL = 1.15 // adjacent grown boxes within this area ratio = stable room
 const MAX_AREA_FRAC = 0.3 // grown fill above this fraction of the sheet = leaked
 const MAX_SIDE_FRAC = 0.6 // grown bbox side above this fraction of the sheet = leaked
 const MIN_CORE_PX = 60 // eroded core smaller than this = a sliver, not a room
@@ -37,8 +39,12 @@ interface WorkImage { w: number; h: number; scale: number; dist: Uint16Array }
 
 async function loadWork(dataUrl: string): Promise<WorkImage | null> {
   const img = new Image()
-  img.src = dataUrl
-  try { await img.decode() } catch { return null }
+  // onload + drawImage, NEVER img.decode(): decode() is deprioritised in hidden or
+  // backgrounded tabs and can stall indefinitely (measured: forever vs 1ms) — a real
+  // phone backgrounding the app mid-detection would freeze the whole feature
+  try {
+    await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = dataUrl })
+  } catch { return null }
   if (!img.naturalWidth) return null
   const scale = Math.min(1, WORK_MAX / Math.max(img.naturalWidth, img.naturalHeight))
   const w = Math.max(1, Math.round(img.naturalWidth * scale))
@@ -51,14 +57,50 @@ async function loadWork(dataUrl: string): Promise<WorkImage | null> {
   let data: Uint8ClampedArray
   try { data = ctx.getImageData(0, 0, w, h).data } catch { return null } // tainted canvas etc.
   const lum = new Uint8ClampedArray(w * h)
-  const hist = new Uint32Array(256)
   for (let i = 0; i < w * h; i++) {
-    const l = (data[i * 4] * 299 + data[i * 4 + 1] * 587 + data[i * 4 + 2] * 114) / 1000
-    lum[i] = l
-    hist[l | 0]++
+    lum[i] = (data[i * 4] * 299 + data[i * 4 + 1] * 587 + data[i * 4 + 2] * 114) / 1000
   }
+  // real plans are photographed and tinted, not white — flatten the illumination so a
+  // shadowed corner or a coloured room fill still reads as paper, and only real ink
+  // (walls, text, hatching) survives the threshold
+  const flat = flattenIllumination(lum, w, h)
+  const hist = new Uint32Array(256)
+  for (let i = 0; i < w * h; i++) hist[flat[i]]++
   const threshold = otsu(hist, w * h)
-  return { w, h, scale, dist: distanceToDark(lum, threshold, w, h) }
+  return { w, h, scale, dist: distanceToDark(flat, threshold, w, h) }
+}
+
+/** Divide each pixel by the local background (a heavy separable box blur, twice):
+ *  vignettes, page shadows and light tints normalise to paper; ink stays dark.
+ *  Shared with the OCR preprocessor (ocr.ts) — same cleanup, both consumers. */
+export function flattenIllumination(lum: Uint8ClampedArray, w: number, h: number): Uint8ClampedArray {
+  const r = Math.max(8, Math.round(Math.max(w, h) / 16))
+  let bg = new Float32Array(lum)
+  for (let pass = 0; pass < 2; pass++) {
+    const tmp = new Float32Array(bg.length)
+    // horizontal running mean
+    for (let y = 0; y < h; y++) {
+      const row = y * w
+      let sum = 0
+      for (let x = -r; x <= r; x++) sum += bg[row + Math.min(w - 1, Math.max(0, x))]
+      for (let x = 0; x < w; x++) {
+        tmp[row + x] = sum / (2 * r + 1)
+        sum += bg[row + Math.min(w - 1, x + r + 1)] - bg[row + Math.max(0, x - r)]
+      }
+    }
+    // vertical running mean
+    for (let x = 0; x < w; x++) {
+      let sum = 0
+      for (let y = -r; y <= r; y++) sum += tmp[Math.min(h - 1, Math.max(0, y)) * w + x]
+      for (let y = 0; y < h; y++) {
+        bg[y * w + x] = sum / (2 * r + 1)
+        sum += tmp[Math.min(h - 1, y + r + 1) * w + x] - tmp[Math.max(0, y - r) * w + x]
+      }
+    }
+  }
+  const out = new Uint8ClampedArray(w * h)
+  for (let i = 0; i < w * h; i++) out[i] = (lum[i] * 220) / Math.max(1, bg[i])
+  return out
 }
 
 /** Otsu's threshold over the luminance histogram, clamped to a sane band so a
@@ -141,44 +183,65 @@ export async function detectRoomExtents(dataUrl: string, seeds: Pt[]): Promise<(
   const { w, h, scale, dist } = wi
   const queue = new Int32Array(w * h)
   const filled = new Uint8Array(w * h)
+  const xHist = new Uint32Array(w)
+  const yHist = new Uint32Array(h)
 
   return seeds.map((seed) => {
     const cx = Math.round(seed.x * scale), cy = Math.round(seed.y * scale)
     if (cx < 0 || cy < 0 || cx >= w || cy >= h) return null
-    let best: [Pt, Pt] | null = null
-    let bestArea = 0
+    let plateau: [Pt, Pt] | null = null
+    let prevArea = 0
     for (const r of R_LADDER) {
       const start = findCore(wi, r, cx, cy)
       if (start < 0) continue // room too small for this r — a shallower erosion may still fit
       // flood the eroded core: only pixels with clearance > r are passable
       filled.fill(0)
+      xHist.fill(0); yHist.fill(0)
       let head = 0, tail = 0
       queue[tail++] = start
       filled[start] = 1
       let area = 0
-      let minX = start % w, maxX = minX, minY = (start / w) | 0, maxY = minY
       while (head < tail) {
         const i = queue[head++]
         area++
         const x = i % w, y = (i / w) | 0
-        if (x < minX) minX = x; if (x > maxX) maxX = x
-        if (y < minY) minY = y; if (y > maxY) maxY = y
+        xHist[x]++; yHist[y]++
         if (x > 0 && !filled[i - 1] && dist[i - 1] > r) { filled[i - 1] = 1; queue[tail++] = i - 1 }
         if (x < w - 1 && !filled[i + 1] && dist[i + 1] > r) { filled[i + 1] = 1; queue[tail++] = i + 1 }
         if (y > 0 && !filled[i - w] && dist[i - w] > r) { filled[i - w] = 1; queue[tail++] = i - w }
         if (y < h - 1 && !filled[i + w] && dist[i + w] > r) { filled[i + w] = 1; queue[tail++] = i + w }
       }
       if (area < MIN_CORE_PX) continue
-      // grow the core's bbox back by r — the room's bounds up to its walls
+      // the core's span, with 2% of pixels trimmed from each side — a thin tendril
+      // that leaked through a gap no longer drags the whole rectangle with it
+      const trim = area >= 400 ? Math.max(1, Math.round(area * 0.02)) : 0
+      const minX = percentileLo(xHist, trim), maxX = percentileHi(xHist, trim)
+      const minY = percentileLo(yHist, trim), maxY = percentileHi(yHist, trim)
+      // grow back by r — the room's bounds up to its walls
       const gminX = Math.max(0, minX - r), gmaxX = Math.min(w - 1, maxX + r)
       const gminY = Math.max(0, minY - r), gmaxY = Math.min(h - 1, maxY + r)
       const bw = gmaxX - gminX + 1, bh = gmaxY - gminY + 1
       const grownArea = bw * bh
-      if (grownArea > w * h * MAX_AREA_FRAC || bw > w * MAX_SIDE_FRAC || bh > h * MAX_SIDE_FRAC) break // leaked outright
-      if (best && grownArea > bestArea * MERGE_JUMP) break // merged with the neighbour — keep the pre-jump answer
-      best = [{ x: gminX / scale, y: gminY / scale }, { x: gmaxX / scale, y: gmaxY / scale }]
-      bestArea = grownArea
+      if (grownArea > w * h * MAX_AREA_FRAC || bw > w * MAX_SIDE_FRAC || bh > h * MAX_SIDE_FRAC) break // leaked — deeper rungs only leak worse
+      if (prevArea > 0 && grownArea <= prevArea * PLATEAU_TOL) {
+        // stable across two rungs — the deepest such pair before a leak wins
+        plateau = [{ x: gminX / scale, y: gminY / scale }, { x: gmaxX / scale, y: gmaxY / scale }]
+      }
+      prevArea = grownArea
     }
-    return best
+    // no two rungs ever agreed = nothing believable was found; the caller falls
+    // back to the point marker rather than guessing
+    return plateau
   })
+}
+
+function percentileLo(hist: Uint32Array, skip: number): number {
+  let acc = 0
+  for (let i = 0; i < hist.length; i++) { acc += hist[i]; if (acc > skip) return i }
+  return 0
+}
+function percentileHi(hist: Uint32Array, skip: number): number {
+  let acc = 0
+  for (let i = hist.length - 1; i >= 0; i--) { acc += hist[i]; if (acc > skip) return i }
+  return hist.length - 1
 }
