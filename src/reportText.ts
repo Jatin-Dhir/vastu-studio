@@ -2,6 +2,7 @@ import type { Marker, Pt } from './types'
 import { placementOf } from './analysis'
 import type { Finding } from './evaluate'
 import { GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from './vastu'
+import { zoneEffect } from './rules16'
 
 /**
  * The written assessment: what about this property can be improved, and what is a
@@ -22,8 +23,12 @@ export interface Assessment {
 }
 
 /** Things a client can pick up and move vs. plumbing/civil work vs. the building itself. */
-const MOVABLE: Record<string, boolean> = { bed: true, pooja: true, water: true, custom: true }
-const PLUMBED: Record<string, boolean> = { kitchen: true, toilet: true }
+const MOVABLE: Record<string, boolean> = {
+  bed: true, pooja: true, water: true, custom: true,
+  tv: true, computer: true, washing: true, dustbin: true, safe: true, music: true,
+  inverter: true, crockery: true, heater: true, medicine: true, pet: true, bar: true,
+}
+const PLUMBED: Record<string, boolean> = { kitchen: true, toilet: true, septic: true }
 
 function seatList(kind: string): string {
   const rule = PLACEMENT_RULES[kind]
@@ -62,7 +67,8 @@ export function buildAssessment(args: {
     const caution = rule.caution.includes(zk)
     if (!bad && !caution) continue
     offSeat += 1
-    const why = (bad ? rule.why.avoid : rule.why.caution) ?? 'not a classical seat for it'
+    // the charts' own per-zone line, wherever one exists
+    const why = zoneEffect(m.kind, zk) ?? (bad ? rule.why.avoid : rule.why.caution) ?? 'not a classical seat for it'
     const kindName = markerKindMeta(m.kind).name.toLowerCase()
     const seats = seatList(m.kind)
     if (MOVABLE[m.kind]) {
@@ -89,7 +95,7 @@ export function buildAssessment(args: {
     const sideGood = GATES32
       .filter((g) => g.code[0] === pl.pada.code[0] && GATE_QUALITY[g.code]?.v === 'good')
       .map((g) => g.code)
-    if (q?.v === 'caution') {
+    if (q?.v === 'caution' || q?.v === 'avoid') {
       improvable.push({
         title: `Work on the ${pl.pada.code} entrance (${m.label})`,
         detail: `${q.note}. The opening itself is structural, so classical practice treats the gate rather than the wall${sideGood.length ? ` — and if this side ever gains a second doorway, the favourable gates on it are ${sideGood.join(', ')}` : ''}.`,

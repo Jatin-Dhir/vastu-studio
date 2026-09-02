@@ -1,6 +1,7 @@
 import { brahmasthanRadius, placementOf, zoneRows } from './analysis'
 import { dist } from './geometry'
 import { GATE_QUALITY, PLACEMENT_RULES, ZONE_SHAPE_NOTES, markerKindMeta } from './vastu'
+import { zoneEffect } from './rules16'
 import type { Marker, Pt, RoomShape } from './types'
 
 export type Severity = 'good' | 'info' | 'warn' | 'bad'
@@ -53,6 +54,12 @@ export function evaluateVastu(args: {
         title: `${m.label}: ${pl.pada.code} · auspicious gate`,
         detail: q.note,
       })
+    } else if (q?.v === 'avoid') {
+      findings.push({
+        severity: 'bad', markerId: m.id,
+        title: `${m.label}: ${pl.pada.code} · inauspicious gate`,
+        detail: `${q.note} — the charts advise remedies or an alternative entry`,
+      })
     } else if (q?.v === 'caution') {
       findings.push({
         severity: 'warn', markerId: m.id,
@@ -75,14 +82,18 @@ export function evaluateVastu(args: {
     const pl = placementOf(m.p, center, northDeg)
     const key = pl.zone.key
     const meta = markerKindMeta(m.kind)
+    // the charts speak per zone — their line for THIS zone beats the generic rule text
+    const eff = zoneEffect(m.kind, key)
     if (rule.ideal.includes(key)) {
-      findings.push({ severity: 'good', markerId: m.id, title: `${m.label} in ${key} — ideal`, detail: rule.why.ideal ?? '' })
+      findings.push({ severity: 'good', markerId: m.id, title: `${m.label} in ${key} — ideal`, detail: eff ?? rule.why.ideal ?? '' })
     } else if (rule.good.includes(key)) {
-      findings.push({ severity: 'good', markerId: m.id, title: `${m.label} in ${key} — good`, detail: rule.why.good ?? '' })
+      findings.push({ severity: 'good', markerId: m.id, title: `${m.label} in ${key} — good`, detail: eff ?? rule.why.good ?? '' })
     } else if (rule.avoid.includes(key)) {
-      findings.push({ severity: 'bad', markerId: m.id, title: `${m.label} in ${key} — avoid`, detail: rule.why.avoid ?? `${meta.name} is classically avoided here` })
+      findings.push({ severity: 'bad', markerId: m.id, title: `${m.label} in ${key} — avoid`, detail: eff ?? rule.why.avoid ?? `${meta.name} is classically avoided here` })
     } else if (rule.caution.includes(key)) {
-      findings.push({ severity: 'warn', markerId: m.id, title: `${m.label} in ${key} — caution`, detail: rule.why.caution ?? '' })
+      findings.push({ severity: 'warn', markerId: m.id, title: `${m.label} in ${key} — caution`, detail: eff ?? rule.why.caution ?? '' })
+    } else if (eff) {
+      findings.push({ severity: 'info', markerId: m.id, title: `${m.label} in ${key}`, detail: eff })
     }
   }
 
@@ -91,6 +102,7 @@ export function evaluateVastu(args: {
   for (const m of markers) {
     if (dist(m.p, center) < bR) {
       const heavy = m.kind === 'toilet' || m.kind === 'kitchen' || m.kind === 'water'
+        || m.kind === 'septic' || m.kind === 'dustbin' || m.kind === 'heater'
       findings.push({
         severity: heavy ? 'bad' : 'warn', markerId: m.id,
         title: `${m.label} sits in the Brahmasthan`,

@@ -27,6 +27,9 @@ export interface TextNote {
 export type MarkerKind =
   | 'entrance' | 'kitchen' | 'toilet' | 'bed' | 'pooja' | 'water'
   | 'living' | 'dining' | 'study' | 'dressing' | 'store' | 'staircase'
+  | 'guest' | 'servant' | 'lounge' | 'septic' | 'bar' | 'guard' | 'pet'
+  | 'tv' | 'computer' | 'washing' | 'dustbin' | 'safe' | 'music'
+  | 'inverter' | 'crockery' | 'heater' | 'ac' | 'medicine' | 'open'
   | 'custom'
 
 export interface Marker {

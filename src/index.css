@@ -1285,6 +1285,7 @@ kbd {
 }
 .gate-q.good { background: rgba(99,181,111,0.16); color: var(--ok); }
 .gate-q.caution { background: rgba(232,165,75,0.16); color: var(--warn); }
+.gate-q.avoid { background: color-mix(in srgb, var(--danger) 16%, transparent); color: var(--danger-fg); }
 .zone-card-rule { line-height: 1.5; }
 .zone-card-rule.good { color: var(--ok); }
 .zone-card-rule.bad { color: var(--danger-fg); }

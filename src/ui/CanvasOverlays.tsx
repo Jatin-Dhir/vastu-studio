@@ -86,7 +86,7 @@ export function ZoneInfoCard() {
         return (
           <div key={g.code} className="zone-card-gate">
             <span className={`gate-q ${q?.v ?? 'neutral'}`}>
-              {q?.v === 'good' ? 'auspicious' : q?.v === 'caution' ? 'challenging' : 'neutral'}
+              {q?.v === 'good' ? 'auspicious' : q?.v === 'avoid' ? 'inauspicious' : q?.v === 'caution' ? 'challenging' : 'neutral'}
             </span>
             {/* the quality note already leads with the devta's name — don't say it twice */}
             <b>{g.code}</b> {q?.note ?? g.devta}
@@ -644,7 +644,7 @@ export function MarkerChips() {
     const pl = placementOf(m.p, c, northDeg)
     if (m.kind === 'entrance') {
       const q = GATE_QUALITY[pl.pada.code]
-      const mark = q?.v === 'good' ? '✓ ' : q?.v === 'caution' ? '! ' : ''
+      const mark = q?.v === 'good' ? '✓ ' : q?.v === 'avoid' ? '✕ ' : q?.v === 'caution' ? '! ' : ''
       place = `${mark}${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
     } else {
       const rule = PLACEMENT_RULES[m.kind]

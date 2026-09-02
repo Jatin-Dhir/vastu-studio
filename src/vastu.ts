@@ -8,6 +8,8 @@
  * 4|5 boundary of its side, matching the classical Vastu Purusha Mandala perimeter.
  */
 
+import { ZONE_RULES } from './rules16'
+
 export interface ZoneDef { key: string; name: string; theme: string; color: string }
 
 export const ZONES16: ZoneDef[] = [
@@ -104,6 +106,25 @@ export const MARKER_KINDS: { kind: string; name: string; color: string; glyph: s
   { kind: 'dressing', name: 'Dressing', color: '#D98BA0', glyph: 'C' },
   { kind: 'store', name: 'Store', color: '#8B8577', glyph: 'U' },
   { kind: 'staircase', name: 'Staircase', color: '#6B7280', glyph: 'Z' },
+  { kind: 'guest', name: 'Guest room', color: '#C9A0DC', glyph: 'G' },
+  { kind: 'servant', name: 'Servant room', color: '#9AAB89', glyph: 'V' },
+  { kind: 'lounge', name: 'Family lounge', color: '#E0B84D', glyph: 'F' },
+  { kind: 'septic', name: 'Septic tank', color: '#77808E', glyph: 'X' },
+  { kind: 'bar', name: 'Bar', color: '#C08552', glyph: 'R' },
+  { kind: 'guard', name: 'Guard room', color: '#7D8A99', glyph: 'Q' },
+  { kind: 'pet', name: 'Pets', color: '#C98D5F', glyph: 'A' },
+  { kind: 'tv', name: 'Television', color: '#6D9BE8', glyph: 'TV' },
+  { kind: 'computer', name: 'Computer', color: '#7FA8D9', glyph: 'PC' },
+  { kind: 'washing', name: 'Washing machine', color: '#7FB6BC', glyph: 'WM' },
+  { kind: 'dustbin', name: 'Dustbin', color: '#97917F', glyph: 'DB' },
+  { kind: 'safe', name: 'Safe / locker', color: '#D9C46B', glyph: '₹' },
+  { kind: 'music', name: 'Music', color: '#B08FD9', glyph: '♪' },
+  { kind: 'inverter', name: 'Inverter', color: '#D08A66', glyph: 'I' },
+  { kind: 'crockery', name: 'Crockery', color: '#C9B79C', glyph: 'CK' },
+  { kind: 'heater', name: 'Heater', color: '#E07856', glyph: 'H' },
+  { kind: 'ac', name: 'Air conditioner', color: '#8FC2CF', glyph: 'AC' },
+  { kind: 'medicine', name: 'Medicines', color: '#7FBF9E', glyph: 'MD' },
+  { kind: 'open', name: 'Open area', color: '#A9C77F', glyph: 'O' },
   { kind: 'custom', name: 'Custom', color: '#63B56F', glyph: '•' },
 ]
 
@@ -241,25 +262,66 @@ export const PLACEMENT_RULES: Record<string, PlacementRule> = {
   },
 }
 
-/** The widely-published quality of the 32 entrance gates (classical texts; MahaVastu-aligned). */
-export const GATE_QUALITY: Record<string, { v: 'good' | 'neutral' | 'caution'; note: string }> = {
-  E3: { v: 'good', note: 'Jayanta — victory and growth' },
-  E4: { v: 'good', note: 'Indra — authority and prosperity' },
-  N3: { v: 'good', note: 'Mukhya — prime gains' },
-  N4: { v: 'good', note: 'Bhallata — abundance' },
-  N5: { v: 'good', note: 'Soma — peace and wealth' },
-  S3: { v: 'good', note: 'Vitatha — material comfort' },
-  S4: { v: 'good', note: 'Grihakshata — household prosperity' },
-  W3: { v: 'good', note: 'Sugriva — gains and recovery' },
-  W4: { v: 'good', note: 'Pushpadanta — prosperity and progeny' },
-  W5: { v: 'good', note: 'Varuna — steady flow of wealth' },
-  N1: { v: 'caution', note: 'Roga — associated with illness' },
-  E1: { v: 'caution', note: 'Shikhi — fire and instability' },
-  S1: { v: 'caution', note: 'Anala — fire risk' },
-  S5: { v: 'caution', note: 'Yama — heaviness and fear' },
-  S8: { v: 'caution', note: 'Mriga — anxieties' },
-  W1: { v: 'caution', note: 'Pitra — burdens' },
-  W8: { v: 'caution', note: 'Papayakshma — losses and ill-health' },
+/* The practitioner's reference charts (src/rules16.ts) supersede the hand-written
+   rules above for every kind they cover: the verdict lists are rebuilt from each
+   chart's 16-zone table, while the generic `why` texts survive only as fallbacks
+   for zones a chart happens not to cover. Kinds without a chart (bed, dressing)
+   keep their classical entries untouched. */
+const GENERIC_WHY: PlacementRule['why'] = {
+  ideal: 'the charts place it exactly here',
+  good: 'a supportive seat in the charts',
+  caution: 'the charts read this seat as mixed — judge the specifics',
+  avoid: 'the charts advise against this seat',
+}
+for (const [kind, table] of Object.entries(ZONE_RULES)) {
+  const r: PlacementRule = {
+    ideal: [], good: [], caution: [], avoid: [],
+    why: { ...GENERIC_WHY, ...PLACEMENT_RULES[kind]?.why },
+  }
+  for (const [zk, e] of Object.entries(table)) {
+    if (e.v === 'ideal') r.ideal.push(zk)
+    else if (e.v === 'good') r.good.push(zk)
+    else if (e.v === 'caution') r.caution.push(zk)
+    else if (e.v === 'avoid') r.avoid.push(zk)
+  }
+  PLACEMENT_RULES[kind] = r
+}
+
+/** All 32 entrances, per the practitioner's MahaVastu entrance wheel (rules/ charts,
+ *  transcribed 2026-09-03). Every gate now carries the wheel's own effect. */
+export const GATE_QUALITY: Record<string, { v: 'good' | 'neutral' | 'caution' | 'avoid'; note: string }> = {
+  N1: { v: 'avoid',   note: 'Roga — raises the possibility of violence against the family' },
+  N2: { v: 'avoid',   note: 'Naga — breeds enmity and jealousy' },
+  N3: { v: 'good',    note: 'Mukhya — plenty of money; male progeny' },
+  N4: { v: 'good',    note: 'Bhallata — abundance of inherited and earned money' },
+  N5: { v: 'neutral', note: 'Soma — a religious bent of mind' },
+  N6: { v: 'avoid',   note: 'Bhujaga — fanatic behaviour' },
+  N7: { v: 'caution', note: 'Aditi — daughters defy the family’s traditions' },
+  N8: { v: 'good',    note: 'Diti — higher bank balance' },
+  E1: { v: 'avoid',   note: 'Shikhi — fire, accidents and losses' },
+  E2: { v: 'caution', note: 'Parjanya — more daughters born; wasteful expenditure' },
+  E3: { v: 'good',    note: 'Jayanta — money, profits and success' },
+  E4: { v: 'good',    note: 'Indra — monetary benefit through influential people' },
+  E5: { v: 'avoid',   note: 'Surya — short temper and aggression' },
+  E6: { v: 'avoid',   note: 'Satya — commitment failures; unreliability' },
+  E7: { v: 'avoid',   note: 'Bhrisha — insensitive behaviour' },
+  E8: { v: 'avoid',   note: 'Akasha — accidents, financial losses, burglary' },
+  S1: { v: 'avoid',   note: 'Anala — negative effects on the son' },
+  S2: { v: 'good',    note: 'Pusha — growth in job and position' },
+  S3: { v: 'good',    note: 'Vitatha — immense prosperity and money' },
+  S4: { v: 'good',    note: 'Grihakshata — male progeny; highly productive output' },
+  S5: { v: 'avoid',   note: 'Yama — debts mount and the mind stays blocked' },
+  S6: { v: 'avoid',   note: 'Gandharva — abysmal poverty' },
+  S7: { v: 'avoid',   note: 'Bhringaraja — total wastage of efforts, no result' },
+  S8: { v: 'avoid',   note: 'Mriga — disconnects the family from the world' },
+  W1: { v: 'avoid',   note: 'Pitra — poor finances and shortened life span' },
+  W2: { v: 'avoid',   note: 'Dauvarika — insecurity in relationships; women’s careers suffer' },
+  W3: { v: 'good',    note: 'Sugriva — money, growth and prosperity' },
+  W4: { v: 'good',    note: 'Pushpadanta — general happiness in life' },
+  W5: { v: 'caution', note: 'Varuna — over-ambition takes hold' },
+  W6: { v: 'avoid',   note: 'Asura — expectations go unfulfilled' },
+  W7: { v: 'avoid',   note: 'Shosha — addiction and lost happiness' },
+  W8: { v: 'avoid',   note: 'Papayakshma — unfair means creep in for personal benefit' },
 }
 
 /** Shape findings: what a cut (compressed) or extended zone means, per classical reading. */
