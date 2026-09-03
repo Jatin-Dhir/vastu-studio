@@ -104,6 +104,71 @@ export async function ocrExtractText(
   }
 }
 
+/**
+ * Second OCR pass: read each room's PRINTED dimension line properly. The full-page
+ * pass finds the labels but mangles the tiny italic size strings beneath them
+ * ("20'-8\"x14'-7\"" came back as just "20'"), so this crops a strip under each
+ * label, upscales it 3–4×, and re-recognises with a digits-and-marks whitelist —
+ * the standard detect-then-zoom pattern. Mutates rooms in place (fills dimM).
+ */
+export async function ocrRefineDimensions(
+  imageDataUrl: string,
+  imgW: number,
+  imgH: number,
+  rooms: { p: { x: number; y: number }; dimM?: { w: number; h: number } }[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  const targets = rooms.filter((r) => !r.dimM)
+  if (targets.length === 0) return
+  const { parseDimensions } = await import('./roomDetect')
+  const { createWorker, PSM } = await import('tesseract.js')
+  // onload, not decode() — decode() stalls indefinitely in hidden tabs
+  const img = new Image()
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = imageDataUrl })
+  let worker: Awaited<ReturnType<typeof createWorker>> | null = null
+  try {
+    worker = await createWorker('eng', 1, {
+      workerPath: `${TESSDATA_BASE}/worker.min.js`,
+      corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
+      langPath: TESSDATA_BASE,
+      workerBlobURL: false,
+      gzip: true,
+    })
+    await worker.setParameters({
+      tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
+      // dimension strings are digits, feet/inch marks and an x — nothing else
+      tessedit_char_whitelist: '0123456789\'"xX×-.mM ',
+    })
+    const halfW = Math.max(90, Math.round(imgW * 0.08))
+    const above = Math.max(6, Math.round(imgW * 0.004))
+    const below = Math.max(30, Math.round(imgW * 0.032))
+    let done = 0
+    for (const room of targets) {
+      const x0 = Math.max(0, Math.round(room.p.x) - halfW)
+      const y0 = Math.max(0, Math.round(room.p.y) - above)
+      const cw = Math.min(imgW - x0, halfW * 2)
+      const ch = Math.min(imgH - y0, above + below)
+      if (cw < 20 || ch < 10) continue
+      const up = Math.min(4, Math.max(2, Math.round(200 / ch)))
+      const cv = document.createElement('canvas')
+      cv.width = cw * up
+      cv.height = ch * up
+      const cx = cv.getContext('2d')
+      if (!cx) continue
+      cx.imageSmoothingQuality = 'high'
+      cx.drawImage(img, x0, y0, cw, ch, 0, 0, cv.width, cv.height)
+      try {
+        const { data } = await worker.recognize(cv.toDataURL('image/png'))
+        const dim = parseDimensions(data.text ?? '')
+        if (dim) room.dimM = dim
+      } catch { /* one bad crop must not kill the rest */ }
+      onProgress?.(++done, targets.length)
+    }
+  } finally {
+    if (worker) await worker.terminate().catch(() => {})
+  }
+}
+
 /** 2× upscale for genuinely small plans only (label text under ~15px reads poorly).
  *  Lossless PNG — a lossy re-encode measurably wrecks sparse-text recognition. */
 async function upscaleIfSmall(

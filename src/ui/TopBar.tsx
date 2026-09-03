@@ -38,6 +38,13 @@ async function runDetect() {
     if (found.length === 0) {
       s.toast('No room labels recognised — mark rooms manually, or try a clearer scan', 'info')
     } else {
+      // second pass: zoom into each label's dimension line ("20'-8"x14'-7"") — the
+      // full-page pass finds names reliably but mangles the small print under them
+      if (s.bg.kind === 'raster' && s.bg.dataUrl && found.some((r) => !r.dimM)) {
+        const { ocrRefineDimensions } = await import('../ocr')
+        await ocrRefineDimensions(s.bg.dataUrl, s.bg.w, s.bg.h, found, (done, total) =>
+          useStore.getState().setBusy(`Reading printed room sizes… ${done}/${total}`))
+      }
       useStore.getState().setDetectedRooms(found)
     }
   } catch (e) {

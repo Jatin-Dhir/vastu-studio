@@ -19,11 +19,24 @@ interface ReviewRow {
   confidence: number
   /** the room's footprint read from the walls around the label — null = not readable */
   rect: [Pt, Pt] | null
+  /** the room's PRINTED size (the dimension line under its label), in metres */
+  dimM?: { w: number; h: number }
 }
 
 const toRow = (r: DetectedRoom): ReviewRow => ({
-  id: r.id, included: true, label: r.label, kind: r.kind, p: r.p, sourceText: r.sourceText, confidence: r.confidence, rect: null,
+  id: r.id, included: true, label: r.label, kind: r.kind, p: r.p, sourceText: r.sourceText, confidence: r.confidence, rect: null, dimM: r.dimM,
 })
+
+/** The best available footprint for a row: the architect's own printed dimensions
+ *  (exact, drawing-style-proof) beat the pixel-detected wall box; null = point. */
+function rectFor(row: ReviewRow, metersPerPx: number | null): [Pt, Pt] | null {
+  if (row.dimM && metersPerPx) {
+    const hw = row.dimM.w / metersPerPx / 2
+    const hh = row.dimM.h / metersPerPx / 2
+    return [{ x: row.p.x - hw, y: row.p.y - hh }, { x: row.p.x + hw, y: row.p.y + hh }]
+  }
+  return row.rect
+}
 
 /**
  * Review-and-confirm for src/roomDetect.ts candidates. Nothing here touches the
@@ -37,6 +50,7 @@ export function AutoDetectDialog() {
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
   const theme = useStore((s) => s.theme)
+  const metersPerPx = useStore((s) => s.metersPerPx)
   const [rows, setRows] = useState<ReviewRow[]>([])
   const [asAreas, setAsAreas] = useState(true)
   const [sizing, setSizing] = useState(false)
@@ -84,11 +98,12 @@ export function AutoDetectDialog() {
       const label = row.label.trim() || markerKindMeta(row.kind).name
       // an entrance is a door — a point on the boundary, never an area (and the
       // entrance-analysis pipeline reads point markers specifically)
-      if (asAreas && row.rect && row.kind !== 'entrance') {
+      const rect = rectFor(row, s.metersPerPx)
+      if (asAreas && rect && row.kind !== 'entrance') {
         // setRoomShapeKind THEN addRoomShape — same store API shape as markers:
         // the add reads the currently-armed kind, it takes no kind argument
         s.setRoomShapeKind(row.kind)
-        const id = s.addRoomShape('rect', row.rect)
+        const id = s.addRoomShape('rect', rect)
         s.updateRoomShape(id, { label })
       } else {
         // setMarkerKind THEN addMarker — addMarker reads the currently-armed kind,
@@ -123,7 +138,7 @@ export function AutoDetectDialog() {
         </span>
       </div>
 
-      {(sizing || rows.some((r) => r.rect)) && (
+      {(sizing || rows.some((r) => rectFor(r, metersPerPx))) && (
         <div className="row-between" style={{ marginBottom: 10 }}>
           <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <button type="button" className={`toggle ${asAreas ? 'on' : ''}`} aria-pressed={asAreas}
@@ -134,7 +149,7 @@ export function AutoDetectDialog() {
             <span className="lbl" style={{ fontWeight: 650 }}>Mark whole room areas</span>
           </span>
           <span className="lbl dim">
-            {sizing ? 'reading sizes from the walls…' : `${rows.filter((r) => r.rect).length} of ${rows.length} sized`}
+            {sizing ? 'reading sizes…' : `${rows.filter((r) => rectFor(r, metersPerPx)).length} of ${rows.length} sized`}
           </span>
         </div>
       )}
@@ -166,12 +181,14 @@ export function AutoDetectDialog() {
                   {MARKER_KINDS.map((k) => <option key={k.kind} value={k.kind}>{k.name}</option>)}
                 </select>
               </div>
-              {(zone || lowConf || row.rect) && (
+              {(zone || lowConf || rectFor(row, metersPerPx)) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingLeft: 41 }}>
                   {zone && <span className="marker-zone" style={{ color: zone.color }}>{zone.key}</span>}
-                  {row.rect && (
+                  {rectFor(row, metersPerPx) && (
                     <span className="lbl dim">
-                      {asAreas && row.kind !== 'entrance' ? 'whole room' : 'point'}
+                      {asAreas && row.kind !== 'entrance'
+                        ? (row.dimM && metersPerPx ? 'whole room — printed size' : 'whole room')
+                        : 'point'}
                     </span>
                   )}
                   {lowConf && (

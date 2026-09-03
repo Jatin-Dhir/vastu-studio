@@ -19,7 +19,10 @@ import type { Pt } from './types'
  * a wrong confident rectangle is worse than a point.
  */
 
-const WORK_MAX = 1000 // px — plans downscale to this for the fill
+// px — plans downscale to this for the fill. 2000, not 1000: a 15-room villa at
+// 1000px shrinks rooms below the erosion ladder's reach (measured: zero cores on a
+// real plan at 1000, healthy cores at 2000; the O(N) passes stay well under 1s)
+const WORK_MAX = 2000
 // erosion radii (work px), LARGEST first. A room announces itself as a PLATEAU:
 // descending r, the grown box grows while pockets merge and alcoves join (the
 // label's own lettering splits large-r cores into fragments, so early growth is

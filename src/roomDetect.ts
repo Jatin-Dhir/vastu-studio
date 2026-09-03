@@ -25,6 +25,32 @@ export interface DetectedRoom {
   p: Pt
   sourceText: string
   confidence: number
+  /** the room's printed size, read from the dimension line under its label
+   *  (architects write "20'-8\"x14'-7\"" beneath every room name) — in metres */
+  dimM?: { w: number; h: number }
+}
+
+/** Parse an architect's dimension string: 20'-8"x14'-7", 12'-6" x 10'-0", 12-6"X10-0",
+ *  or metric 3.5x4.2m. Returns metres, or null if the text isn't a dimension. */
+export function parseDimensions(raw: string): { w: number; h: number } | null {
+  const t = raw.toLowerCase().replace(/\s+/g, ' ').trim()
+  // feet-inches on both sides of an x. The full form is 20'-8"x14'-7" — apostrophe
+  // AND dash — but OCR freely drops either mark, so accept: 20'-8", 20'8", 20-8", 20'
+  const side = `(\\d{1,3})\\s*(?:['’]\\s*)?(?:-?\\s*(\\d{1,2}))?\\s*(?:"|”|'')?`
+  const ftin = new RegExp(`${side}\\s*[x×]\\s*${side}`)
+  const m = ftin.exec(t)
+  if (m && (/['’"”-]/.test(m[0]) || t.includes("'"))) { // some mark must exist, else it's not feet-inches
+    const w = parseInt(m[1]) * 0.3048 + (m[2] ? parseInt(m[2]) * 0.0254 : 0)
+    const h = parseInt(m[3]) * 0.3048 + (m[4] ? parseInt(m[4]) * 0.0254 : 0)
+    if (w > 0.5 && h > 0.5 && w < 60 && h < 60) return { w, h }
+  }
+  const metric = /(\d{1,2}(?:\.\d{1,2})?)\s*[x×]\s*(\d{1,2}(?:\.\d{1,2})?)\s*m\b/
+  const m2 = metric.exec(t)
+  if (m2) {
+    const w = parseFloat(m2[1]), h = parseFloat(m2[2])
+    if (w > 0.5 && h > 0.5 && w < 60 && h < 60) return { w, h }
+  }
+  return null
 }
 
 /**
@@ -34,10 +60,14 @@ export interface DetectedRoom {
  * Matching is substring-on-lowercased-text, so short codes ("wc", "mbr") still hit.
  */
 const KEYWORDS: [MarkerKind, string[]][] = [
-  ['entrance', ['main entrance', 'main door', 'entrance', 'entry', 'foyer', 'porch']],
+  // 'porch' deliberately NOT here: a front porch is open space, not the main door —
+  // an entrance marker at a porch centre would poison the gate analysis
+  ['entrance', ['main entrance', 'main door', 'entrance', 'entry', 'foyer']],
   ['staircase', ['staircase', 'stair case', 'stairs', 'stair']],
   ['septic', ['septic tank', 'septic']],
-  ['washing', ['washing machine', 'wash machine', 'laundry']],
+  // 'wash(ing) area' on Indian plans = the clothes-washing/utility corner (churning),
+  // not a bathroom — it lived in toilet's list once, which misread real plans
+  ['washing', ['washing machine', 'wash machine', 'laundry', 'washing area', 'wash area', 'utility area']],
   ['guest', ['guest room', 'guest bedroom', 'guest bed room']],
   ['servant', ['servant room', 'servant', 'maid room', 'maid']],
   ['guard', ['security guard', 'guard room', 'security room', 'security cabin']],
@@ -47,7 +77,7 @@ const KEYWORDS: [MarkerKind, string[]][] = [
   ['study', ['study room', 'study', 'home office', 'office']],
   ['dining', ['dining room', 'dining']],
   ['pooja', ['pooja', 'puja', 'prayer room', 'prayer', 'mandir', 'temple']],
-  ['toilet', ['toilet', 'bathroom', 'bath room', 'washroom', 'wash area', 'washing area', 'w.c.', 'wc', 'lavatory', 'attached bath', 'bath']],
+  ['toilet', ['toilet', 'bathroom', 'bath room', 'washroom', 'w.c.', 'wc', 'lavatory', 'attached bath', 'bath']],
   ['kitchen', ['kitchen', 'kitchenette']],
   ['water', ['water tank', 'bore well', 'borewell', 'sump', 'overhead tank', 'water body', 'swimming pool']],
   ['bar', ['bar counter', 'mini bar', 'bar']],
@@ -61,7 +91,7 @@ const KEYWORDS: [MarkerKind, string[]][] = [
   ['heater', ['room heater', 'heater']],
   ['ac', ['air conditioner', 'air conditioning', 'split ac', 'window ac']],
   ['medicine', ['medicines', 'medicine', 'first aid']],
-  ['open', ['open area', 'open space', 'courtyard', 'open to sky', 'verandah', 'veranda', 'balcony', 'aangan']],
+  ['open', ['open area', 'open space', 'courtyard', 'open to sky', 'verandah', 'veranda', 'balcony', 'aangan', 'indoor lawn', 'lawn', 'porch', 'terrace garden']],
   ['bed', ['master bedroom', 'master bed room', 'bedroom', 'bed room', 'mbr']],
   ['living', ['living room', 'living', 'drawing room', 'drawing', 'sitting room']],
 ]
@@ -99,6 +129,23 @@ export function detectFromTextSamples(samples: TextSample[]): DetectedRoom[] {
   for (const h of hits.sort((a, b) => b.confidence - a.confidence)) {
     const dup = kept.find((k) => k.kind === h.kind && Math.hypot(k.p.x - h.p.x, k.p.y - h.p.y) < CLUSTER_PX)
     if (!dup) kept.push(h)
+  }
+  // architects print each room's size right under its name — claim the nearest
+  // dimension line for each label (one line feeds one label only, nearest wins)
+  const dims = samples
+    .map((s) => ({ p: s.p, d: parseDimensions(s.text) }))
+    .filter((x): x is { p: Pt; d: { w: number; h: number } } => x.d !== null)
+  const DIM_RADIUS = 160
+  for (const room of kept) {
+    let bestI = -1, bestDist = DIM_RADIUS
+    for (let i = 0; i < dims.length; i++) {
+      const dd = Math.hypot(dims[i].p.x - room.p.x, dims[i].p.y - room.p.y)
+      if (dd < bestDist) { bestDist = dd; bestI = i }
+    }
+    if (bestI >= 0) {
+      room.dimM = dims[bestI].d
+      dims.splice(bestI, 1)
+    }
   }
   return kept
 }
