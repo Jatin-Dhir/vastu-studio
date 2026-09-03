@@ -116,8 +116,27 @@ let seq = 0
 /** Match every sample, keep the best hit per kind cluster (two labels for the same
  *  room shouldn't become two markers a few px apart), return candidates for review. */
 export function detectFromTextSamples(samples: TextSample[]): DetectedRoom[] {
+  // OCR splits stacked labels into separate lines ("GUARD" above "ROOM") — also try
+  // vertically-adjacent pairs joined, so phrase keywords can still match
+  const planW = samples.reduce((m, s) => Math.max(m, s.p.x), 0)
+  const dyMax = Math.max(16, planW * 0.016)
+  const dxMax = Math.max(40, planW * 0.05)
+  const merged: TextSample[] = []
+  for (const a of samples) {
+    for (const b of samples) {
+      if (a === b) continue
+      const dy = b.p.y - a.p.y
+      if (dy > 2 && dy < dyMax && Math.abs(b.p.x - a.p.x) < dxMax) {
+        merged.push({
+          text: `${a.text} ${b.text}`,
+          p: { x: (a.p.x + b.p.x) / 2, y: (a.p.y + b.p.y) / 2 },
+          confidence: Math.min(a.confidence, b.confidence),
+        })
+      }
+    }
+  }
   const hits: DetectedRoom[] = []
-  for (const s of samples) {
+  for (const s of [...samples, ...merged]) {
     const m = matchKeyword(s.text)
     if (!m) continue
     hits.push({ id: `det${seq++}`, label: m.label, kind: m.kind, p: s.p, sourceText: s.text, confidence: s.confidence })
@@ -153,4 +172,68 @@ export function detectFromTextSamples(samples: TextSample[]): DetectedRoom[] {
 /** DXF's own text layer is exact — every label already has a real world position. */
 export function textSamplesFromDxf(dxf: DxfImport): TextSample[] {
   return dxf.texts.map((t) => ({ text: t.str, p: { x: t.x, y: t.y }, confidence: 1 }))
+}
+
+export interface RecoverySpot {
+  p: Pt
+  /** 'at' — re-read the sample's own strip (mangled label like "1A ROOM");
+   *  'above' — an orphan dimension line, its label sits just above it */
+  where: 'at' | 'above'
+}
+
+/** Spots worth a zoomed second look: room-ish text that matched nothing (OCR mangled
+ *  the distinctive word — "1A ROOM", "FRONT PO!"), and dimension lines no detected
+ *  room claimed (the label above them was lost entirely, like DINING/LOBBY's). */
+export function recoverySpots(samples: TextSample[], rooms: DetectedRoom[], claimRadius = 160): RecoverySpot[] {
+  const spots: RecoverySpot[] = []
+  const nearRoom = (p: Pt, r: number) => rooms.some((k) => Math.hypot(k.p.x - p.x, k.p.y - p.y) < r)
+  const ROOMISH = /\b(room|area|front|hall|rooj|roon)\b/
+  for (const s of samples) {
+    const t = s.text.toLowerCase()
+    if (parseDimensions(s.text)) {
+      if (!nearRoom(s.p, claimRadius)) spots.push({ p: s.p, where: 'above' })
+    } else if (ROOMISH.test(t) && !matchKeyword(s.text) && !nearRoom(s.p, 80)) {
+      spots.push({ p: s.p, where: 'at' })
+    }
+  }
+  // two fragments of the same lost label shouldn't trigger two crops
+  const kept: RecoverySpot[] = []
+  for (const sp of spots) {
+    if (!kept.some((k) => Math.hypot(k.p.x - sp.p.x, k.p.y - sp.p.y) < 80)) kept.push(sp)
+  }
+  return kept.slice(0, 12) // a page of junk text must not queue endless re-reads
+}
+
+/** Fold recovered label reads back into the room list (same clustering rule). */
+export function addRecoveredRooms(rooms: DetectedRoom[], reads: { p: Pt; text: string }[]): number {
+  let added = 0
+  const clean = (s: string) => s.trim().replace(/^[^a-z0-9(]+/i, '').replace(/[^a-z0-9)"'’”/.\- ]+$/i, '')
+  for (const r of reads) {
+    const lines = r.text.split(/\n+/)
+    // the crop may catch the dimension line with the label — match line by line
+    let matched = false
+    for (const line of lines) {
+      const m = matchKeyword(line)
+      if (!m) continue
+      matched = true
+      if (rooms.some((k) => k.kind === m.kind && Math.hypot(k.p.x - r.p.x, k.p.y - r.p.y) < 60)) break
+      rooms.push({ id: `det${seq++}`, label: clean(m.label) || m.label, kind: m.kind, p: r.p, sourceText: line.trim(), confidence: 0.75 })
+      added++
+      break
+    }
+    if (matched) continue
+    // the name resisted even the zoomed read, but a room with a printed size at a
+    // known spot is still real — surface it UNNAMED for the practitioner to re-kind
+    // in the review dialog (never guess: a wrong pooja/toilet poisons the analysis)
+    const dim = lines.map(parseDimensions).find((d) => d !== null) ?? parseDimensions(r.text)
+    if (!dim) continue
+    if (rooms.some((k) => Math.hypot(k.p.x - r.p.x, k.p.y - r.p.y) < 60)) continue
+    const nameLine = lines.map(clean).find((l) => /[a-z]{2,}/i.test(l) && !parseDimensions(l))
+    rooms.push({
+      id: `det${seq++}`, label: nameLine || 'Unnamed room', kind: 'custom', p: r.p,
+      sourceText: r.text.trim().slice(0, 40), confidence: 0.5, dimM: dim,
+    })
+    added++
+  }
+  return added
 }

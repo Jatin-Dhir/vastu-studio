@@ -33,8 +33,19 @@ async function runDetect() {
       s.toast('This plan has no scannable text', 'info')
       return
     }
-    const { detectFromTextSamples } = await import('../roomDetect')
+    const { detectFromTextSamples, recoverySpots, addRecoveredRooms } = await import('../roomDetect')
     const found = detectFromTextSamples(samples)
+    if (s.bg.kind === 'raster' && s.bg.dataUrl) {
+      // recovery pass: mangled labels ("1A ROOM") and orphan dimension lines whose
+      // label vanished get a zoomed re-read before we give up on them
+      const spots = recoverySpots(samples, found)
+      if (spots.length > 0) {
+        useStore.getState().setBusy('Taking a closer look at unclear labels…')
+        const { ocrRecoverLabels } = await import('../ocr')
+        const reads = await ocrRecoverLabels(s.bg.dataUrl, s.bg.w, s.bg.h, spots)
+        addRecoveredRooms(found, reads)
+      }
+    }
     if (found.length === 0) {
       s.toast('No room labels recognised — mark rooms manually, or try a clearer scan', 'info')
     } else {

@@ -149,6 +149,11 @@ export async function ocrRefineDimensions(
       const cw = Math.min(imgW - x0, halfW * 2)
       const ch = Math.min(imgH - y0, above + below)
       if (cw < 20 || ch < 10) continue
+      const nat = document.createElement('canvas')
+      nat.width = cw; nat.height = ch
+      const ng = nat.getContext('2d', { willReadFrequently: true })
+      if (!ng) continue
+      ng.drawImage(img, x0, y0, cw, ch, 0, 0, cw, ch)
       const up = Math.min(4, Math.max(2, Math.round(200 / ch)))
       const cv = document.createElement('canvas')
       cv.width = cw * up
@@ -156,17 +161,116 @@ export async function ocrRefineDimensions(
       const cx = cv.getContext('2d')
       if (!cx) continue
       cx.imageSmoothingQuality = 'high'
-      cx.drawImage(img, x0, y0, cw, ch, 0, 0, cv.width, cv.height)
       try {
-        const { data } = await worker.recognize(cv.toDataURL('image/png'))
-        const dim = parseDimensions(data.text ?? '')
-        if (dim) room.dimM = dim
+        // plain read first; only if it doesn't parse, retry with underlines erased —
+        // the strip rescues underlined dim lines but can nick clean ones
+        for (const stripped of [false, true]) {
+          if (stripped) stripUnderlines(nat)
+          cx.drawImage(nat, 0, 0, cv.width, cv.height)
+          const { data } = await worker.recognize(cv.toDataURL('image/png'))
+          const dim = parseDimensions(data.text ?? '')
+          if (dim) { room.dimM = dim; break }
+        }
       } catch { /* one bad crop must not kill the rest */ }
       onProgress?.(++done, targets.length)
     }
   } finally {
     if (worker) await worker.terminate().catch(() => {})
   }
+}
+
+/** Erase long horizontal dark runs (label underlines, table borders) from a crop —
+ *  underlines slice through italic descenders and can make a word unreadable
+ *  (measured: PUJA ROOM's dimension line went from garbage to exact after this). */
+function stripUnderlines(cv: HTMLCanvasElement) {
+  const g = cv.getContext('2d', { willReadFrequently: true })
+  if (!g) return
+  const { width: w, height: h } = cv
+  const id = g.getImageData(0, 0, w, h)
+  const px = id.data
+  const MAX_RUN = 25
+  for (let y = 0; y < h; y++) {
+    let run = 0
+    for (let x = 0; x <= w; x++) {
+      const o = (y * w + x) * 4
+      const dark = x < w && (px[o] * 299 + px[o + 1] * 587 + px[o + 2] * 114) / 1000 < 150
+      if (dark) run++
+      else {
+        if (run > MAX_RUN) {
+          for (let k = x - run; k < x; k++) { const e = (y * w + k) * 4; px[e] = px[e + 1] = px[e + 2] = 255 }
+        }
+        run = 0
+      }
+    }
+  }
+  g.putImageData(id, 0, 0)
+}
+
+/**
+ * Zoomed re-read of suspicious label spots (see roomDetect.recoverySpots): the
+ * full-page pass mangles small italic labels ("PUJA ROOM" → "1A ROOM") or drops
+ * them while keeping their dimension line. A 3–4× crop read with the full charset
+ * recovers them. 'at' re-reads the sample's own strip; 'above' looks over an
+ * orphan dimension line for its lost label. Returns one raw text per spot.
+ */
+export async function ocrRecoverLabels(
+  imageDataUrl: string,
+  imgW: number,
+  imgH: number,
+  spots: { p: { x: number; y: number }; where: 'at' | 'above' }[],
+): Promise<{ p: { x: number; y: number }; text: string }[]> {
+  if (spots.length === 0) return []
+  const { createWorker, PSM } = await import('tesseract.js')
+  // onload, not decode() — decode() stalls indefinitely in hidden tabs
+  const img = new Image()
+  await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = imageDataUrl })
+  let worker: Awaited<ReturnType<typeof createWorker>> | null = null
+  const out: { p: { x: number; y: number }; text: string }[] = []
+  try {
+    worker = await createWorker('eng', 1, {
+      workerPath: `${TESSDATA_BASE}/worker.min.js`,
+      corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
+      langPath: TESSDATA_BASE,
+      workerBlobURL: false,
+      gzip: true,
+    })
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
+    const lineH = Math.max(14, Math.round(imgW * 0.011))
+    for (const spot of spots) {
+      // 'at' crops stay NARROW — a wide crop swallows the neighbouring room's label
+      // and the mixed line matches nothing (measured on side-by-side KIT.WASH/PUJA)
+      const halfW = spot.where === 'at' ? Math.max(84, Math.round(imgW * 0.05)) : Math.max(100, Math.round(imgW * 0.09))
+      const cx0 = Math.round(spot.p.x), cy0 = Math.round(spot.p.y)
+      const yTop = spot.where === 'at' ? cy0 - lineH * 1.4 : cy0 - lineH * 3.4
+      const yBot = spot.where === 'at' ? cy0 + lineH * 2.6 : cy0 - lineH * 0.2
+      const x0 = Math.max(0, cx0 - halfW)
+      const y0 = Math.max(0, Math.round(yTop))
+      const cw = Math.min(imgW - x0, halfW * 2)
+      const ch = Math.min(imgH - y0, Math.max(12, Math.round(yBot - yTop)))
+      if (cw < 24 || ch < 10) continue
+      const nat = document.createElement('canvas')
+      nat.width = cw; nat.height = ch
+      const ng = nat.getContext('2d', { willReadFrequently: true })
+      if (!ng) continue
+      ng.drawImage(img, x0, y0, cw, ch, 0, 0, cw, ch)
+      stripUnderlines(nat)
+      const up = Math.min(6, Math.max(2, Math.round(180 / ch)))
+      const cv = document.createElement('canvas')
+      cv.width = cw * up
+      cv.height = ch * up
+      const cx = cv.getContext('2d')
+      if (!cx) continue
+      cx.imageSmoothingQuality = 'high'
+      cx.drawImage(nat, 0, 0, cv.width, cv.height)
+      try {
+        const { data } = await worker.recognize(cv.toDataURL('image/png'))
+        out.push({ p: spot.p, text: data.text ?? '' })
+      } catch { /* skip a bad crop, keep the rest */ }
+    }
+  } finally {
+    if (worker) await worker.terminate().catch(() => {})
+  }
+  return out
 }
 
 /** 2× upscale for genuinely small plans only (label text under ~15px reads poorly).
