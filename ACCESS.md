@@ -28,9 +28,12 @@ before accounts existed — so nothing breaks mid-setup.
    ```bash
    SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=<key> node scripts/push-charts.mjs
    ```
-6. **First admin** — Authentication → Users → *Add user* → phone (E.164, e.g. `+919876543210`)
-   + password, tick *Auto confirm*. Then SQL Editor:
-   `update public.profiles set role = 'admin', name = 'Your name' where phone = '+919876543210';`
+6. **First admin** — with the same two variables as step 5:
+   ```bash
+   node scripts/first-admin.mjs "+919876543210" "Your name"
+   ```
+   It creates the account (or resets its password if it exists), makes it the admin and
+   prints the password. Re-run it any time you lock yourself out.
 7. **Wire the app** — Project settings → API → copy the *Project URL* and the `anon` key:
    - local: copy `.env.example` to `.env.local` and fill both values;
    - deployed: GitHub repo → Settings → Secrets → Actions → `VITE_SUPABASE_URL` and
