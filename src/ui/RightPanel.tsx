@@ -76,17 +76,6 @@ function preview(id: string) {
           })}
         </svg>
       )
-    case 'chakra8':
-      return (
-        <svg viewBox="0 0 40 40">
-          <circle cx={c} cy={c} r={R} fill="none" stroke="#D9B45B" strokeWidth="1.2" />
-          {Array.from({ length: 8 }, (_, i) => {
-            const a = (i * 45 * Math.PI) / 180
-            return <line key={i} x1={c} y1={c} x2={c + Math.sin(a) * R} y2={c - Math.cos(a) * R}
-              stroke="#C9CFDD" strokeWidth="0.9" opacity="0.85" />
-          })}
-        </svg>
-      )
     case 'grid9':
       return (
         <svg viewBox="0 0 40 40">
@@ -95,18 +84,6 @@ function preview(id: string) {
               fill={r === 1 && col === 1 ? '#D9B45B' : 'none'}
               fillOpacity={0.5} stroke="#C9CFDD" strokeWidth="0.8" opacity="0.85" />
           )))}
-        </svg>
-      )
-    case 'dial':
-      return (
-        <svg viewBox="0 0 40 40">
-          <circle cx={c} cy={c} r={R} fill="none" stroke="#D9B45B" strokeWidth="1.2" />
-          {Array.from({ length: 12 }, (_, i) => {
-            const a = (i * 30 * Math.PI) / 180
-            return <line key={i} x1={c + Math.sin(a) * R * 0.78} y1={c - Math.cos(a) * R * 0.78}
-              x2={c + Math.sin(a) * R} y2={c - Math.cos(a) * R} stroke="#C9CFDD" strokeWidth="1" />
-          })}
-          <path d={`M${c} ${c - R} l3 6 h-6 Z`} fill="#F26B57" />
         </svg>
       )
     default:
@@ -640,7 +617,7 @@ export function RightPanel() {
               {compass.id !== 'custom' && (
                 <Toggle label="Labels" on={compass.labels} onChange={(v) => setCompass({ labels: v })} />
               )}
-              {['zones16', 'gates32', 'chakra8'].includes(compass.id) && (
+              {['zones16', 'gates32'].includes(compass.id) && (
                 <Toggle label="Degrees" on={compass.degreeRing} onChange={(v) => setCompass({ degreeRing: v })} />
               )}
               <Toggle label="Brahmasthan" on={compass.brahmasthan} onChange={(v) => setCompass({ brahmasthan: v })} />

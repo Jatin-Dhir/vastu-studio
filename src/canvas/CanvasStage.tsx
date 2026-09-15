@@ -35,12 +35,53 @@ function snapPoint(prev: Pt, p: Pt): Pt {
   return { x: prev.x + len * Math.cos(r), y: prev.y + len * Math.sin(r) }
 }
 
+/** Resize handle ids for a two-corner box (rooms and ink rects/circles). */
+const HANDLE_CURSOR: Record<string, string> = {
+  nw: 'nwse-resize', se: 'nwse-resize', ne: 'nesw-resize', sw: 'nesw-resize',
+  n: 'ns-resize', s: 'ns-resize', e: 'ew-resize', w: 'ew-resize',
+}
+function boxHandles(a: Pt, b: Pt): { id: string; p: Pt }[] {
+  const x0 = Math.min(a.x, b.x), x1 = Math.max(a.x, b.x), y0 = Math.min(a.y, b.y), y1 = Math.max(a.y, b.y)
+  const xm = (x0 + x1) / 2, ym = (y0 + y1) / 2
+  return [
+    { id: 'nw', p: { x: x0, y: y0 } }, { id: 'n', p: { x: xm, y: y0 } }, { id: 'ne', p: { x: x1, y: y0 } },
+    { id: 'e', p: { x: x1, y: ym } }, { id: 'se', p: { x: x1, y: y1 } }, { id: 's', p: { x: xm, y: y1 } },
+    { id: 'sw', p: { x: x0, y: y1 } }, { id: 'w', p: { x: x0, y: ym } },
+  ]
+}
+/** Move one box edge/corner to `w`; the opposite side stays put. Shift on a corner keeps it square. */
+function resizeBox(orig: Pt[], handle: string, w: Pt, square: boolean): Pt[] {
+  const [a, b] = orig
+  let minX = Math.min(a.x, b.x), maxX = Math.max(a.x, b.x)
+  let minY = Math.min(a.y, b.y), maxY = Math.max(a.y, b.y)
+  if (handle.includes('w')) minX = w.x
+  if (handle.includes('e')) maxX = w.x
+  if (handle.includes('n')) minY = w.y
+  if (handle.includes('s')) maxY = w.y
+  if (square && handle.length === 2) {
+    const m = Math.max(Math.abs(maxX - minX), Math.abs(maxY - minY))
+    if (handle.includes('w')) minX = maxX - m; else maxX = minX + m
+    if (handle.includes('n')) minY = maxY - m; else maxY = minY + m
+  }
+  // dragging an edge past the opposite one just mirrors the box, like any editor
+  return [
+    { x: Math.min(minX, maxX), y: Math.min(minY, maxY) },
+    { x: Math.max(minX, maxX), y: Math.max(minY, maxY) },
+  ]
+}
+
 interface DragState {
   mode: 'idle' | 'maybe-pan' | 'pan' | 'vertex' | 'center' | 'calA' | 'calB' | 'calLine' | 'bulge' | 'marker' | 'drawing' | 'room-shape' | 'ink-shape' | 'erasing' | 'text-drag'
+    | 'room-move' | 'room-resize' | 'stroke-move' | 'stroke-handle'
   idx: number
   markerId: string | null
   rsid: string | null
   txid: string | null
+  strokeId: string | null
+  /** which resize handle was grabbed: a box side/corner id, or a vertex index */
+  handle: string | null
+  /** the shape's points when the drag began — every move is orig + delta, so nothing accumulates */
+  orig: Pt[] | null
   zoneIdx: number | null
   startX: number
   startY: number
@@ -80,6 +121,7 @@ export function CanvasStage() {
   const markers = useStore((s) => s.markers)
   const selectedMarker = useStore((s) => s.selectedMarker)
   const strokes = useStore((s) => s.strokes)
+  const selectedStroke = useStore((s) => s.selectedStroke)
   const roomShapes = useStore((s) => s.roomShapes)
   const selectedRoomShape = useStore((s) => s.selectedRoomShape)
   const roomDrawMode = useStore((s) => s.roomDrawMode)
@@ -99,13 +141,15 @@ export function CanvasStage() {
   // 60fps-critical gesture, so plain state (like the calibration line) is fine here
   const [activeRoom, setActiveRoom] = useState<[Pt, Pt] | null>(null)
   const [activeShape, setActiveShape] = useState<[Pt, Pt] | null>(null)
+  // a room/stroke is being moved or resized — shows its live dimensions while it happens
+  const [shapeDrag, setShapeDrag] = useState<'move' | 'resize' | null>(null)
   const activeLenRef = useRef<SVGTextElement>(null)
   // ink preview is driven imperatively (like the view transform) so drawing never re-renders the scene
   const activeStrokeRef = useRef<Pt[]>([])
   const activeInkRef = useRef<SVGPathElement>(null)
   const snapDotsRef = useRef<SVGGElement>(null)
   const penCursorRef = useRef<Pt | null>(null)
-  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, txid: null, zoneIdx: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
+  const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, txid: null, strokeId: null, handle: null, orig: null, zoneIdx: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
   const pointers = useRef(new Map<number, { x: number; y: number }>())
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
@@ -370,12 +414,15 @@ export function CanvasStage() {
         setSnapDot(0, null)
         setSnapDot(1, null)
       }
+      setShapeDrag(null)
       dd.mode = 'idle'
       lastPinch.current = null
       return
     }
     if (e.button === 2) return
-    const target = (e.target as Element).closest('[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-txid],[data-zone],[data-role]')
+    const target = (e.target as Element).closest('[data-rh],[data-sh],[data-vidx],[data-bidx],[data-mkid],[data-strokeid],[data-rsid],[data-txid],[data-zone],[data-role]')
+    const rh = target?.getAttribute('data-rh')
+    const sh = target?.getAttribute('data-sh')
     const vidx = target?.getAttribute('data-vidx')
     const bidx = target?.getAttribute('data-bidx')
     const mkid = target?.getAttribute('data-mkid')
@@ -388,21 +435,35 @@ export function CanvasStage() {
     d.startX = e.clientX; d.startY = e.clientY
     d.lastX = e.clientX; d.lastY = e.clientY
     d.moved = false; d.pushed = false; d.markerId = null; d.rsid = null; d.txid = null; d.zoneIdx = null
+    d.strokeId = null; d.handle = null; d.orig = null
     d.grabbed = toWorld(e.clientX, e.clientY)
     if (vidx != null) { d.mode = 'vertex'; d.idx = Number(vidx); setEditDragging(true); setDragIdx({ mode: 'vertex', idx: d.idx }) }
     else if (bidx != null) { d.mode = 'bulge'; d.idx = Number(bidx); setEditDragging(true); setDragIdx({ mode: 'bulge', idx: d.idx }) }
     else if (mkid != null) { d.mode = 'marker'; d.markerId = mkid }
+    else if (rh != null && rsid != null) {
+      // a resize handle on the selected room — box sides/corners, or a traced area's vertices
+      const r = useStore.getState().roomShapes.find((x) => x.id === rsid)
+      if (r) { d.mode = 'room-resize'; d.rsid = rsid; d.handle = rh; d.orig = r.pts.map((p) => ({ ...p })) }
+      else d.mode = 'idle'
+    }
+    else if (sh != null && strokeId != null) {
+      const st = useStore.getState().strokes.find((x) => x.id === strokeId)
+      if (st) { d.mode = 'stroke-handle'; d.strokeId = strokeId; d.handle = sh; d.orig = st.pts.map((p) => ({ ...p })) }
+      else d.mode = 'idle'
+    }
     else if (strokeId != null) {
-      useStore.getState().setSelectedStroke(
-        useStore.getState().selectedStroke === strokeId ? null : strokeId)
-      d.mode = 'idle'
-      return
+      // a drag moves the whole stroke; a press that stays a tap toggles its selection on release
+      const st = useStore.getState().strokes.find((x) => x.id === strokeId)
+      d.mode = 'stroke-move'
+      d.strokeId = strokeId
+      d.orig = st ? st.pts.map((p) => ({ ...p })) : null
     }
     else if (rsid != null) {
       const s0 = useStore.getState()
-      if (s0.tool === 'room' && !s0.locked && e.button === 0) {
-        // room tool: a press on an existing room starts a new shape on top of it —
-        // a press that stays a tap still selects, on release
+      const r = s0.roomShapes.find((x) => x.id === rsid)
+      if (s0.tool === 'room' && !s0.locked && e.button === 0 && s0.selectedRoomShape !== rsid) {
+        // room tool: a press on an UNSELECTED room starts a new shape on top of it (rooms nest —
+        // a bathroom inside a bedroom); a press that stays a tap still selects, on release
         if (s0.roomDrawMode === 'polygon') { d.mode = 'maybe-pan' } // taps place corners, drags pan
         else {
           d.mode = 'room-shape'
@@ -410,9 +471,10 @@ export function CanvasStage() {
           setActiveRoom([d.grabbed!, d.grabbed!])
         }
       } else {
-        s0.setSelectedRoomShape(s0.selectedRoomShape === rsid ? null : rsid)
-        d.mode = 'idle'
-        return
+        // the select tool, or the already-selected room: a drag moves it, a tap toggles selection
+        d.mode = 'room-move'
+        d.rsid = rsid
+        d.orig = r ? r.pts.map((p) => ({ ...p })) : null
       }
     }
     else if (txid != null) {
@@ -558,6 +620,45 @@ export function CanvasStage() {
     if (d.mode === 'text-drag' && d.moved && d.txid && !s.locked) {
       if (!d.pushed) { pushHistory(); d.pushed = true }
       s.moveText(d.txid, world)
+      return
+    }
+    if ((d.mode === 'room-move' || d.mode === 'stroke-move') && d.moved && d.orig && d.grabbed && !s.locked) {
+      if (!d.pushed) { pushHistory(); d.pushed = true; setShapeDrag('move') }
+      const dx = world.x - d.grabbed.x, dy = world.y - d.grabbed.y
+      const moved = d.orig.map((p) => ({ x: p.x + dx, y: p.y + dy }))
+      if (d.mode === 'room-move' && d.rsid) s.updateRoomShapePts(d.rsid, moved)
+      else if (d.strokeId) s.moveStroke(d.strokeId, moved)
+      return
+    }
+    if (d.mode === 'room-resize' && d.moved && d.orig && d.rsid && d.handle != null && !s.locked) {
+      if (!d.pushed) { pushHistory(); d.pushed = true; setShapeDrag('resize') }
+      const r = s.roomShapes.find((x) => x.id === d.rsid)
+      if (!r) return
+      if (r.shape === 'polygon') {
+        const next = d.orig.slice()
+        next[Number(d.handle)] = world
+        s.updateRoomShapePts(r.id, next)
+      } else {
+        s.updateRoomShapePts(r.id, resizeBox(d.orig, d.handle, world, (e.nativeEvent as PointerEvent).shiftKey))
+      }
+      return
+    }
+    if (d.mode === 'stroke-handle' && d.moved && d.orig && d.strokeId && d.handle != null && !s.locked) {
+      if (!d.pushed) { pushHistory(); d.pushed = true; setShapeDrag('resize') }
+      const st = s.strokes.find((x) => x.id === d.strokeId)
+      if (!st) return
+      if (st.kind === 'line' || st.kind === 'arrow') {
+        // an endpoint snaps to the outline exactly as it did when the line was drawn
+        const i = Number(d.handle)
+        const r = snapToOutline(world)
+        let p = r.p
+        if (!r.snapped && s.angleSnap && d.orig[1 - i]) p = snapPoint(d.orig[1 - i], p)
+        const next = d.orig.slice()
+        next[i] = p
+        s.moveStroke(st.id, next)
+      } else {
+        s.moveStroke(st.id, resizeBox(d.orig, d.handle, world, (e.nativeEvent as PointerEvent).shiftKey))
+      }
       return
     }
     if (d.mode === 'drawing') {
@@ -726,6 +827,15 @@ export function CanvasStage() {
           s0.setSelectedRoomShape(s0.selectedRoomShape === d.rsid ? null : d.rsid)
         }
       }
+      return
+    }
+    if (mode === 'room-move' || mode === 'stroke-move' || mode === 'room-resize' || mode === 'stroke-handle') {
+      setShapeDrag(null)
+      if (moved) { haptic('light'); return }
+      // a press that never moved is a tap: toggle the selection (handles only ever move)
+      const s0 = useStore.getState()
+      if (mode === 'room-move' && d.rsid) s0.setSelectedRoomShape(s0.selectedRoomShape === d.rsid ? null : d.rsid)
+      else if (mode === 'stroke-move' && d.strokeId) s0.setSelectedStroke(s0.selectedStroke === d.strokeId ? null : d.strokeId)
       return
     }
     if (e.button === 2 || moved) return
@@ -1020,11 +1130,11 @@ export function CanvasStage() {
           })
         })()}
 
-        {/* stroke hit paths — tap a stroke in Select mode to manage it */}
+        {/* stroke hit paths — tap a stroke in Select mode to manage it, drag to move it */}
         {tool === 'select' && !locked && strokes.map((s2) => (
           <path key={`hit-${s2.id}`} data-strokeid={s2.id} d={strokePathD(s2.pts, s2.kind)} fill="none"
             stroke="rgba(0,0,0,0)" strokeWidth={Math.max(s2.width * 2, (COARSE ? 20 : 12) / k)}
-            style={{ cursor: 'pointer' }} />
+            style={{ cursor: selectedStroke === s2.id ? 'move' : 'pointer' }} />
         ))}
 
         {/* text-note hit areas — tap to manage, drag to move (select tool only) */}
@@ -1037,25 +1147,27 @@ export function CanvasStage() {
             fill="rgba(0,0,0,0.001)" style={{ cursor: 'grab' }} />
         })}
 
-        {/* room-shape hit areas — the whole room is tappable, not just its border */}
+        {/* room-shape hit areas — the whole room is tappable, not just its border; the
+            selected one (and every room in the Select tool) drags to move */}
         {(tool === 'select' || tool === 'room') && !locked && roomShapes.map((r) => {
           const [p1, p2] = r.pts
           if (!p1 || !p2) return null
+          const cursor = tool === 'select' || selectedRoomShape === r.id ? 'move' : 'pointer'
           if (r.shape === 'polygon' && r.pts.length >= 3) {
             const dPath = `M${r.pts.map((p) => `${p.x} ${p.y}`).join('L')}Z`
             return <path key={`hit-${r.id}`} data-rsid={r.id} d={dPath}
-              fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
+              fill="rgba(0,0,0,0.001)" style={{ cursor }} />
           }
           if (r.shape === 'ellipse') {
             const mid = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 }
             return <ellipse key={`hit-${r.id}`} data-rsid={r.id} cx={mid.x} cy={mid.y}
               rx={Math.abs(p2.x - p1.x) / 2} ry={Math.abs(p2.y - p1.y) / 2}
-              fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
+              fill="rgba(0,0,0,0.001)" style={{ cursor }} />
           }
           const x = Math.min(p1.x, p2.x), y = Math.min(p1.y, p2.y)
           return <rect key={`hit-${r.id}`} data-rsid={r.id} x={x} y={y}
             width={Math.abs(p2.x - p1.x)} height={Math.abs(p2.y - p1.y)}
-            fill="rgba(0,0,0,0.001)" style={{ cursor: 'pointer' }} />
+            fill="rgba(0,0,0,0.001)" style={{ cursor }} />
         })}
 
         {/* free-traced area in progress — corners placed by taps, first corner closes it */}
@@ -1286,6 +1398,61 @@ export function CanvasStage() {
             )}
           </g>
         ))}
+
+        {/* the selected stroke: a soft halo so it reads as selected, plus end/corner handles */}
+        {tool === 'select' && !locked && selectedStroke && (() => {
+          const s2 = strokes.find((x) => x.id === selectedStroke)
+          if (!s2 || s2.pts.length < 2) return null
+          const hs: { id: string; p: Pt }[] =
+            s2.kind === 'line' || s2.kind === 'arrow' ? [{ id: '0', p: s2.pts[0] }, { id: '1', p: s2.pts[1] }]
+              : s2.kind === 'rect' || s2.kind === 'ellipse' ? boxHandles(s2.pts[0], s2.pts[1]).filter((h) => h.id.length === 2)
+                : []
+          return (
+            <g>
+              <path d={strokePathD(s2.pts, s2.kind)} fill="none" stroke={GOLD} strokeWidth={s2.width + 6 / k}
+                strokeLinecap="round" strokeLinejoin="round" opacity={0.3} pointerEvents="none" />
+              {hs.map((h) => (
+                <g key={h.id} data-sh={h.id} data-strokeid={s2.id} style={{ cursor: HANDLE_CURSOR[h.id] ?? 'grab' }}>
+                  <circle cx={h.p.x} cy={h.p.y} r={HIT_PX / k} fill="rgba(0,0,0,0)" />
+                  <circle cx={h.p.x} cy={h.p.y} r={5 / k} fill="#FFFFFF" stroke={GOLD} strokeWidth={1.7 / k} />
+                </g>
+              ))}
+            </g>
+          )
+        })()}
+
+        {/* the selected room: corner + side handles on a box, vertex handles on a traced area,
+            and its live size while it's being moved or resized */}
+        {(tool === 'select' || tool === 'room') && !locked && selectedRoomShape && (() => {
+          const r = roomShapes.find((x) => x.id === selectedRoomShape)
+          if (!r || r.pts.length < 2) return null
+          const hs = r.shape === 'polygon' ? r.pts.map((p, i) => ({ id: String(i), p })) : boxHandles(r.pts[0], r.pts[1])
+          const [p1, p2] = r.pts
+          const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y)
+          const lx = (p1.x + p2.x) / 2, ly = Math.min(p1.y, p2.y) - 12 / k
+          return (
+            <g>
+              {hs.map((h2) => (
+                <g key={h2.id} data-rh={h2.id} data-rsid={r.id} style={{ cursor: HANDLE_CURSOR[h2.id] ?? 'grab' }}>
+                  <circle cx={h2.p.x} cy={h2.p.y} r={HIT_PX / k} fill="rgba(0,0,0,0)" />
+                  {r.shape === 'polygon'
+                    ? <circle cx={h2.p.x} cy={h2.p.y} r={5 / k} fill="#FFFFFF" stroke={GOLD} strokeWidth={1.7 / k} />
+                    : <rect x={h2.p.x - 4.5 / k} y={h2.p.y - 4.5 / k} width={9 / k} height={9 / k} rx={1.5 / k}
+                        fill="#FFFFFF" stroke={GOLD} strokeWidth={1.6 / k} />}
+                </g>
+              ))}
+              {shapeDrag && r.shape !== 'polygon' && (
+                <text x={lx} y={ly} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                  fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${lx} ${ly})`}
+                  stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke" pointerEvents="none">
+                  {metersPerPx
+                    ? `${formatLen(w * metersPerPx, unit)} × ${formatLen(h * metersPerPx, unit)}`
+                    : `${Math.round(w)} u × ${Math.round(h)} u`}
+                </text>
+              )}
+            </g>
+          )
+        })()}
 
         {/* center drag handle — ONLY in the Pin-centre tool, so panning and
             curve-handle drags near the middle can never pin it by accident */}

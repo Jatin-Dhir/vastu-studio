@@ -701,7 +701,7 @@ input[type='range']:focus-visible { outline: 2px solid var(--gold); outline-offs
 .toggle.on .knob::after { transform: translateX(10px); background: #241d07; }
 
 /* compass picker */
-.compass-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.compass-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 7px; }
 .compass-grid.locked { opacity: 0.45; pointer-events: none; }
 .compass-card {
   display: flex; flex-direction: column; align-items: center; gap: 6px;
@@ -1136,9 +1136,69 @@ kbd {
   border-radius: 8px;
   font-size: 12px; font-weight: 700;
   color: var(--muted);
-  transition: all 0.15s ease;
+  transition: color 0.15s ease, background-color 0.15s ease, transform 0.12s ease;
   display: inline-flex; align-items: center; gap: 5px;
 }
+.qpill:active { transform: scale(0.96); }
+
+/* ---- kind picker: one pill + a searchable list, instead of thirty pills ---- */
+.kind-picker, .style-picker { position: relative; }
+.qpill.picker { padding-right: 8px; }
+.qpill.picker svg, .style-picker > .qpill svg { opacity: 0.7; }
+.kind-pop, .style-pop {
+  position: absolute; top: calc(100% + 8px); left: 0;
+  z-index: 30;
+  background: var(--panel-solid);
+  border: 1px solid var(--stroke-2);
+  border-radius: 14px; /* concentric: inner 6px radius + 8px padding */
+  box-shadow: var(--shadow);
+  padding: 8px;
+  transform-origin: top left;
+  transition: opacity 0.14s cubic-bezier(0.23, 1, 0.32, 1), transform 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+}
+@starting-style {
+  .kind-pop, .style-pop { opacity: 0; transform: scale(0.96) translateY(-3px); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .kind-pop, .style-pop { transition: opacity 0.14s ease; }
+  @starting-style { .kind-pop, .style-pop { transform: none; } }
+  .qpill:active { transform: none; }
+}
+.kind-pop { width: 296px; }
+.kind-search {
+  display: flex; align-items: center; gap: 7px;
+  padding: 6px 9px; margin-bottom: 6px;
+  border-radius: 6px;
+  background: var(--surface-1);
+  border: 1px solid var(--stroke);
+  color: var(--muted);
+}
+.kind-search:focus-within { border-color: color-mix(in srgb, var(--gold) 55%, transparent); }
+.kind-search input {
+  flex: 1; min-width: 0;
+  background: none; border: none; outline: none; padding: 0;
+  color: var(--text); font: inherit; font-size: 12.5px;
+}
+.kind-list { max-height: 340px; overflow-y: auto; display: flex; flex-direction: column; gap: 1px; }
+.kind-head {
+  font-size: 10.5px; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--muted); padding: 8px 8px 4px;
+}
+.kind-item {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; border-radius: 6px;
+  font-size: 12.5px; font-weight: 650; color: var(--text); text-align: left;
+  transition: background-color 0.12s ease;
+}
+.kind-item:hover, .kind-item.hl { background: var(--surface-1-hover); }
+.kind-item.on { background: var(--gold-soft); color: var(--gold-2); }
+.kind-empty { padding: 12px 8px; font-size: 12px; color: var(--muted); }
+/* ---- draw style picker: colour + width behind one swatch pill ---- */
+.style-swatch { width: 13px; height: 13px; border-radius: 50%; box-shadow: 0 0 0 1.5px rgba(0,0,0,0.35); flex: 0 0 auto; }
+.style-width { width: 16px; border-radius: 3px; flex: 0 0 auto; }
+.style-pop { display: flex; flex-direction: column; gap: 7px; }
+.style-row { display: flex; align-items: center; gap: 5px; }
+.style-row .lbl { font-size: 10.5px; font-weight: 700; color: var(--muted); width: 44px; flex: 0 0 auto; }
 .qpill:hover { color: var(--text); background: var(--surface-1-hover); }
 .qpill.on { background: var(--gold-soft); color: var(--gold-2); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--gold) 35%, transparent); }
 .qpill.deg { font-variant-numeric: tabular-nums; }
@@ -1478,8 +1538,8 @@ kbd {
 }
 
 /* marker kind pills */
-.quickbar-row.kinds { max-width: calc(100vw - 16px); overflow-x: auto; scrollbar-width: none; }
-.quickbar-row.kinds::-webkit-scrollbar { display: none; }
+/* the row must not clip: the kind/style pickers drop their lists below it */
+.quickbar-row.kinds { max-width: calc(100vw - 16px); overflow: visible; }
 .qpill.kind { display: inline-flex; align-items: center; gap: 6px; }
 .kind-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; box-shadow: 0 0 0 1.5px rgba(0,0,0,0.35); }
 .sel-chips .chip.place { color: var(--gold-2); border-color: rgba(217,180,91,0.4); cursor: default; }

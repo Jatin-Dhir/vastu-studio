@@ -4,7 +4,7 @@ import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { brahmasthanRadius, placementOf } from '../analysis'
 import { formatArea, formatLen } from '../format'
-import { DIRS8, GATES32, GATE_QUALITY, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
+import { GATES32, GATE_QUALITY, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
 
 export const FONT = "'Inter Variable', Inter, system-ui, sans-serif"
 export const GOLD = '#D9B45B'
@@ -530,50 +530,6 @@ function Gates32({ c, R, north, compass, k, vr, paper }: ChakraProps) {
   )
 }
 
-function Chakra8({ c, R, north, compass, k, vr, paper }: ChakraProps) {
-  return (
-    <g>
-      {DIRS8.map((_, i) => {
-        const a0 = north - 22.5 + i * 45
-        return i % 2 === 1 ? (
-          <path key={i} d={wedgePath(c, R, a0, a0 + 45)} fill={paper ? '#14151A' : '#FFFFFF'} fillOpacity={0.035} />
-        ) : null
-      })}
-      {DIRS8.map((_, i) => {
-        const a = north - 22.5 + i * 45
-        const p = polar(c, a, R)
-        return <CasedLine key={i} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
-          stroke="#EFE3C0" width={0.9 / k} opacity={0.5} />
-      })}
-      {DIRS8.map((_, i) => {
-        const p = polar(c, north + i * 45, R * 0.985)
-        return <CasedLine key={`ax${i}`} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
-          width={i % 2 === 0 ? 1.3 / k : 0.9 / k} opacity={i % 2 === 0 ? 0.75 : 0.55} />
-      })}
-      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
-      <CasedCircle cx={c.x} cy={c.y} r={R * 0.62} k={k} width={0.8 / k} opacity={0.4} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} vr={vr} />}
-      <NorthNeedle c={c} R={R} north={north} k={k} />
-      {compass.labels && DIRS8.map((d8, i) => (
-        <Fragment key={d8.key}>
-          <RingLabel c={c} deg={north + i * 45} r={R * 1.08}
-            size={Math.min(Math.max(i % 2 === 0 ? R * 0.068 : R * 0.05, 9.5 / k), R * 0.11)}
-            text={d8.key} weight={800}
-            fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.013} vr={vr} upright={i % 2 === 0} />
-          {R * 0.036 * k >= 6.5 && (
-            <>
-              <RingLabel c={c} deg={north + i * 45} r={R * 0.75} size={R * 0.036}
-                text={d8.sanskrit} fill="#E4D9BC" weight={600} halo={R * 0.009} vr={vr} />
-              <RingLabel c={c} deg={north + i * 45} r={R * 0.68} size={R * 0.03}
-                text={d8.deity} fill="#A9B0BF" weight={500} halo={R * 0.008} vr={vr} />
-            </>
-          )}
-        </Fragment>
-      ))}
-    </g>
-  )
-}
-
 function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
   const frame = useMemo(() => {
     if (!closed || pts.length < 3) return null
@@ -690,49 +646,6 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
           N
         </text>
       )}
-    </g>
-  )
-}
-
-function Dial({ c, R, north, compass, k, vr }: ChakraProps) {
-  const px = R * k
-  // this wheel's whole job is fine degree resolution, so it keeps a finer floor than the
-  // other compasses' LOD — but still coarsens at low zoom instead of rendering 180 ticks as fuzz
-  const step = px > 1400 ? 2 : px > 700 ? 5 : px > 300 ? 10 : 30
-  const ticks = []
-  for (let d = 0; d < 360; d += step) {
-    const major = d % 30 === 0
-    const med = d % 10 === 0
-    const len = major ? R * 0.055 : med ? R * 0.038 : R * 0.02
-    const a = north + d
-    const p0 = polar(c, a, R - len)
-    const p1 = polar(c, a, R)
-    ticks.push(
-      <line key={`u${d}`} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
-        stroke={INKHALO} strokeWidth={(major ? 3 : 1.8) / k} opacity={0.5} />,
-      <line key={d} x1={p0.x} y1={p0.y} x2={p1.x} y2={p1.y}
-        stroke="#EDE2C2" strokeWidth={(major ? 1.5 : 0.7) / k} opacity={major ? 0.92 : 0.6} />,
-    )
-  }
-  const nTip = polar(c, north, R * 0.995)
-  const nL = polar(c, north + 4, R * 0.9)
-  const nR = polar(c, north - 4, R * 0.9)
-  return (
-    <g>
-      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.8 / k} opacity={0.95} />
-      <CasedCircle cx={c.x} cy={c.y} r={R * 0.82} k={k} width={0.7 / k} opacity={0.4} />
-      {ticks}
-      <path d={`M${nTip.x} ${nTip.y} L${nL.x} ${nL.y} L${nR.x} ${nR.y} Z`}
-        fill="#F26B57" stroke={INKHALO} strokeWidth={1.8 / k} strokeLinejoin="round" />
-      {compass.labels && R * 0.045 * k >= 6 && Array.from({ length: 12 }, (_, i) => i * 30).map((d) => (
-        <RingLabel key={d} c={c} deg={north + d} r={R * 1.07} size={R * 0.045}
-          text={String(d)} fill="#DFE3EC" weight={600} halo={R * 0.01} vr={vr} />
-      ))}
-      {compass.labels && DIRS8.map((d8, i) => (
-        <RingLabel key={d8.key} c={c} deg={north + i * 45} r={R * 0.73}
-          size={Math.min(Math.max(i % 2 === 0 ? R * 0.085 : R * 0.05, 9 / k), R * 0.12)} text={d8.key} weight={800}
-          fill={i === 0 ? '#F26B57' : '#EFE4C8'} halo={R * 0.014} vr={vr} upright={i % 2 === 0} />
-      ))}
     </g>
   )
 }
@@ -963,9 +876,7 @@ export function Scene(props: SceneProps) {
         {chakraProps && compass.id === 'custom' && <CustomOverlay {...chakraProps} />}
         {chakraProps && compass.id === 'zones16' && <Zones16 {...chakraProps} />}
         {chakraProps && compass.id === 'gates32' && <Gates32 {...chakraProps} />}
-        {chakraProps && compass.id === 'chakra8' && <Chakra8 {...chakraProps} />}
         {chakraProps && compass.id === 'grid9' && <Grid9 {...chakraProps} />}
-        {chakraProps && compass.id === 'dial' && <Dial {...chakraProps} />}
       </g>
       {/* tapped zone from the analysis panel, lit on the plan itself */}
       {typeof props.highlightZone === 'number' && closed && center && R > 0 && (() => {

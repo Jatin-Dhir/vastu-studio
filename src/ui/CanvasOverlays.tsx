@@ -1,12 +1,30 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Check, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
+import { Check, ChevronDown, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
 import { M_PER_FT, formatArea, formatLen } from '../format'
 import { placementOf, zoneRows } from '../analysis'
 import { NorthDial } from './NorthDial'
-import { GATES32, GATE_QUALITY, GATE_START_DEG, MARKER_KINDS, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
-import type { MarkerKind } from '../types'
+import { KindPicker } from './KindPicker'
+import type { Pt, ViewState } from '../types'
+
+/** World → screen, the same transform the stage applies to #world. */
+const toScreen = (view: ViewState, p: Pt): Pt => {
+  const rad = (view.rot * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  return { x: view.tx + view.k * (p.x * cos - p.y * sin), y: view.ty + view.k * (p.x * sin + p.y * cos) }
+}
+/** Screen-space bounds of a shape's points; two-corner boxes expand to all four corners
+ *  so a rotated view still measures the box's real top edge. */
+const screenBounds = (view: ViewState, pts: Pt[], box: boolean) => {
+  const corners = box && pts.length >= 2
+    ? [pts[0], pts[1], { x: pts[0].x, y: pts[1].y }, { x: pts[1].x, y: pts[0].y }]
+    : pts
+  const sp = corners.map((p) => toScreen(view, p))
+  const xs = sp.map((p) => p.x), ys = sp.map((p) => p.y)
+  return { midX: (Math.min(...xs) + Math.max(...xs)) / 2, top: Math.min(...ys) }
+}
+import { GATES32, GATE_QUALITY, GATE_START_DEG, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
 
 /**
  * Detail card for a tapped wheel zone — the "what IS this region" answer in one place:
@@ -155,18 +173,73 @@ function ToolHint() {
               : drawMode === 'erase' ? 'Tap or swipe across a drawing or note to remove it'
                 : 'Draw freely on the plan — pan with two fingers'
   } else if (tool === 'room') {
-    text = roomDrawMode === 'ellipse' ? 'Drag out a circle — hold Shift for a perfect circle'
+    text = roomDrawMode === 'ellipse' ? 'Drag out a circle — then drag it to move, or pull its handles to resize'
       : roomDrawMode === 'polygon'
         ? (draftLen === 0 ? 'Trace the area — tap its first corner'
           : draftLen < 3 ? `Tap the next corner · ${draftLen} placed`
             : `Tap corners, then the first one (or the ✓) to close · ${draftLen} placed`)
-        : 'Drag out a room — hold Shift for a perfect square'
+        : 'Drag out a room — then drag it to move, or pull its corners to resize'
   }
   if (!text) return null
   return <div className="tool-hint">{text}</div>
 }
 
 const DRAW_COLORS = ['#F26B57', '#D9B45B', '#5B8DEF', '#63B56F', '#F2F2F2']
+
+/** Colour + line width behind one swatch pill — the current choice is visible on the
+ *  pill itself, so the eight individual buttons no longer crowd the toolbar. */
+function StylePicker({ color, width, widths, onColor, onWidth }: {
+  color: string; width: number; widths: boolean
+  onColor: (c: string) => void; onWidth: (w: number) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (!open) return
+    const onDown = (e: PointerEvent) => {
+      if (ref.current?.contains(e.target as Node)) return
+      if ((e.target as Element).closest?.('[data-canvas]')) e.stopPropagation()
+      setOpen(false)
+    }
+    window.addEventListener('pointerdown', onDown, true)
+    return () => window.removeEventListener('pointerdown', onDown, true)
+  }, [open])
+  const px = (w: number) => (w === 1 ? 2 : w === 2 ? 3.5 : 6)
+  return (
+    <div className="style-picker" ref={ref}
+      onKeyDown={(e) => { if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); triggerRef.current?.focus() } }}>
+      <button ref={triggerRef} type="button" className={`qpill ${open ? 'on' : ''}`} aria-expanded={open} aria-haspopup="dialog"
+        title="Colour and line width" aria-label="Colour and line width" onClick={() => setOpen(!open)}>
+        <span className="style-swatch" style={{ background: color }} />
+        {widths && <span className="style-width" style={{ height: px(width), background: color }} />}
+        <ChevronDown size={12} />
+      </button>
+      {open && (
+        <div className="style-pop">
+          <div className="style-row">
+            <span className="lbl">Colour</span>
+            {DRAW_COLORS.map((c) => (
+              <button key={c} type="button" className={`draw-swatch ${color === c ? 'on' : ''}`} aria-label={`Draw colour ${c}`}
+                style={{ background: c }} onClick={() => onColor(c)} />
+            ))}
+          </div>
+          {widths && (
+            <div className="style-row">
+              <span className="lbl">Width</span>
+              {[1, 2, 3].map((w) => (
+                <button key={w} type="button" className={`draw-width ${width === w ? 'on' : ''}`} aria-label={`Line width ${w}`}
+                  onClick={() => onWidth(w)}>
+                  <span style={{ height: px(w) }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
 
 /** Pen/line/arrow/text/eraser, colour and width options while the Draw tool is armed. */
 function DrawOptionsRow() {
@@ -202,20 +275,8 @@ function DrawOptionsRow() {
       {drawMode !== 'erase' && (
         <>
           <span className="qsep" />
-          {DRAW_COLORS.map((c) => (
-            <button key={c} className={`draw-swatch ${drawColor === c ? 'on' : ''}`} aria-label={`Draw colour ${c}`}
-              style={{ background: c }} onClick={() => st.setDrawColor(c)} />
-          ))}
-        </>
-      )}
-      {strokey && (
-        <>
-          <span className="qsep" />
-          {[1, 2, 3].map((w) => (
-            <button key={w} className={`draw-width ${drawWidth === w ? 'on' : ''}`} aria-label={`Line width ${w}`} onClick={() => st.setDrawWidth(w)}>
-              <span style={{ height: w === 1 ? 2 : w === 2 ? 3.5 : 6 }} />
-            </button>
-          ))}
+          <StylePicker color={drawColor} width={drawWidth} widths={strokey}
+            onColor={(c) => st.setDrawColor(c)} onWidth={(w) => st.setDrawWidth(w)} />
         </>
       )}
       {hasInk && (
@@ -249,12 +310,7 @@ function RoomOptionsRow() {
         <Spline size={12} /> Trace
       </button>
       <span className="qsep" />
-      {MARKER_KINDS.filter((m) => m.kind !== 'entrance').map((m) => (
-        <button key={m.kind} className={`qpill kind ${roomShapeKind === m.kind ? 'on' : ''}`}
-          onClick={() => st.setRoomShapeKind(m.kind as MarkerKind)}>
-          {m.name}
-        </button>
-      ))}
+      <KindPicker value={roomShapeKind} onChange={(k) => st.setRoomShapeKind(k)} exclude={['entrance']} />
     </div>
   )
 }
@@ -268,21 +324,13 @@ export function RoomShapeChips() {
   const editing = useStore((s) => s.roomShapeEditing)
   const r = roomShapes.find((x) => x.id === selectedRoomShape)
   if (!r || locked || editing) return null
-  // bbox midpoint, not pts[0]/pts[1] — polygon shapes carry more than two points
-  const xs = r.pts.map((p) => p.x), ys = r.pts.map((p) => p.y)
-  const mid = {
-    x: (Math.min(...xs) + Math.max(...xs)) / 2,
-    y: (Math.min(...ys) + Math.max(...ys)) / 2,
-  }
-  const rad = (view.rot * Math.PI) / 180
-  const cos = Math.cos(rad), sin = Math.sin(rad)
-  const sx = view.tx + view.k * (mid.x * cos - mid.y * sin)
-  const sy = view.ty + view.k * (mid.x * sin + mid.y * cos)
+  // sit just above the room's top edge, clear of its label and its resize handles
+  const { midX, top } = screenBounds(view, r.pts, r.shape !== 'polygon')
   const st = useStore.getState()
   return (
     <div className="sel-chips" style={{
-      left: `max(8px, min(${sx - 60}px, calc(100vw - 220px)))`,
-      top: Math.max(60, sy - 30),
+      left: `max(8px, min(${midX - 60}px, calc(100vw - 220px)))`,
+      top: Math.max(60, top - 48),
     }}>
       <button className="chip" onClick={() => st.setRoomShapeEditing(true)}>
         <Pencil size={12} /> {r.label}
@@ -384,11 +432,8 @@ export function StrokeChips() {
   useEffect(() => { setLenEditing(false) }, [selectedStroke])
   const s2 = strokes.find((x) => x.id === selectedStroke)
   if (!s2 || locked) return null
-  const mid = s2.pts[Math.floor(s2.pts.length / 2)]
-  const rad = (view.rot * Math.PI) / 180
-  const cos = Math.cos(rad), sin = Math.sin(rad)
-  const sx = view.tx + view.k * (mid.x * cos - mid.y * sin)
-  const sy = view.ty + view.k * (mid.x * sin + mid.y * cos)
+  const { midX: sx, top } = screenBounds(view, s2.pts, s2.kind === 'rect' || s2.kind === 'ellipse')
+  const sy = top
   const st = useStore.getState()
   const measurable = (s2.kind === 'line' || s2.kind === 'arrow') && s2.pts.length >= 2
   const boxy = (s2.kind === 'rect' || s2.kind === 'ellipse') && s2.pts.length >= 2
@@ -423,7 +468,7 @@ export function StrokeChips() {
   return (
     <div className="sel-chips" style={{
       left: `max(8px, min(${sx - 40}px, calc(100vw - 240px)))`,
-      top: Math.max(60, sy - 52),
+      top: Math.max(60, sy - 48),
     }}>
       {measurable && !lenEditing && (
         <button className="chip" title="Set the exact length" onClick={beginEdit}>
@@ -472,12 +517,7 @@ function MarkerKindRow() {
   const setMarkerKind = useStore((s) => s.setMarkerKind)
   return (
     <div className="quickbar-row kinds">
-      {MARKER_KINDS.map((m) => (
-        <button key={m.kind} className={`qpill kind ${markerKind === m.kind ? 'on' : ''}`}
-          onClick={() => setMarkerKind(m.kind as MarkerKind)}>
-          {m.name}
-        </button>
-      ))}
+      <KindPicker value={markerKind} onChange={setMarkerKind} recents={5} />
     </div>
   )
 }

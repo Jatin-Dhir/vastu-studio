@@ -158,7 +158,37 @@ export default function App() {
         case 'Enter': if (!s.closed && s.pts.length >= 3) s.closePolygon(); break
         case 'Backspace': case 'Delete':
           if (s.tool === 'trace' && !s.closed && s.pts.length > 0) { e.preventDefault(); s.popPoint() }
+          else if (s.locked) break
+          // whatever is selected on the plan goes — the same expectation as every desktop editor
+          else if (s.selectedRoomShape) { e.preventDefault(); s.deleteRoomShape(s.selectedRoomShape) }
+          else if (s.selectedStroke) { e.preventDefault(); s.deleteStroke(s.selectedStroke) }
+          else if (s.selectedMarker) { e.preventDefault(); s.deleteMarker(s.selectedMarker) }
+          else if (s.selectedText) { e.preventDefault(); s.deleteText(s.selectedText) }
+          else if (s.selectedVertex != null) { e.preventDefault(); s.deletePoint(s.selectedVertex); s.setSelection({ vertex: null, edge: null }) }
           break
+        case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown': {
+          // nudge whatever is selected by one screen pixel (ten with Shift), in screen
+          // directions — the keyboard path for placement that would otherwise be pointer-only
+          if (s.locked) break
+          const step = (e.shiftKey ? 10 : 1) / s.view.k
+          const sx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0
+          const sy = e.key === 'ArrowUp' ? -step : e.key === 'ArrowDown' ? step : 0
+          const rad = (-s.view.rot * Math.PI) / 180
+          const dx = sx * Math.cos(rad) - sy * Math.sin(rad), dy = sx * Math.sin(rad) + sy * Math.cos(rad)
+          const shift = (p: { x: number; y: number }) => ({ x: p.x + dx, y: p.y + dy })
+          const room = s.selectedRoomShape ? s.roomShapes.find((r) => r.id === s.selectedRoomShape) : null
+          const stroke = s.selectedStroke ? s.strokes.find((x) => x.id === s.selectedStroke) : null
+          const marker = s.selectedMarker ? s.markers.find((m) => m.id === s.selectedMarker) : null
+          const text = s.selectedText ? s.texts.find((t) => t.id === s.selectedText) : null
+          if (!room && !stroke && !marker && !text) break
+          e.preventDefault()
+          if (!e.repeat) s.pushHistory() // one undo step per key press, not per auto-repeat
+          if (room) s.updateRoomShapePts(room.id, room.pts.map(shift))
+          else if (stroke) s.moveStroke(stroke.id, stroke.pts.map(shift))
+          else if (marker) s.moveMarker(marker.id, shift(marker.p))
+          else if (text) s.moveText(text.id, shift(text.p))
+          break
+        }
         case 'Escape':
           if (s.selectedMarker) s.setSelectedMarker(null)
           else if (s.selectedStroke) s.setSelectedStroke(null)

@@ -19,12 +19,16 @@ const THEME_KEY = 'vastu-studio.theme.v1'
 /** Wall render prefs — an app-wide drawing preference (like angle snap), not per-project. */
 const WALL_DEFAULTS = { wallColor: '#C9C6BC', wallWidthM: 0.23, wallOpacity: 1 }
 type WallPrefs = typeof WALL_DEFAULTS
-function loadThemePrefs(): { theme: ThemeMode; accent: AccentId; angleSnap: boolean; showEdgeLabels: boolean } & WallPrefs {
+/** Seeded so the kind picker's one-click row is useful before anything has been placed. */
+const RECENT_KINDS_DEFAULT: MarkerKind[] = ['kitchen', 'toilet', 'bed', 'pooja', 'living']
+type Prefs = { theme: ThemeMode; accent: AccentId; angleSnap: boolean; showEdgeLabels: boolean; recentKinds: MarkerKind[] } & WallPrefs
+function loadThemePrefs(): Prefs {
+  const base: Prefs = { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, recentKinds: RECENT_KINDS_DEFAULT, ...WALL_DEFAULTS }
   try {
     const raw = localStorage.getItem(THEME_KEY)
-    if (raw) return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, ...WALL_DEFAULTS, ...JSON.parse(raw) }
+    if (raw) return { ...base, ...JSON.parse(raw) }
   } catch { /* private mode or corrupt value */ }
-  return { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, ...WALL_DEFAULTS }
+  return base
 }
 
 /** A drawing currently open in a tab — only ever added once it has a real project id
@@ -88,6 +92,8 @@ export interface VastuStore {
   drawWidth: number
   addStroke: (s: Stroke) => void
   updateStroke: (id: string, patch: Partial<Pick<Stroke, 'pts' | 'color' | 'width'>>) => void
+  /** live drag/resize of a stroke — no history entry per move; the gesture pushes once itself */
+  moveStroke: (id: string, pts: Pt[]) => void
   deleteStroke: (id: string) => void
   clearStrokes: () => void
   setSelectedStroke: (id: string | null) => void
@@ -195,6 +201,8 @@ export interface VastuStore {
   deleteMarker: (id: string) => void
   setSelectedMarker: (id: string | null) => void
   setMarkerKind: (k: MarkerKind) => void
+  /** most recently picked kinds, newest first — feeds the kind picker's one-click row */
+  recentKinds: MarkerKind[]
   markerEditing: boolean
   setMarkerEditing: (on: boolean) => void
   /** auto-detect rooms: candidates awaiting the practitioner's review (null = closed) */
@@ -256,8 +264,13 @@ export const useStore = create<VastuStore>()((set, get) => {
   }
 
   const savePrefs = () => {
-    const { theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity } = get()
-    try { localStorage.setItem(THEME_KEY, JSON.stringify({ theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity })) } catch { /* private mode */ }
+    const { theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity, recentKinds } = get()
+    try { localStorage.setItem(THEME_KEY, JSON.stringify({ theme, accent, angleSnap, showEdgeLabels, wallColor, wallWidthM, wallOpacity, recentKinds })) } catch { /* private mode */ }
+  }
+  const bumpRecentKind = (k: MarkerKind) => {
+    if (k === 'custom') return
+    set((s) => ({ recentKinds: [k, ...s.recentKinds.filter((x) => x !== k)].slice(0, 8) }))
+    savePrefs()
   }
 
   const saveTabs = () => {
@@ -305,6 +318,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       }))
     },
     updateStroke: (id, patch) => { push(); set((s) => ({ strokes: s.strokes.map((x) => (x.id === id ? { ...x, ...patch } : x)) })) },
+    moveStroke: (id, pts) => set((s) => ({ strokes: s.strokes.map((x) => (x.id === id ? { ...x, pts } : x)) })),
     clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null, texts: [], selectedText: null, textEditing: false }) },
     setSelectedStroke: (selectedStroke) =>
       set({ selectedStroke, ...(selectedStroke === null ? {} : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
@@ -572,7 +586,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     // selections are mutually exclusive — on phones all the chip bars share one fixed slot
     setSelectedMarker: (selectedMarker) =>
       set({ selectedMarker, ...(selectedMarker === null ? { markerEditing: false } : { selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
-    setMarkerKind: (markerKind) => set({ markerKind }),
+    setMarkerKind: (markerKind) => { set({ markerKind }); bumpRecentKind(markerKind) },
     markerEditing: false,
     setMarkerEditing: (markerEditing) => set({ markerEditing }),
     detectedRooms: null,
@@ -610,7 +624,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     clearRoomShapes: () => { push(); set({ roomShapes: [], selectedRoomShape: null }) },
     setSelectedRoomShape: (selectedRoomShape) =>
       set({ selectedRoomShape, ...(selectedRoomShape === null ? { roomShapeEditing: false } : { selectedMarker: null, markerEditing: false, selectedStroke: null, selectedText: null, textEditing: false }) }),
-    setRoomShapeKind: (roomShapeKind) => set({ roomShapeKind }),
+    setRoomShapeKind: (roomShapeKind) => { set({ roomShapeKind }); bumpRecentKind(roomShapeKind) },
     setRoomDrawMode: (roomDrawMode) => set({ roomDrawMode }),
     setRoomShapeEditing: (roomShapeEditing) => set({ roomShapeEditing }),
     setReport: (patch) => set((s) => ({ report: { ...s.report, ...patch } })),
@@ -686,7 +700,11 @@ export const useStore = create<VastuStore>()((set, get) => {
         northDeg: p.northDeg,
         // legacy files predate northSource — a set bearing there was a deliberate manual act
         northSource: p.northSource ?? (p.northDeg ? 'manual' : null),
-        compass: { ...DEFAULT_COMPASS, ...p.compass },
+        // the 8-direction and degree-dial wheels were retired — files that used them open on 16 Zones
+        compass: {
+          ...DEFAULT_COMPASS, ...p.compass,
+          id: ['chakra8', 'dial'].includes(String(p.compass?.id)) ? 'zones16' : p.compass.id,
+        },
         locked: p.locked ?? false,
         markers: p.markers ?? [],
         selectedMarker: null,

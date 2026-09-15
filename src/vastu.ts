@@ -338,8 +338,6 @@ export const ANALYSIS_DISCLAIMER =
 export const COMPASS_META: { id: string; label: string; sub: string }[] = [
   { id: 'zones16', label: '16 Zones', sub: 'MahaVastu chakra' },
   { id: 'gates32', label: '32 Gates', sub: 'Entrance devtas' },
-  { id: 'chakra8', label: '8 Directions', sub: 'Dik chakra' },
   { id: 'grid9',   label: 'Pada Grid', sub: '9×9 mandala' },
-  { id: 'dial',    label: 'Degree Dial', sub: '0–360°' },
   { id: 'custom',  label: 'Custom', sub: 'Your own PNG' },
 ]
