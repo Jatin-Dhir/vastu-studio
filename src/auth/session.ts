@@ -192,9 +192,20 @@ export async function signOut(): Promise<void> {
   setAuth({ status: 'signed-out' })
 }
 
+/** No project configured (offline development only): seed the charts from the gitignored
+ *  rules/charts.json, fetched from the dev server — never imported, so no build can inline
+ *  it. Production builds always have a project and skip this entirely. */
+function loadDevCharts() {
+  if (!import.meta.env.DEV) return
+  void fetch(`${import.meta.env.BASE_URL}rules/charts.json`)
+    .then((r) => (r.ok ? r.json() : null))
+    .then((c: Charts | null) => { if (c) { setCharts(c); useStore.getState().setChartsReady(true) } })
+    .catch(() => { /* no local charts — analysis stays empty in this dev session */ })
+}
+
 /** Wire accounts into the app at boot: restore the session, verify the seat, keep verifying. */
 export function initAuth(): void {
-  if (!AUTH_ENABLED) { setAuth({ status: 'off' }); return }
+  if (!AUTH_ENABLED) { setAuth({ status: 'off' }); loadDevCharts(); return }
   setAuth({ status: 'loading' })
   void check().then(() => { if (useStore.getState().auth.status === 'ok') logEvent('open') })
   supabase().auth.onAuthStateChange((event) => {

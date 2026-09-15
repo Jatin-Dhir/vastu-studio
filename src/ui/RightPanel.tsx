@@ -236,7 +236,7 @@ export function RightPanel() {
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
-  const analysisOk = analysisAllowed(useStore((s) => s.auth))
+  const analysisOk = analysisAllowed(useStore((s) => s.auth), useStore((s) => s.chartsReady))
   const setCompass = useStore((s) => s.setCompass)
   const setTool = useStore((s) => s.setTool)
   // arming a canvas tool from a sheet button must get the sheet OUT of the way —

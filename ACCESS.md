@@ -24,8 +24,9 @@ before accounts existed — so nothing breaks mid-setup.
    npx supabase link --project-ref <ref>      # the id in the project URL
    npx supabase functions deploy admin-users
    ```
-5. **Charts** — Project settings → API → copy the `service_role` key (secret — never put it in
-   the app), then:
+5. **Charts** — they live only on the server and in the gitignored `rules/charts.json` on this
+   machine (never in the repo or the app). To (re)upload after editing that file:
+   Project settings → API → copy the `service_role` key (secret — never put it in the app), then:
    ```bash
    SUPABASE_URL=https://<ref>.supabase.co SUPABASE_SERVICE_ROLE_KEY=<key> node scripts/push-charts.mjs
    ```

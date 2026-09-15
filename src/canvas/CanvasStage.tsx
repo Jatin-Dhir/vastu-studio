@@ -106,6 +106,7 @@ export function CanvasStage() {
   const northDeg = useStore((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
   const auth = useStore((s) => s.auth)
+  const chartsReady = useStore((s) => s.chartsReady)
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
   const tool = useStore((s) => s.tool)
@@ -1038,7 +1039,7 @@ export function CanvasStage() {
   // and stays away entirely once the trial has ended (the analysis is the paid insight;
   // the Brahmasthan ring renders independently of the compass id, so silence it too)
   const editingOutline = tool === 'trace' || editDragging
-  const analysisOk = analysisAllowed(auth)
+  const analysisOk = analysisAllowed(auth, chartsReady)
   const sceneCompass = !analysisOk
     ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
     : editingOutline && compass.id !== 'none'
