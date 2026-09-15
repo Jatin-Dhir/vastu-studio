@@ -13,9 +13,10 @@ before accounts existed — so nothing breaks mid-setup.
 
 1. **Create the project** — supabase.com → New project → region *Mumbai (ap-south-1)*.
    Save the database password somewhere safe.
-2. **Phone sign-in** — Authentication → Providers → Phone → **Enable**. Leave *Enable phone
-   confirmations* **off** (users are created by the admin, never self-signup, so no SMS is sent).
-   Authentication → Settings → turn **Allow new users to sign up** off.
+2. **Auth** — nothing to enable: sign-in is by phone number, and under the hood each account is
+   an email user (`<digits>@phone.vastustudio.app`), so no SMS provider is involved. New accounts
+   start switched off until the admin grants access; as belt and braces you can also turn
+   **Allow new users to sign up** off under Authentication → Settings.
 3. **Schema** — SQL Editor → paste `supabase/migrations/20260915120000_access.sql` → Run.
 4. **Admin function** — from this folder, once:
    ```bash

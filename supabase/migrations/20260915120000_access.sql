@@ -10,7 +10,7 @@ create table if not exists public.profiles (
   name text not null default '',
   role text not null default 'user' check (role in ('user', 'admin')),
   expires_at timestamptz,               -- null = no end date
-  disabled boolean not null default false,
+  disabled boolean not null default true,   -- switched on by the admin when access is granted
   active_device text,                   -- the one device currently holding the seat
   active_device_name text,
   device_claimed_at timestamptz,
@@ -44,12 +44,14 @@ create table if not exists public.usage_events (
 create index if not exists usage_events_created_idx on public.usage_events (created_at desc);
 create index if not exists usage_events_user_idx on public.usage_events (user_id, created_at desc);
 
--- every new auth user gets a profile row (the admin function fills the rest)
+-- every new auth user gets a profile row — switched OFF until the admin grants access, so a
+-- stray self-signup never holds a seat. Sign-in is by phone; under the hood the auth user's
+-- email is <digits>@phone.vastustudio.app and the real phone rides in the user metadata.
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
 begin
   insert into public.profiles (id, phone, name)
-  values (new.id, new.phone, coalesce(new.raw_user_meta_data->>'name', ''))
+  values (new.id, coalesce(new.phone, new.raw_user_meta_data->>'phone'), coalesce(new.raw_user_meta_data->>'name', ''))
   on conflict (id) do nothing;
   return new;
 end $$;

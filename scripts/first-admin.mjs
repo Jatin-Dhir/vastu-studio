@@ -14,22 +14,23 @@ if (!url || !key || !phone) {
 }
 if (!/^\+[1-9]\d{7,14}$/.test(phone)) { console.error('Phone must be international, e.g. +919876543210'); process.exit(1) }
 
+const email = `${phone.replace(/^\+/, '')}@phone.vastustudio.app`
 const password = given ?? Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789'[b % 54]).join('')
 const headers = { apikey: key, Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' }
 
 // does the user already exist? (re-runs just promote + reset the password)
 const list = await fetch(`${url}/auth/v1/admin/users?page=1&per_page=1000`, { headers })
 if (!list.ok) { console.error('Auth admin API refused:', list.status, await list.text()); process.exit(1) }
-const existing = ((await list.json()).users ?? []).find((u) => u.phone === phone.replace(/^\+/, '') || u.phone === phone)
+const existing = ((await list.json()).users ?? []).find((u) => u.email === email)
 
 let id
 if (existing) {
   id = existing.id
-  const r = await fetch(`${url}/auth/v1/admin/users/${id}`, { method: 'PUT', headers, body: JSON.stringify({ password, phone_confirm: true, user_metadata: { name } }) })
+  const r = await fetch(`${url}/auth/v1/admin/users/${id}`, { method: 'PUT', headers, body: JSON.stringify({ password, email_confirm: true, user_metadata: { name, phone } }) })
   if (!r.ok) { console.error('Password reset failed:', r.status, await r.text()); process.exit(1) }
   console.log(`Existing user ${phone} — password reset.`)
 } else {
-  const r = await fetch(`${url}/auth/v1/admin/users`, { method: 'POST', headers, body: JSON.stringify({ phone, password, phone_confirm: true, user_metadata: { name } }) })
+  const r = await fetch(`${url}/auth/v1/admin/users`, { method: 'POST', headers, body: JSON.stringify({ email, password, email_confirm: true, user_metadata: { name, phone } }) })
   if (!r.ok) { console.error('Create failed:', r.status, await r.text()); process.exit(1) }
   id = (await r.json()).id
   console.log(`Created user ${phone}.`)
@@ -38,7 +39,7 @@ if (existing) {
 // the trigger made the profile row; make it the admin
 const p = await fetch(`${url}/rest/v1/profiles?id=eq.${id}`, {
   method: 'PATCH', headers: { ...headers, Prefer: 'return=minimal' },
-  body: JSON.stringify({ role: 'admin', name, disabled: false, expires_at: null }),
+  body: JSON.stringify({ role: 'admin', name, phone, disabled: false, expires_at: null }),
 })
 if (!p.ok) { console.error('Profile update failed:', p.status, await p.text()); process.exit(1) }
 

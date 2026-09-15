@@ -14,6 +14,9 @@ const BROADCAST_SEEN_KEY = 'vastu-studio.broadcast-seen.v1'
 
 const setAuth = (a: AuthSnapshot) => useStore.getState().setAuth(a)
 
+/** The auth user behind a phone number: no SMS provider needed, the phone stays the identity. */
+export const phoneToEmail = (p: string) => `${p.replace(/^\+/, '')}@phone.vastustudio.app`
+
 /** Indian numbers typed the local way become E.164; anything already international passes. */
 export function normalizePhone(raw: string): string {
   const s = raw.replace(/[\s\-().]/g, '')
@@ -154,7 +157,7 @@ export async function signIn(phone: string, password: string): Promise<string | 
   const p = normalizePhone(phone)
   if (!/^\+[1-9]\d{7,14}$/.test(p)) return 'Enter the phone number your account was created with'
   if (!password) return 'Enter your password'
-  const { error } = await supabase().auth.signInWithPassword({ phone: p, password })
+  const { error } = await supabase().auth.signInWithPassword({ email: phoneToEmail(p), password })
   if (error) {
     if (/invalid login|invalid credentials/i.test(error.message)) return 'That phone number and password don’t match'
     if (/fetch|network/i.test(error.message)) return 'Can’t reach the server — check your connection and try again'
