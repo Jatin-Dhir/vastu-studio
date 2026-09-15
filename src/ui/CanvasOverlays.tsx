@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Check, ChevronDown, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
@@ -6,6 +6,7 @@ import { M_PER_FT, formatArea, formatLen } from '../format'
 import { placementOf, zoneRows } from '../analysis'
 import { NorthDial } from './NorthDial'
 import { KindPicker } from './KindPicker'
+import { assessItem, roomPolygon, sharesLine, verdictWord } from '../assess'
 import type { Pt, ViewState } from '../types'
 
 /** World → screen, the same transform the stage applies to #world. */
@@ -316,30 +317,58 @@ function RoomOptionsRow() {
 }
 
 /** Edit / delete chips for a tapped room shape. */
+/** The floating chip row, kept inside the stage: clear of the left edge and of the right
+ *  panel whatever the row's measured width turns out to be (a verdict chip can make it wide). */
+function Chips({ left, top, children }: { left: number; top: number; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [w, setW] = useState(0)
+  useLayoutEffect(() => { const el = ref.current; if (el && el.offsetWidth !== w) setW(el.offsetWidth) })
+  const panel = document.querySelector<HTMLElement>('.panel')
+  const panelLeft = panel ? panel.getBoundingClientRect().left : 0
+  // the desktop panel docks on the right; the phone sheet spans the width (left ≈ 0) and is ignored
+  const limit = (panelLeft > 400 ? panelLeft : window.innerWidth) - 8
+  return <div ref={ref} className="sel-chips" style={{ left: Math.max(8, Math.min(left, limit - w)), top }}>{children}</div>
+}
+
 export function RoomShapeChips() {
   const selectedRoomShape = useStore((s) => s.selectedRoomShape)
   const roomShapes = useStore((s) => s.roomShapes)
   const view = useStore((s) => s.view)
   const locked = useStore((s) => s.locked)
   const editing = useStore((s) => s.roomShapeEditing)
+  const pts = useStore((s) => s.pts)
+  const bulges = useStore((s) => s.bulges)
+  const closed = useStore((s) => s.closed)
+  const centerOverride = useStore((s) => s.centerOverride)
+  const northDeg = useStore((s) => s.northDeg)
   const r = roomShapes.find((x) => x.id === selectedRoomShape)
-  if (!r || locked || editing) return null
+  if (!r || editing) return null
   // sit just above the room's top edge, clear of its label and its resize handles
   const { midX, top } = screenBounds(view, r.pts, r.shape !== 'polygon')
   const st = useStore.getState()
+  let place: string | null = null
+  if (closed && pts.length >= 3) {
+    const poly = roomPolygon(r)
+    if (poly.length >= 3) {
+      const c = centerOverride ?? centroid(sampledPolygon(pts, bulges, true))
+      const xs = poly.map((q) => q.x), ys = poly.map((q) => q.y)
+      const anchor = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
+      const a = assessItem({ id: r.id, kind: r.kind, label: r.label, anchor, poly, center: c, northDeg })
+      const mark = a.verdict === 'ideal' || a.verdict === 'good' ? '✓ ' : a.verdict === 'avoid' ? '✕ ' : a.verdict === 'caution' ? '! ' : ''
+      place = `${mark}${verdictWord(a.verdict)} · ${sharesLine(a)}`
+    }
+  }
   return (
-    <div className="sel-chips" style={{
-      left: `max(8px, min(${midX - 60}px, calc(100vw - 220px)))`,
-      top: Math.max(60, top - 48),
-    }}>
-      <button className="chip" onClick={() => st.setRoomShapeEditing(true)}>
+    <Chips left={midX - 60} top={Math.max(60, top - 48)}>
+      {place && <span className="chip place">{place}</span>}
+      {!locked && <button className="chip" onClick={() => st.setRoomShapeEditing(true)}>
         <Pencil size={12} /> {r.label}
-      </button>
-      <button className="chip danger" aria-label="Delete" onClick={() => st.deleteRoomShape(r.id)}>
+      </button>}
+      {!locked && <button className="chip danger" aria-label="Delete" onClick={() => st.deleteRoomShape(r.id)}>
         <Trash2 size={12} />
-      </button>
+      </button>}
       <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedRoomShape(null)}><X size={12} /></button>
-    </div>
+    </Chips>
   )
 }
 
@@ -359,10 +388,7 @@ export function TextChips() {
   const st = useStore.getState()
   const label = t.text ? (t.text.length > 14 ? t.text.slice(0, 14) + '…' : t.text) : 'Note'
   return (
-    <div className="sel-chips" style={{
-      left: `max(8px, min(${sx - 60}px, calc(100vw - 220px)))`,
-      top: Math.max(60, sy - 44),
-    }}>
+    <Chips left={sx - 60} top={Math.max(60, sy - 44)}>
       <button className="chip" onClick={() => st.setTextEditing(true)}>
         <Pencil size={12} /> {label}
       </button>
@@ -370,7 +396,7 @@ export function TextChips() {
         <Trash2 size={12} />
       </button>
       <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedText(null)}><X size={12} /></button>
-    </div>
+    </Chips>
   )
 }
 
@@ -466,10 +492,7 @@ export function StrokeChips() {
     setLenEditing(false)
   }
   return (
-    <div className="sel-chips" style={{
-      left: `max(8px, min(${sx - 40}px, calc(100vw - 240px)))`,
-      top: Math.max(60, sy - 48),
-    }}>
+    <Chips left={sx - 40} top={Math.max(60, sy - 48)}>
       {measurable && !lenEditing && (
         <button className="chip" title="Set the exact length" onClick={beginEdit}>
           <Ruler size={12} /> {fmt(dist(s2.pts[0], s2.pts[1]))}
@@ -507,7 +530,7 @@ export function StrokeChips() {
         <Trash2 size={12} /> Delete
       </button>
       <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedStroke(null)}><X size={12} /></button>
-    </div>
+    </Chips>
   )
 }
 
@@ -686,15 +709,12 @@ export function MarkerChips() {
       const q = GATE_QUALITY[pl.pada.code]
       const mark = q?.v === 'good' ? '✓ ' : q?.v === 'avoid' ? '✕ ' : q?.v === 'caution' ? '! ' : ''
       place = `${mark}${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
+    } else if (m.kind === 'custom') {
+      place = `${pl.zone.key} — ${pl.zone.name}`
     } else {
-      const rule = PLACEMENT_RULES[m.kind]
-      const key = pl.zone.key
-      const verdict = !rule ? ''
-        : rule.ideal.includes(key) ? '✓ ideal · '
-          : rule.good.includes(key) ? '✓ good · '
-            : rule.avoid.includes(key) ? '✕ avoid · '
-              : rule.caution.includes(key) ? '! caution · ' : ''
-      place = `${verdict}${key} — ${pl.zone.name}`
+      const a = assessItem({ id: m.id, kind: m.kind, label: m.label, anchor: m.p, center: c, northDeg })
+      const mark = a.verdict === 'ideal' || a.verdict === 'good' ? '✓ ' : a.verdict === 'avoid' ? '✕ ' : a.verdict === 'caution' ? '! ' : ''
+      place = `${mark}${verdictWord(a.verdict)} · ${pl.zone.key} — ${pl.zone.name}`
     }
   }
 
@@ -704,10 +724,7 @@ export function MarkerChips() {
   const sy = view.ty + view.k * (m.p.x * sin + m.p.y * cos)
 
   return (
-    <div className="sel-chips" style={{
-      left: `max(8px, min(${sx - 60}px, calc(100vw - 250px)))`,
-      top: Math.max(60, sy - 58),
-    }}>
+    <Chips left={sx - 60} top={Math.max(60, sy - 58)}>
       {place && <span className="chip place">{place}</span>}
       {!locked && (
         <>
@@ -720,7 +737,7 @@ export function MarkerChips() {
         </>
       )}
       <button className="chip" aria-label="Deselect" onClick={() => st.setSelectedMarker(null)}><X size={12} /></button>
-    </div>
+    </Chips>
   )
 }
 
@@ -751,10 +768,7 @@ export function SelectionChips() {
   const clear = () => st.setSelection({ vertex: null, edge: null })
 
   return (
-    <div className="sel-chips" style={{
-      left: `max(8px, min(${sx}px, calc(100vw - 180px)))`,
-      top: Math.max(60, sy - 54),
-    }}>
+    <Chips left={sx} top={Math.max(60, sy - 54)}>
       {selectedVertex != null && (
         <button className="chip danger" onClick={() => {
           st.deletePoint(selectedVertex)
@@ -784,6 +798,6 @@ export function SelectionChips() {
         </>
       )}
       <button className="chip" aria-label="Deselect" onClick={clear}><X size={12} /></button>
-    </div>
+    </Chips>
   )
 }

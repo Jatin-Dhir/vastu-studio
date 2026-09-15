@@ -46,10 +46,17 @@ export const GATE_QUALITY: Record<string, GateQuality> = {}
 /* ------------------------------------------------------------------ */
 export interface Charts { zone_rules?: Record<string, Table>; gate_quality?: Record<string, GateQuality> }
 const listeners: (() => void)[] = []
+/** bumps on every setCharts — memoised analysis keys on it so a late-arriving chart re-reads */
+let version = 0
+export const chartsVersion = () => version
 /** Runs after setCharts — vastu.ts rebuilds its derived PLACEMENT_RULES here. */
-export function onChartsChanged(fn: () => void) { listeners.push(fn) }
+export function onChartsChanged(fn: () => void): () => void {
+  listeners.push(fn)
+  return () => { const i = listeners.indexOf(fn); if (i >= 0) listeners.splice(i, 1) }
+}
 /** Replace the tables in place: consumers hold references to these very objects. */
 export function setCharts(c: Charts) {
+  version += 1
   if (c.zone_rules) {
     for (const k of Object.keys(ZONE_RULES)) delete ZONE_RULES[k]
     Object.assign(ZONE_RULES, c.zone_rules)

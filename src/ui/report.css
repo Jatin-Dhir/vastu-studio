@@ -339,3 +339,10 @@
   .report-note { font-size: 9.5px; }
   .report-foot { margin-top: 10px; font-size: 8.5px; }
 }
+
+/* how an item spreads across zones — one chip per zone it touches */
+.report-shares { display: inline-flex; flex-wrap: wrap; gap: 4px 8px; }
+.report-share { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.report-share.v-avoid { color: #B23A2E; }
+.report-share.v-caution { color: #8F6318; }
+.report-move { color: #7A5A12; }

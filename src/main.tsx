@@ -6,6 +6,10 @@ import './index.css'
 import './theme.css'
 import App from './App'
 import { initNative, isNative } from './native'
+import { useStore } from './store'
+
+// dev-only handle for scripted UI checks (the map exposes itself the same way)
+if (import.meta.env.DEV) (window as unknown as { __vastu: typeof useStore }).__vastu = useStore
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

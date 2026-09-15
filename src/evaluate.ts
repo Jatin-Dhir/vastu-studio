@@ -1,8 +1,9 @@
-import { brahmasthanRadius, placementOf, zoneRows } from './analysis'
+import { brahmasthanRadius, zoneRows } from './analysis'
 import { dist } from './geometry'
-import { GATE_QUALITY, PLACEMENT_RULES, ZONE_SHAPE_NOTES, markerKindMeta } from './vastu'
-import { zoneEffect } from './rules16'
-import type { Marker, Pt, RoomShape } from './types'
+import { formatLen } from './format'
+import { ZONE_SHAPE_NOTES, type Verdict } from './vastu'
+import { assessAll, capFirst, moveSentence, type Assessment } from './assess'
+import type { Marker, Pt, RoomShape, Unit } from './types'
 
 export type Severity = 'good' | 'info' | 'warn' | 'bad'
 
@@ -10,16 +11,20 @@ export interface Finding {
   severity: Severity
   title: string
   detail: string
+  /** the marker or drawn room this is about */
   markerId?: string
   zoneIdx?: number
 }
 
 const SEV_ORDER: Record<Severity, number> = { bad: 0, warn: 1, info: 2, good: 3 }
+export const SEV_OF: Record<Verdict, Severity> = { ideal: 'good', good: 'good', neutral: 'info', caution: 'warn', avoid: 'bad' }
 
 export interface Evaluation {
   findings: Finding[]
   favourable: number
   attention: number
+  /** every marked item, read where it sits — the findings above are written from these */
+  assessments: Assessment[]
 }
 
 /** Where a drawn room/area anchors for analysis: its bounding-box centre — the same point
@@ -31,81 +36,61 @@ export function roomShapeAnchor(r: RoomShape): Pt | null {
   return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
 }
 
-/** The interpretive pass: entrances vs the 32 gates, placements vs classical rules,
- *  plot-shape cuts/extensions, and Brahmasthan occupancy. */
+/** The interpretive pass: every marker and room against the charts (areas by their real
+ *  zone coverage), entrances against the 32 gates, plot-shape cuts/extensions, and
+ *  Brahmasthan occupancy. */
 export function evaluateVastu(args: {
   sampled: Pt[]
   center: Pt
   northDeg: number
   markers: Marker[]
+  roomShapes?: RoomShape[]
+  metersPerPx?: number | null
+  unit?: Unit
   /** manual Brahmasthan size in % of the drawing-derived radius (default 100) */
   brahmaPct?: number
 }): Evaluation {
   const { sampled, center, northDeg, markers } = args
+  const roomShapes = args.roomShapes ?? []
+  const fmtD = (px: number) => (args.metersPerPx ? formatLen(px * args.metersPerPx, args.unit ?? 'ft') : null)
   const findings: Finding[] = []
+  const assessments = assessAll({ markers, roomShapes, center, northDeg })
 
-  /* entrances against the gates */
-  for (const m of markers.filter((x) => x.kind === 'entrance')) {
-    const pl = placementOf(m.p, center, northDeg)
-    const q = GATE_QUALITY[pl.pada.code]
-    if (q?.v === 'good') {
+  for (const a of assessments) {
+    if (a.gate) {
+      const g = a.gate
+      const tail = g.verdict === 'avoid' ? ' — the charts advise remedies or an alternative entry'
+        : g.verdict === 'caution' ? ' — classical texts advise remedies or an alternative entry' : ''
+      const better = g.better.length > 0 && (g.verdict === 'avoid' || g.verdict === 'caution')
+        ? ` Favourable gates on this wall: ${g.better.slice(0, 2).map((b) => `${b.code} ${b.devta}`).join(', ')}.` : ''
       findings.push({
-        severity: 'good', markerId: m.id,
-        title: `${m.label}: ${pl.pada.code} · auspicious gate`,
-        detail: q.note,
+        severity: SEV_OF[g.verdict], markerId: a.id,
+        title: `${a.label}: ${a.headline}`,
+        detail: `${g.note ?? 'a neutral gate in the classical reading'}${tail}${better}`,
       })
-    } else if (q?.v === 'avoid') {
-      findings.push({
-        severity: 'bad', markerId: m.id,
-        title: `${m.label}: ${pl.pada.code} · inauspicious gate`,
-        detail: `${q.note} — the charts advise remedies or an alternative entry`,
-      })
-    } else if (q?.v === 'caution') {
-      findings.push({
-        severity: 'warn', markerId: m.id,
-        title: `${m.label}: ${pl.pada.code} · challenging gate`,
-        detail: `${q.note} — classical texts advise remedies or an alternative entry`,
-      })
-    } else {
-      findings.push({
-        severity: 'info', markerId: m.id,
-        title: `${m.label}: ${pl.pada.code} · ${pl.pada.devta}`,
-        detail: 'a neutral gate in the classical reading',
-      })
+      continue
     }
-  }
-
-  /* placements against the classical matrix */
-  for (const m of markers.filter((x) => x.kind !== 'entrance' && x.kind !== 'custom')) {
-    const rule = PLACEMENT_RULES[m.kind]
-    if (!rule) continue
-    const pl = placementOf(m.p, center, northDeg)
-    const key = pl.zone.key
-    const meta = markerKindMeta(m.kind)
-    // the charts speak per zone — their line for THIS zone beats the generic rule text
-    const eff = zoneEffect(m.kind, key)
-    if (rule.ideal.includes(key)) {
-      findings.push({ severity: 'good', markerId: m.id, title: `${m.label} in ${key} — ideal`, detail: eff ?? rule.why.ideal ?? '' })
-    } else if (rule.good.includes(key)) {
-      findings.push({ severity: 'good', markerId: m.id, title: `${m.label} in ${key} — good`, detail: eff ?? rule.why.good ?? '' })
-    } else if (rule.avoid.includes(key)) {
-      findings.push({ severity: 'bad', markerId: m.id, title: `${m.label} in ${key} — avoid`, detail: eff ?? rule.why.avoid ?? `${meta.name} is classically avoided here` })
-    } else if (rule.caution.includes(key)) {
-      findings.push({ severity: 'warn', markerId: m.id, title: `${m.label} in ${key} — caution`, detail: eff ?? rule.why.caution ?? '' })
-    } else if (eff) {
-      findings.push({ severity: 'info', markerId: m.id, title: `${m.label} in ${key}`, detail: eff })
-    }
+    const move = moveSentence(a, fmtD)
+    const keep = a.keepOut
+      ? ` Keep it clear of ${a.keepOut.key} — ${Math.round(a.keepOut.pct)}% of it sits there (${a.keepOut.verdict}).`
+      : ''
+    // rows render `detail` bare and the report adds its own full stop, so no trailing period here
+    findings.push({
+      severity: SEV_OF[a.verdict], markerId: a.id,
+      title: `${a.label} ${a.headline}`,
+      detail: [a.why ? `${capFirst(a.why)}.` : null, move, keep.trim()].filter(Boolean).join(' ').replace(/\.$/, ''),
+    })
   }
 
   /* Brahmasthan occupancy — sized from the drawing itself, never the compass */
   const bR = brahmasthanRadius(sampled) * ((args.brahmaPct ?? 100) / 100)
-  for (const m of markers) {
-    if (dist(m.p, center) < bR) {
-      const heavy = m.kind === 'toilet' || m.kind === 'kitchen' || m.kind === 'water'
-        || m.kind === 'septic' || m.kind === 'dustbin' || m.kind === 'heater'
+  for (const a of assessments) {
+    if (a.gate) continue
+    if (dist(a.anchor, center) < bR) {
+      const heavy = ['toilet', 'kitchen', 'water', 'septic', 'dustbin', 'heater'].includes(a.kind)
       findings.push({
-        severity: heavy ? 'bad' : 'warn', markerId: m.id,
-        title: `${m.label} sits in the Brahmasthan`,
+        severity: heavy ? 'bad' : 'warn', markerId: a.id,
+        title: `${a.label} sits in the Brahmasthan`,
         detail: heavy
           ? 'toilets, kitchens and water sources in the centre are among the gravest doshas'
           : 'the centre should stay light and open — avoid weight and activity here',
@@ -139,5 +124,6 @@ export function evaluateVastu(args: {
     findings,
     favourable: findings.filter((f) => f.severity === 'good').length,
     attention: findings.filter((f) => f.severity === 'bad' || f.severity === 'warn').length,
+    assessments,
   }
 }

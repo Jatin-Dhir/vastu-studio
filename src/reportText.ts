@@ -1,14 +1,12 @@
-import type { Marker, Pt } from './types'
-import { placementOf } from './analysis'
 import type { Finding } from './evaluate'
-import { GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from './vastu'
-import { zoneEffect } from './rules16'
+import { PLACEMENT_RULES, ZONES16, markerKindMeta } from './vastu'
+import { moveSentence, sharesLine, type Assessment as ItemAssessment } from './assess'
 
 /**
  * The written assessment: what about this property can be improved, and what is a
  * fixed characteristic to plan around. Every sentence is assembled from the same
- * verified rule data the findings use (PLACEMENT_RULES.why, GATE_QUALITY notes,
- * shape findings) — nothing here invents doctrine of its own.
+ * assessments the findings use — the charts' own per-zone lines, the real zone
+ * coverage of each room, and the nearest better seat — nothing here invents doctrine.
  */
 
 export interface AssessmentItem {
@@ -40,74 +38,69 @@ function seatList(kind: string): string {
 }
 
 export function buildAssessment(args: {
-  items: Marker[]
-  center: Pt
-  northDeg: number
+  assessments: ItemAssessment[]
   findings: Finding[]
   strongest: { key: string; pct: number } | null
   weakest: { key: string; pct: number } | null
+  /** plan pixels → "3.2 m" / "10 ft 6 in", or null when the plan is unscaled */
+  fmtDistance: (px: number) => string | null
 }): Assessment {
-  const { items, center, northDeg, findings } = args
+  const { assessments, findings, fmtDistance } = args
   const improvable: AssessmentItem[] = []
   const structural: AssessmentItem[] = []
 
-  const entrances = items.filter((m) => m.kind === 'entrance')
-  const others = items.filter((m) => m.kind !== 'entrance')
+  const entrances = assessments.filter((a) => a.gate)
+  const others = assessments.filter((a) => !a.gate)
 
   let wellPlaced = 0
   let offSeat = 0
 
-  for (const m of others) {
-    const rule = PLACEMENT_RULES[m.kind]
-    if (!rule) continue
-    const pl = placementOf(m.p, center, northDeg)
-    const zk = pl.zone.key
-    if (rule.ideal.includes(zk) || rule.good.includes(zk)) { wellPlaced += 1; continue }
-    const bad = rule.avoid.includes(zk)
-    const caution = rule.caution.includes(zk)
-    if (!bad && !caution) continue
+  for (const a of others) {
+    if (a.verdict === 'ideal' || a.verdict === 'good') { wellPlaced += 1; continue }
+    if (a.verdict === 'neutral') continue
     offSeat += 1
-    // the charts' own per-zone line, wherever one exists
-    const why = zoneEffect(m.kind, zk) ?? (bad ? rule.why.avoid : rule.why.caution) ?? 'not a classical seat for it'
-    const kindName = markerKindMeta(m.kind).name.toLowerCase()
-    const seats = seatList(m.kind)
-    if (MOVABLE[m.kind]) {
+    const kindName = markerKindMeta(a.kind).name.toLowerCase()
+    const where = a.isArea && a.shares.length > 1
+      ? `spread ${sharesLine(a)}`
+      : `in ${a.shares[0].key} (${a.shares[0].name})`
+    const why = a.why ?? 'not a classical seat for it'
+    const move = moveSentence(a, fmtDistance) ?? (seatList(a.kind) ? `The classical seats are ${seatList(a.kind)}.` : '')
+    const dom = a.shares[0].key
+    if (MOVABLE[a.kind]) {
       improvable.push({
-        title: `Relocate ${m.label} out of ${zk}`,
-        detail: `A ${kindName} in ${zk} (${pl.zone.name}) — ${why}. This is furniture-level work, no construction: the classical seats are ${seats}.`,
+        title: `Relocate ${a.label} out of ${dom}`,
+        detail: `A ${kindName} ${where} — ${why}. ${move} This is furniture-level work, no construction.`,
       })
-    } else if (PLUMBED[m.kind]) {
+    } else if (PLUMBED[a.kind]) {
       improvable.push({
-        title: `Mitigate ${m.label} in ${zk}`,
-        detail: `A ${kindName} in ${zk} (${pl.zone.name}) — ${why}. Relocation means plumbing and civil work, so classical practice first mitigates in place${m.kind === 'toilet' ? ' (keep it sealed, ventilated and closed)' : ' (shift the cooking fire within the room toward its favourable corner)'}. If a remodel is ever on the table, the classical seats are ${seats}.`,
+        title: `Mitigate ${a.label} in ${dom}`,
+        detail: `A ${kindName} ${where} — ${why}. Relocation means plumbing and civil work, so classical practice first mitigates in place${a.kind === 'toilet' ? ' (keep it sealed, ventilated and closed)' : a.kind === 'kitchen' ? ' (shift the cooking fire within the room toward its favourable corner)' : ''}. If a remodel is ever on the table: ${move}`,
       })
     } else {
       improvable.push({
-        title: `Review ${m.label} in ${zk}`,
-        detail: `${why}. Classical seats: ${seats}.`,
+        title: `Review ${a.label} in ${dom}`,
+        detail: `A ${kindName} ${where} — ${why}. ${move}`,
       })
     }
   }
 
-  for (const m of entrances) {
-    const pl = placementOf(m.p, center, northDeg)
-    const q = GATE_QUALITY[pl.pada.code]
-    const sideGood = GATES32
-      .filter((g) => g.code[0] === pl.pada.code[0] && GATE_QUALITY[g.code]?.v === 'good')
-      .map((g) => g.code)
-    if (q?.v === 'caution' || q?.v === 'avoid') {
+  for (const a of entrances) {
+    const g = a.gate!
+    const z = a.shares[0]
+    const sideGood = g.better.map((b) => b.code)
+    if (g.verdict === 'caution' || g.verdict === 'avoid') {
       improvable.push({
-        title: `Work on the ${pl.pada.code} entrance (${m.label})`,
-        detail: `${q.note}. The opening itself is structural, so classical practice treats the gate rather than the wall${sideGood.length ? ` — and if this side ever gains a second doorway, the favourable gates on it are ${sideGood.join(', ')}` : ''}.`,
+        title: `Work on the ${g.code} entrance (${a.label})`,
+        detail: `${g.note ?? ''}. The opening itself is structural, so classical practice treats the gate rather than the wall${sideGood.length ? ` — and if this side ever gains a second doorway, the favourable gates on it are ${sideGood.join(', ')}` : ''}.`,
       })
       structural.push({
-        title: `${m.label} sits on pada ${pl.pada.code} · ${pl.pada.devta}`,
-        detail: `Its position in the ${pl.zone.key} wall is a built fact of the property — remedies can soften it, but only construction can move it.`,
+        title: `${a.label} sits on pada ${g.code} · ${g.devta}`,
+        detail: `Its position in the ${z.key} wall is a built fact of the property — remedies can soften it, but only construction can move it.`,
       })
-    } else if (q?.v === 'good') {
+    } else if (g.verdict === 'good') {
       structural.push({
-        title: `${m.label} on ${pl.pada.code} · ${pl.pada.devta} is an asset`,
-        detail: `${q.note}. A favourable, permanent characteristic — nothing to change here.`,
+        title: `${a.label} on ${g.code} · ${g.devta} is an asset`,
+        detail: `${g.note ?? ''}. A favourable, permanent characteristic — nothing to change here.`,
       })
     }
   }
@@ -125,10 +118,10 @@ export function buildAssessment(args: {
   // Brahmasthan occupancy reads as improvable — the occupant moves, the centre doesn't
   for (const f of findings) {
     if (/brahmasthan/i.test(f.title) && f.severity !== 'good' && f.markerId) {
-      const m = items.find((x) => x.id === f.markerId)
-      if (m) {
+      const a = assessments.find((x) => x.id === f.markerId)
+      if (a) {
         improvable.push({
-          title: `Free the Brahmasthan of ${m.label}`,
+          title: `Free the Brahmasthan of ${a.label}`,
           detail: `${f.detail}. The centre itself is fixed; what occupies it is not — classical practice keeps the central ninth open and light.`,
         })
       }
@@ -137,7 +130,7 @@ export function buildAssessment(args: {
 
   const bits: string[] = []
   if (others.length > 0) {
-    bits.push(`Of the ${others.length} placements marked, ${wellPlaced} sit in their classically favourable zones and ${offSeat} ${offSeat === 1 ? 'calls' : 'call'} for attention.`)
+    bits.push(`Of the ${others.length} placements marked, ${wellPlaced} sit in their favourable zones and ${offSeat} ${offSeat === 1 ? 'calls' : 'call'} for attention.`)
   }
   if (args.strongest && args.weakest) {
     bits.push(`The plot gives its most area to ${args.strongest.key} (${args.strongest.pct.toFixed(1)}%) and its least to ${args.weakest.key} (${args.weakest.pct.toFixed(1)}%).`)

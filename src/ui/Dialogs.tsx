@@ -122,10 +122,11 @@ export function CalibrateDialog() {
   )
 }
 
-import { GATE_QUALITY, PLACEMENT_RULES, markerKindMeta, type Verdict } from '../vastu'
+import { GATE_QUALITY, markerKindMeta, type Verdict } from '../vastu'
 import { placementOf } from '../analysis'
-import { zoneEffect, zoneVerdict } from '../rules16'
 import { roomShapeAnchor } from '../evaluate'
+import { assessItem, moveSentence, roomPolygon, sharesLine } from '../assess'
+import { formatLen } from '../format'
 import { centroid, sampledPolygon } from '../geometry'
 import { KindPicker } from './KindPicker'
 import type { MarkerKind, Pt } from '../types'
@@ -155,7 +156,9 @@ const VERDICT_CLASS: Record<Verdict, string> = { ideal: 'good', good: 'good', ne
 
 /** What this kind means at this point of the plan — live, so changing the kind answers
  *  "and what would THAT be here?" before anything is saved. */
-function PlacementLine({ kind, p }: { kind: MarkerKind; p: Pt | null }) {
+function PlacementLine({ kind, p, poly }: { kind: MarkerKind; p: Pt | null; poly?: Pt[] }) {
+  const metersPerPx = useStore((s) => s.metersPerPx)
+  const unit = useStore((s) => s.unit)
   const pts = useStore((s) => s.pts)
   const bulges = useStore((s) => s.bulges)
   const closed = useStore((s) => s.closed)
@@ -178,15 +181,13 @@ function PlacementLine({ kind, p }: { kind: MarkerKind; p: Pt | null }) {
   if (kind === 'custom') {
     return <div className="place-line neutral"><b>{pl.zone.key} · {pl.zone.name}</b> — {pl.zone.theme}</div>
   }
-  const key = pl.zone.key
-  const rule = PLACEMENT_RULES[kind]
-  const v: Verdict = zoneVerdict(kind, key)
-    ?? (rule?.ideal.includes(key) ? 'ideal' : rule?.good.includes(key) ? 'good'
-      : rule?.avoid.includes(key) ? 'avoid' : rule?.caution.includes(key) ? 'caution' : 'neutral')
-  const eff = zoneEffect(kind, key) ?? rule?.why[v] ?? pl.zone.theme
+  const a = assessItem({ id: 'preview', kind, label: '', anchor: p, poly, center, northDeg })
+  const move = moveSentence(a, (px) => (metersPerPx ? formatLen(px * metersPerPx, unit) : null))
+  const top = a.shares[0]
   return (
-    <div className={`place-line ${VERDICT_CLASS[v]}`}>
-      <b>{key} · {pl.zone.name}</b> — {VERDICT_WORD[v]} · {eff}
+    <div className={`place-line ${VERDICT_CLASS[a.verdict]}`}>
+      <b>{a.isArea && a.shares.length > 1 ? sharesLine(a) : top ? `${top.key} · ${top.name}` : pl.zone.key}</b> — {VERDICT_WORD[a.verdict]}{a.why ? ` · ${a.why}` : ''}
+      {move && <span className="place-move">{move}</span>}
     </div>
   )
 }
@@ -268,7 +269,7 @@ export function RoomShapeDialog() {
   return (
     <Dialog title="Edit room" onClose={close} width={380}>
       <KindPicker inline value={kind} onChange={pickKind} exclude={['entrance']} />
-      <PlacementLine kind={kind} p={roomShapeAnchor(r)} />
+      <PlacementLine kind={kind} p={roomShapeAnchor(r)} poly={roomPolygon(r)} />
       <div className="cal-row">
         <input type="text" value={label} placeholder="Name (e.g. Bedroom 2)"
           onChange={(e) => setLabel(e.target.value)}

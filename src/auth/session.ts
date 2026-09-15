@@ -207,7 +207,19 @@ function loadDevCharts() {
 export function initAuth(): void {
   if (!AUTH_ENABLED) { setAuth({ status: 'off' }); loadDevCharts(); return }
   setAuth({ status: 'loading' })
-  void check().then(() => { if (useStore.getState().auth.status === 'ok') logEvent('open') })
+  void (async () => {
+    // a returning user opens straight into the studio: the last verified identity and the
+    // cached charts carry the first second, the heartbeat confirms (or revokes) right after
+    const { data: { session } } = await supabase().auth.getSession()
+    const ok = lastOk()
+    if (session && ok && Date.now() - ok.t < GRACE_MS) {
+      const cached = cachedCharts()
+      if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
+      setAuth({ status: 'ok', user: ok.user })
+    }
+    await check()
+    if (useStore.getState().auth.status === 'ok') logEvent('open')
+  })()
   supabase().auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_OUT') setAuth({ status: 'signed-out' })
   })

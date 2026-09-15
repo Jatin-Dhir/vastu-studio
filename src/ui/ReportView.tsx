@@ -10,8 +10,10 @@ import { brahmasthanRadius, placementOf, zoneRows } from '../analysis'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { formatArea, formatLen, formatScale } from '../format'
 import { GATES32, GATE_QUALITY, PLACEMENT_RULES, ZONES16, markerKindMeta } from '../vastu'
-import { evaluateVastu, roomShapeAnchor } from '../evaluate'
+import { evaluateVastu, roomShapeAnchor, SEV_OF } from '../evaluate'
 import type { Finding, Severity } from '../evaluate'
+import { capFirst, fmtPct, moveSentence, verdictWord, type Assessment as ItemAssessment } from '../assess'
+import { useChartsVersion } from './useChartsVersion'
 import type { Marker, NorthSource, Pt, ScaleSource } from '../types'
 import './report.css'
 
@@ -24,24 +26,22 @@ function Pill({ sev, children }: { sev: Severity; children: ReactNode }) {
   return <span className={`report-pill report-pill-${sev}`}>{children}</span>
 }
 
-type RuleVerdict = 'ideal' | 'good' | 'caution' | 'avoid' | 'neutral'
-
-/** Same ideal→good→avoid→caution precedence CanvasOverlays' MarkerChips and evaluate.ts's
- *  placement loop use, so a room's verdict here can never disagree with the canvas badge. */
-function ruleVerdict(kind: string, zoneKey: string): { verdict: RuleVerdict; why: string | null } {
-  const rule = PLACEMENT_RULES[kind]
-  if (!rule) return { verdict: 'neutral', why: null }
-  if (rule.ideal.includes(zoneKey)) return { verdict: 'ideal', why: rule.why.ideal ?? null }
-  if (rule.good.includes(zoneKey)) return { verdict: 'good', why: rule.why.good ?? null }
-  if (rule.avoid.includes(zoneKey)) return { verdict: 'avoid', why: rule.why.avoid ?? null }
-  if (rule.caution.includes(zoneKey)) return { verdict: 'caution', why: rule.why.caution ?? null }
-  return { verdict: 'neutral', why: null }
+function VerdictPill({ verdict }: { verdict: ItemAssessment['verdict'] }) {
+  return <Pill sev={SEV_OF[verdict]}>{verdictWord(verdict)}</Pill>
 }
 
-function VerdictPill({ verdict }: { verdict: RuleVerdict }) {
-  const sev: Severity = verdict === 'avoid' ? 'bad' : verdict === 'caution' ? 'warn' : verdict === 'neutral' ? 'info' : 'good'
-  const label = verdict === 'ideal' ? 'Ideal' : verdict === 'good' ? 'Good' : verdict === 'avoid' ? 'Avoid' : verdict === 'caution' ? 'Caution' : 'Neutral'
-  return <Pill sev={sev}>{label}</Pill>
+/** How a room or object spreads across the 16 zones — one chip per zone it touches. */
+function ShareChips({ a }: { a: ItemAssessment }) {
+  return (
+    <span className="report-shares">
+      {a.shares.map((s) => (
+        <span key={s.key} className={`report-share v-${s.verdict}`}>
+          <span className="report-zonechip" style={{ background: s.color }} />
+          {s.key}{a.shares.length > 1 ? ` ${fmtPct(s.pct)}` : ''}
+        </span>
+      ))}
+    </span>
+  )
 }
 
 /** Extra zone/pada context for a finding row — built from the same placementOf() the rest of
@@ -173,10 +173,13 @@ export function ReportView() {
     })],
     [markers, roomShapes],
   )
+  const chartsV = useChartsVersion()
   const ev = useMemo(
-    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers: items, brahmaPct: compass.brahmaPct }) : null),
-    [closed, center, sampled, northDeg, items, compass.brahmaPct],
+    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct }) : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [closed, center, sampled, northDeg, markers, roomShapes, metersPerPx, unit, compass.brahmaPct, chartsV],
   )
+  const fmtDistance = (px: number) => (metersPerPx ? formatLen(px * metersPerPx, unit) : null)
   const sevCounts = useMemo<Record<Severity, number>>(() => {
     const c: Record<Severity, number> = { good: 0, info: 0, warn: 0, bad: 0 }
     ev?.findings.forEach((f) => { c[f.severity] += 1 })
@@ -210,12 +213,14 @@ export function ReportView() {
     if (!ev || !center || !closed || !rows) return null
     const strongest = rows.reduce((a, b) => (b.pct > a.pct ? b : a))
     const weakest = rows.reduce((a, b) => (b.pct < a.pct ? b : a))
-    return buildAssessment({ items, center, northDeg, findings: ev.findings, strongest, weakest })
-  }, [ev, center, closed, rows, items, northDeg])
+    return buildAssessment({ assessments: ev.assessments, findings: ev.findings, strongest, weakest, fmtDistance })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ev, center, closed, rows, metersPerPx, unit])
 
   const entrances = items.filter((m) => m.kind === 'entrance')
-  const others = items.filter((m) => m.kind !== 'entrance')
-  const kindsPresent = Array.from(new Set(others.map((m) => m.kind))).filter((k) => PLACEMENT_RULES[k])
+  // every non-entrance item, read where it actually sits (rooms by their footprint)
+  const others: ItemAssessment[] = ev ? ev.assessments.filter((a) => !a.gate) : []
+  const kindsPresent = Array.from(new Set(others.map((a) => a.kind))).filter((k) => PLACEMENT_RULES[k])
   const curvedEdgeCount = bulges.filter((b) => Math.abs(b) > 1e-4).length
   const scaleLabel = scaleSourceLabel(scaleSource)
   const northLabel = northSourceLabel(northSource)
@@ -272,7 +277,9 @@ export function ReportView() {
         const ctx = center ? findingContext(f, items, center, northDeg) : null
         return {
           severity: f.severity,
-          text: `${f.title}. ${f.detail}.${ctx ? ` ${ctx.zoneLabel} — ${ctx.theme}${ctx.extra ? ` · ${ctx.extra}` : ''}` : ''}`,
+          title: f.title,
+          detail: `${f.detail}.`,
+          context: ctx ? `${ctx.zoneLabel} — ${ctx.theme}${ctx.extra ? ` · ${ctx.extra}` : ''}` : null,
         }
       })
 
@@ -296,17 +303,18 @@ export function ReportView() {
         }
       }) : []
 
-      const roomsData: ReportPdfData['rooms'] = center ? others.map((m) => {
-        const pl = placementOf(m.p, center, northDeg)
-        const { verdict, why } = ruleVerdict(m.kind, pl.zone.key)
+      const roomsData: ReportPdfData['rooms'] = center ? others.map((a) => {
+        const pl = placementOf(a.anchor, center, northDeg)
         return {
-          item: m.label,
-          type: markerKindMeta(m.kind).name,
-          zone: `${pl.zone.key} — ${pl.zone.name}`,
+          item: a.label,
+          type: markerKindMeta(a.kind).name,
           pada: `${pl.pada.code} ${pl.pada.devta}`,
-          verdict: verdict === 'ideal' ? 'Ideal' : verdict === 'good' ? 'Good' : verdict === 'avoid' ? 'Avoid' : verdict === 'caution' ? 'Caution' : 'Neutral',
-          verdictSev: verdict === 'avoid' ? 'bad' as const : verdict === 'caution' ? 'warn' as const : verdict === 'neutral' ? 'info' as const : 'good' as const,
-          why: why ? `${why}.` : null,
+          shares: a.shares.map((s) => ({ key: s.key, pct: s.pct, color: s.color })),
+          verdict: verdictWord(a.verdict),
+          verdictSev: SEV_OF[a.verdict],
+          why: a.why ? `${capFirst(a.why)}.` : null,
+          move: moveSentence(a, fmtDistance),
+          note: markers.find((m) => m.id === a.id)?.note ?? roomShapes.find((r) => r.id === a.id)?.note ?? null,
         }
       }) : []
 
@@ -319,6 +327,7 @@ export function ReportView() {
           name: r.name,
           theme: r.theme,
           share: `${r.pct.toFixed(1)}%`,
+          sharePct: r.pct,
           area: metersPerPx ? formatArea(r.areaPx * metersPerPx ** 2, unit) : null,
           status: flag ? (over ? 'Over-occupied' : 'Under-used') : 'Balanced',
           statusSev: flag ? flag.severity : null,
@@ -558,24 +567,28 @@ export function ReportView() {
             <h2>Rooms & objects</h2>
             <div className="report-table-wrap">
               <table className="report-table">
-                <thead><tr><th>Item</th><th>Type</th><th>Zone</th><th>Pada</th><th>Verdict</th><th>Notes</th></tr></thead>
+                <thead><tr><th>Item</th><th>Type</th><th>Where it sits</th><th>Pada</th><th>Verdict</th><th>Notes</th></tr></thead>
                 <tbody>
-                  {others.map((m) => {
-                    const pl = placementOf(m.p, center, northDeg)
-                    const { verdict, why } = ruleVerdict(m.kind, pl.zone.key)
+                  {others.map((a) => {
+                    const pl = placementOf(a.anchor, center, northDeg)
+                    const note = markers.find((m) => m.id === a.id)?.note ?? roomShapes.find((r) => r.id === a.id)?.note
+                    const move = moveSentence(a, fmtDistance)
                     return (
-                      <Fragment key={m.id}>
+                      <Fragment key={a.id}>
                         <tr>
-                          <td>{m.label}</td>
-                          <td>{markerKindMeta(m.kind).name}</td>
-                          <td><span className="report-zonechip" style={{ background: pl.zone.color }} />{pl.zone.key} — {pl.zone.name}</td>
+                          <td>{a.label}</td>
+                          <td>{markerKindMeta(a.kind).name}</td>
+                          <td><ShareChips a={a} /></td>
                           <td>{pl.pada.code} {pl.pada.devta}</td>
-                          <td><VerdictPill verdict={verdict} /></td>
-                          <td>{m.note ?? ''}</td>
+                          <td><VerdictPill verdict={a.verdict} /></td>
+                          <td>{note ?? ''}</td>
                         </tr>
-                        {why && (
+                        {(a.why || move) && (
                           <tr className="report-subrow">
-                            <td colSpan={6} className="report-note">{why}.</td>
+                            <td colSpan={6} className="report-note">
+                              {a.why ? `${capFirst(a.why)}.` : ''}
+                              {move && <span className="report-move"> {move}</span>}
+                            </td>
                           </tr>
                         )}
                       </Fragment>

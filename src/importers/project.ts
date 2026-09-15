@@ -4,6 +4,8 @@ import { newProjectId, putProject, getProject, type ProjectRecord } from '../db'
 import { shareBlobNative } from '../native'
 
 export function downloadBlob(blob: Blob, filename: string) {
+  // dev-only: scripted checks read the generated file back instead of chasing the download
+  if (import.meta.env.DEV) (window as unknown as { __lastDownload?: { blob: Blob; filename: string } }).__lastDownload = { blob, filename }
   // inside the Android/iOS shell an anchor download silently does nothing —
   // route through the native share sheet there; the web keeps the download
   void shareBlobNative(blob, filename).then((handled) => {

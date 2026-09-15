@@ -1,16 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, Navigation, RotateCcw, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, MoveRight, Navigation, RotateCcw, XCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { analysisAllowed, requireAnalysis } from '../auth/gate'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
-import { placementOf, zoneRows } from '../analysis'
-import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
-import { evaluateVastu, roomShapeAnchor } from '../evaluate'
+import { zoneRows } from '../analysis'
+import { markerKindMeta } from '../vastu'
+import { evaluateVastu } from '../evaluate'
+import { assessAll, capFirst, fmtPct, moveSentence, verdictWord } from '../assess'
+import { useChartsVersion } from './useChartsVersion'
 import { processCompassImage } from '../imageTools'
 import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
-import type { CompassId, Marker, Pt, Tool } from '../types'
+import type { CompassId, Marker, Pt, RoomShape, Tool } from '../types'
 import { detectPdfScaleRatio, hasPdfOpen, renderPdfPage } from '../importers/pdf'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
@@ -153,6 +155,93 @@ function NorthRow() {
   )
 }
 
+/* ---------- rooms & objects: the assessment, one expandable row per item ---------- */
+
+function ItemsCard({ markers, roomShapes, center, northDeg }: {
+  markers: Marker[]; roomShapes: RoomShape[]; center: Pt; northDeg: number
+}) {
+  const metersPerPx = useStore((s) => s.metersPerPx)
+  const unit = useStore((s) => s.unit)
+  const selectedMarker = useStore((s) => s.selectedMarker)
+  const selectedRoomShape = useStore((s) => s.selectedRoomShape)
+  const chartsV = useChartsVersion()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const list = useMemo(() => assessAll({ markers, roomShapes, center, northDeg }), [markers, roomShapes, center, northDeg, chartsV])
+  // null = follow whatever is selected on the plan; '' = deliberately closed
+  const [open, setOpen] = useState<string | null>(null)
+  const openId = open ?? selectedMarker ?? selectedRoomShape
+  const fmtD = (px: number) => (metersPerPx ? formatLen(px * metersPerPx, unit) : null)
+  const select = (id: string) => {
+    const st = useStore.getState()
+    if (st.roomShapes.some((r) => r.id === id)) st.setSelectedRoomShape(id)
+    else st.setSelectedMarker(id)
+  }
+  const right = list.filter((a) => a.verdict === 'ideal' || a.verdict === 'good').length
+  const off = list.filter((a) => a.verdict === 'caution' || a.verdict === 'avoid').length
+  if (list.length === 0) return null
+  return (
+    <section className="card">
+      <header className="card-head">
+        <h2>Rooms & objects</h2>
+        <span className="file-chip">{right} right · {off} to move</span>
+      </header>
+      <div className="item-list">
+        {list.map((a) => {
+          const isOpen = openId === a.id
+          const meta = markerKindMeta(a.kind)
+          const top = a.shares[0]
+          return (
+            <div key={a.id} className={`item v-${a.verdict} ${isOpen ? 'open' : ''}`}>
+              <button type="button" className="item-head" aria-expanded={isOpen}
+                onClick={() => { setOpen(isOpen ? '' : a.id); select(a.id) }}>
+                <span className="kind-dot" style={{ background: meta.color }} />
+                <span className="item-name">{a.label}</span>
+                <span className="item-where">
+                  {a.gate ? a.gate.code : top ? (top.pct >= 99.5 ? top.key : `${fmtPct(top.pct)} ${top.key}`) : '—'}
+                </span>
+                <span className={`vbadge v-${a.verdict}`}>{verdictWord(a.verdict)}</span>
+              </button>
+              {isOpen && (
+                <div className="item-body">
+                  {a.gate ? (
+                    <>
+                      <p className="item-why"><b>{a.gate.code} · {a.gate.devta}</b>{a.gate.note ? ` — ${a.gate.note}` : ''}</p>
+                      {(a.gate.verdict === 'avoid' || a.gate.verdict === 'caution') && a.gate.better.length > 0 && (
+                        <p className="item-move"><MoveRight size={12} /> Favourable gates on this wall: {a.gate.better.slice(0, 3).map((b) => `${b.code} ${b.devta}`).join(', ')}.</p>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="share-list">
+                        {a.shares.map((s) => (
+                          <div key={s.key} className="share-row" title={s.text ?? undefined}>
+                            <span className="share-key" style={{ color: s.color }}>{s.key}</span>
+                            <span className="share-bar"><i style={{ width: `${s.pct}%`, background: s.color }} /></span>
+                            <span className="share-pct">{fmtPct(s.pct)}</span>
+                            <span className={`share-v v-${s.verdict}`}>{verdictWord(s.verdict)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      {a.why && <p className="item-why">{capFirst(a.why)}.</p>}
+                      {a.move ? (
+                        <p className="item-move"><MoveRight size={12} /> {moveSentence(a, fmtD)}</p>
+                      ) : a.keepOut ? (
+                        <p className="item-ok"><CheckCircle2 size={12} /> Right where it should be — keep it clear of {a.keepOut.key}, {fmtPct(a.keepOut.pct)} of it sits there ({verdictWord(a.keepOut.verdict)}).</p>
+                      ) : (
+                        <p className="item-ok"><CheckCircle2 size={12} /> Right where it should be.</p>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </section>
+  )
+}
+
 /* ---------- zone balance chart ---------- */
 
 function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg: number }) {
@@ -263,16 +352,7 @@ export function RightPanel() {
   const customFileRef = useRef<HTMLInputElement>(null)
   const [pageBusy, setPageBusy] = useState(false)
 
-  // drawn rooms join the marker analysis as pseudo-markers at their bbox centre,
-  // the exact verdict types.ts promises an area
-  const items = useMemo<Marker[]>(
-    () => [...markers, ...roomShapes.flatMap((r) => {
-      const p = roomShapeAnchor(r)
-      return p ? [{ id: r.id, kind: r.kind, label: r.label, note: r.note, p }] : []
-    })],
-    [markers, roomShapes],
-  )
-  // panel list rows may carry a room-shape id — route selection to the right store slice
+  // findings rows may carry a room-shape id — route selection to the right store slice
   const selectItem = (id: string) => {
     const st = useStore.getState()
     if (st.roomShapes.some((r) => r.id === id)) st.setSelectedRoomShape(id)
@@ -670,46 +750,14 @@ export function RightPanel() {
         </div>
       </section>
 
-      {/* -------- Markers -------- */}
-      {analysisOk && items.length > 0 && center && closed && (
-        <section className="card">
-          <header className="card-head"><h2>Rooms & objects</h2></header>
-          {items.filter((m) => m.kind === 'entrance').map((m) => {
-            const pl = placementOf(m.p, center, northDeg)
-            return (
-              <button key={m.id} type="button" className="entrance-card"
-                style={{ width: '100%', textAlign: 'left' }}
-                onClick={() => selectItem(m.id)}>
-                <span className="entrance-title">{m.label}</span>
-                <b>{pl.pada.code} · {pl.pada.devta}</b>
-                <span className="lbl dim">{pl.zone.key} zone · {pl.bearing.toFixed(1)}° from centre</span>
-              </button>
-            )
-          })}
-          <div className="marker-list">
-            {items.filter((m) => m.kind !== 'entrance').map((m) => {
-              const pl = placementOf(m.p, center, northDeg)
-              const meta = markerKindMeta(m.kind)
-              return (
-                <button key={m.id} className="marker-row"
-                  onClick={() => selectItem(m.id)}>
-                  <span className="kind-dot" style={{ background: meta.color }} />
-                  <span className="marker-name">{m.label}</span>
-                  <span className="marker-zone" style={{ color: pl.zone.color }}>{pl.zone.key}</span>
-                  <span className="lbl dim">{pl.pada.code}</span>
-                </button>
-              )
-            })}
-          </div>
-          {items.some((m) => m.note) && (
-            <div className="zone-note">Notes on markers appear in the report.</div>
-          )}
-        </section>
+      {/* -------- Rooms & objects: each item read where it actually sits -------- */}
+      {analysisOk && (markers.length > 0 || roomShapes.length > 0) && center && closed && (
+        <ItemsCard markers={markers} roomShapes={roomShapes} center={center} northDeg={northDeg} />
       )}
 
       {/* -------- Vastu analysis -------- */}
       {analysisOk && closed && center && pts.length >= 3 && (() => {
-        const ev = evaluateVastu({ sampled, center, northDeg, markers: items, brahmaPct: compass.brahmaPct })
+        const ev = evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct })
         return (
           <section className="card">
             <header className="card-head">
@@ -741,7 +789,6 @@ export function RightPanel() {
                 </button>
               ))}
             </div>
-            {ev.findings.length > 0 && <div className="zone-note">{ANALYSIS_DISCLAIMER}</div>}
           </section>
         )
       })()}
