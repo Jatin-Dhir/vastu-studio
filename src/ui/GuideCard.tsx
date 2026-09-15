@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight, Check, Compass, MapPin, MousePointerClick, X } from 'lucide-react'
 import { useStore } from '../store'
-import { requireAnalysis } from '../license'
+import { requireAnalysis } from '../auth/gate'
 import { formatScale } from '../format'
 import { goToStep, useGuide } from './steps'
 

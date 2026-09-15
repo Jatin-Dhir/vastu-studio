@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, KeyRound, LocateFixed, Navigation, RotateCcw, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, Navigation, RotateCcw, XCircle } from 'lucide-react'
 import { useStore } from '../store'
-import { analysisAllowed, requireAnalysis } from '../license'
+import { analysisAllowed, requireAnalysis } from '../auth/gate'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
 import { placementOf, zoneRows } from '../analysis'
 import { ANALYSIS_DISCLAIMER, markerKindMeta } from '../vastu'
@@ -236,7 +236,7 @@ export function RightPanel() {
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
-  const analysisOk = analysisAllowed(useStore((s) => s.license))
+  const analysisOk = analysisAllowed(useStore((s) => s.auth))
   const setCompass = useStore((s) => s.setCompass)
   const setTool = useStore((s) => s.setTool)
   // arming a canvas tool from a sheet button must get the sheet OUT of the way —
@@ -669,18 +669,6 @@ export function RightPanel() {
           </span>
         </div>
       </section>
-
-      {/* -------- Analysis lock: after the trial, the readings are the paid part -------- */}
-      {!analysisOk && closed && (
-        <section className="card">
-          <header className="card-head"><h2>Vastu analysis</h2></header>
-          <p className="hint">Your trial has ended — the compass overlay, zone readings and findings
-            are part of the full version. Your plans and tracings are untouched.</p>
-          <button className="btn-primary panel-activate" onClick={() => useStore.getState().setActivationOpen(true)}>
-            <KeyRound size={14} /> Activate Vastu Studio
-          </button>
-        </section>
-      )}
 
       {/* -------- Markers -------- */}
       {analysisOk && items.length > 0 && center && closed && (

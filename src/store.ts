@@ -1,6 +1,7 @@
 import { create } from 'zustand'
 import { splitBulge } from './geometry'
-import type { BgState, CompassState, LicenseSnapshot, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, TextNote, Tool, Unit, ViewState } from './types'
+import type { AuthSnapshot } from './auth/types'
+import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, TextNote, Tool, Unit, ViewState } from './types'
 import type { DetectedRoom } from './roomDetect'
 
 export interface Toast {
@@ -122,11 +123,14 @@ export interface VastuStore {
   projectsOpen: boolean
   shortcutsOpen: boolean
   setShortcutsOpen: (open: boolean) => void
-  /** licensing display state — the key itself never leaves src/license.ts */
-  license: LicenseSnapshot
-  setLicense: (l: LicenseSnapshot) => void
-  activationOpen: boolean
-  setActivationOpen: (open: boolean) => void
+  /** account state — the session itself lives in src/auth/session.ts */
+  auth: AuthSnapshot
+  setAuth: (a: AuthSnapshot) => void
+  /** the practitioner's charts have arrived from the server (or their offline copy) */
+  chartsReady: boolean
+  setChartsReady: (on: boolean) => void
+  broadcast: { id: number; message: string } | null
+  setBroadcast: (b: { id: number; message: string } | null) => void
   /** TopBar's sheets live here (not component state) so the Android back button can peel them */
   moreOpen: boolean
   clearOpen: boolean
@@ -366,10 +370,12 @@ export const useStore = create<VastuStore>()((set, get) => {
     projectsOpen: false,
     shortcutsOpen: false,
     setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
-    license: { status: 'unconfigured' },
-    setLicense: (license) => set({ license }),
-    activationOpen: false,
-    setActivationOpen: (activationOpen) => set({ activationOpen }),
+    auth: { status: 'off' },
+    setAuth: (auth) => set({ auth }),
+    chartsReady: false,
+    setChartsReady: (chartsReady) => set({ chartsReady }),
+    broadcast: null,
+    setBroadcast: (broadcast) => set({ broadcast }),
     moreOpen: false,
     clearOpen: false,
     appearanceOpen: false,

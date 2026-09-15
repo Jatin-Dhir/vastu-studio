@@ -1,11 +1,12 @@
 import {
-  Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, KeyRound, Lock, LockOpen, Map as MapIcon,
-  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, Square as SquareIcon, Trash2, Undo2, Upload, Wand2,
+  Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
+  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, ShieldCheck, Square as SquareIcon, Trash2, Undo2, Upload, UserRound, Wand2,
 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { exportPng } from '../export'
-import { requireAnalysis, requireLicense } from '../license'
+import { requireAnalysis, requireLicense } from '../auth/gate'
+import { signOut } from '../auth/session'
 import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
 import { AppearanceSheet } from './AppearanceSheet'
@@ -88,7 +89,7 @@ export function TopBar() {
   const setClearOpen = useStore((s) => s.setClearOpen)
   const appearanceOpen = useStore((s) => s.appearanceOpen)
   const setAppearanceOpen = useStore((s) => s.setAppearanceOpen)
-  const license = useStore((s) => s.license)
+  const auth = useStore((s) => s.auth)
 
   const savePortable = () => { if (requireLicense()) saveProjectFile() }
 
@@ -154,16 +155,20 @@ export function TopBar() {
     { icon: Wand2, label: 'Auto-detect rooms', sub: 'Find labelled rooms on this plan', onTap: () => void runDetect() },
     { icon: FolderOpen, label: 'Projects', sub: 'Open, rename, back up', onTap: () => useStore.getState().setProjectsOpen(true) },
     { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', onTap: savePortable },
-    ...(license.status !== 'unconfigured' ? [{
-      icon: KeyRound,
-      label: 'Licence & activation',
-      sub: license.status === 'active' ? `Licensed · ${license.plan}`
-        : license.status === 'expired' ? 'Subscription ended — renew to keep working'
-        : license.status === 'trial-ended' ? 'Trial ended — activate to keep analysing'
-        : license.status === 'trial' ? `Trial — ${license.daysLeft} ${license.daysLeft === 1 ? 'day' : 'days'} left · exports locked`
-        : 'Trial mode',
-      onTap: () => useStore.getState().setActivationOpen(true),
-    }] : []),
+    ...(auth.status === 'ok' ? [
+      {
+        icon: UserRound,
+        label: auth.user.name || auth.user.phone,
+        sub: auth.user.expiresAt
+          ? `Access until ${new Date(auth.user.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · tap to sign out`
+          : 'Signed in · tap to sign out',
+        onTap: () => { void signOut() },
+      },
+      ...(auth.user.role === 'admin' ? [{
+        icon: ShieldCheck, label: 'Admin panel', sub: 'Users, access, updates, stats',
+        onTap: () => { location.hash = '#/admin' },
+      }] : []),
+    ] : []),
     { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },
     { icon: Eraser, label: 'Clear…', sub: 'Remove just the background, markers, drawings or outline', onTap: () => setClearOpen(true) },
   ]
@@ -212,15 +217,6 @@ export function TopBar() {
       </button>
 
       <div className="topbar-right">
-        {(license.status === 'trial' || license.status === 'trial-ended' || license.status === 'expired') && (
-          <button className={`trial-pill hide-mobile ${license.status !== 'trial' ? 'ended' : ''}`}
-            onClick={() => useStore.getState().setActivationOpen(true)}>
-            <KeyRound size={12} strokeWidth={2.2} />
-            {license.status === 'expired' ? 'Renew'
-              : license.status === 'trial-ended' ? 'Trial ended — activate'
-              : `Trial — ${license.daysLeft} ${license.daysLeft === 1 ? 'day' : 'days'} left`}
-          </button>
-        )}
         <button className={`icon-btn lock-btn hide-mobile ${locked ? 'locked' : ''}`} onClick={() => setLocked(!locked)}
           aria-label={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}
           data-tip={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}>

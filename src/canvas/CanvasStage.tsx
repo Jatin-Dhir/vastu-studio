@@ -5,7 +5,7 @@ import { importDxf, type DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgeLength, edgePoint, nearestOnEdge, polar, polygonArea, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import { haptic } from '../native'
-import { analysisAllowed } from '../license'
+import { analysisAllowed } from '../auth/gate'
 import { setGestureBusy } from './gesture'
 import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
@@ -105,7 +105,7 @@ export function CanvasStage() {
   const centerOverride = useStore((s) => s.centerOverride)
   const northDeg = useStore((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
-  const license = useStore((s) => s.license)
+  const auth = useStore((s) => s.auth)
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
   const tool = useStore((s) => s.tool)
@@ -1038,7 +1038,7 @@ export function CanvasStage() {
   // and stays away entirely once the trial has ended (the analysis is the paid insight;
   // the Brahmasthan ring renders independently of the compass id, so silence it too)
   const editingOutline = tool === 'trace' || editDragging
-  const analysisOk = analysisAllowed(license)
+  const analysisOk = analysisAllowed(auth)
   const sceneCompass = !analysisOk
     ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
     : editingOutline && compass.id !== 'none'

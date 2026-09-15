@@ -22,7 +22,7 @@ export type RuleVerdict = 'ideal' | 'good' | 'neutral' | 'caution' | 'avoid'
 
 export interface ZoneEffect { v: RuleVerdict; t: string }
 
-type Table = Partial<Record<ZoneKey, ZoneEffect>>
+export type Table = Partial<Record<ZoneKey, ZoneEffect>>
 
 export const ZONE_RULES: Record<string, Table> = {
   kitchen: {
@@ -547,4 +547,63 @@ export function zoneEffect(kind: string, zoneKey: string): string | null {
 
 export function zoneVerdict(kind: string, zoneKey: string): RuleVerdict | null {
   return ZONE_RULES[kind]?.[zoneKey as ZoneKey]?.v ?? null
+}
+
+/** All 32 entrances, per the practitioner's MahaVastu entrance wheel (rules/ charts,
+ *  transcribed 2026-09-03). Every gate now carries the wheel's own effect. */
+export interface GateQuality { v: 'good' | 'neutral' | 'caution' | 'avoid'; note: string }
+export const GATE_QUALITY: Record<string, GateQuality> = {
+  N1: { v: 'avoid',   note: 'Roga — raises the possibility of violence against the family' },
+  N2: { v: 'avoid',   note: 'Naga — breeds enmity and jealousy' },
+  N3: { v: 'good',    note: 'Mukhya — plenty of money; male progeny' },
+  N4: { v: 'good',    note: 'Bhallata — abundance of inherited and earned money' },
+  N5: { v: 'neutral', note: 'Soma — a religious bent of mind' },
+  N6: { v: 'avoid',   note: 'Bhujaga — fanatic behaviour' },
+  N7: { v: 'caution', note: 'Aditi — daughters defy the family’s traditions' },
+  N8: { v: 'good',    note: 'Diti — higher bank balance' },
+  E1: { v: 'avoid',   note: 'Shikhi — fire, accidents and losses' },
+  E2: { v: 'caution', note: 'Parjanya — more daughters born; wasteful expenditure' },
+  E3: { v: 'good',    note: 'Jayanta — money, profits and success' },
+  E4: { v: 'good',    note: 'Indra — monetary benefit through influential people' },
+  E5: { v: 'avoid',   note: 'Surya — short temper and aggression' },
+  E6: { v: 'avoid',   note: 'Satya — commitment failures; unreliability' },
+  E7: { v: 'avoid',   note: 'Bhrisha — insensitive behaviour' },
+  E8: { v: 'avoid',   note: 'Akasha — accidents, financial losses, burglary' },
+  S1: { v: 'avoid',   note: 'Anala — negative effects on the son' },
+  S2: { v: 'good',    note: 'Pusha — growth in job and position' },
+  S3: { v: 'good',    note: 'Vitatha — immense prosperity and money' },
+  S4: { v: 'good',    note: 'Grihakshata — male progeny; highly productive output' },
+  S5: { v: 'avoid',   note: 'Yama — debts mount and the mind stays blocked' },
+  S6: { v: 'avoid',   note: 'Gandharva — abysmal poverty' },
+  S7: { v: 'avoid',   note: 'Bhringaraja — total wastage of efforts, no result' },
+  S8: { v: 'avoid',   note: 'Mriga — disconnects the family from the world' },
+  W1: { v: 'avoid',   note: 'Pitra — poor finances and shortened life span' },
+  W2: { v: 'avoid',   note: 'Dauvarika — insecurity in relationships; women’s careers suffer' },
+  W3: { v: 'good',    note: 'Sugriva — money, growth and prosperity' },
+  W4: { v: 'good',    note: 'Pushpadanta — general happiness in life' },
+  W5: { v: 'caution', note: 'Varuna — over-ambition takes hold' },
+  W6: { v: 'avoid',   note: 'Asura — expectations go unfulfilled' },
+  W7: { v: 'avoid',   note: 'Shosha — addiction and lost happiness' },
+  W8: { v: 'avoid',   note: 'Papayakshma — unfair means creep in for personal benefit' },
+}
+
+/* ------------------------------------------------------------------ */
+/* Runtime registry — the charts arrive from the server for a signed-in */
+/* seat; the tables in this file are the bundled defaults until then.   */
+/* ------------------------------------------------------------------ */
+export interface Charts { zone_rules?: Record<string, Table>; gate_quality?: Record<string, GateQuality> }
+const listeners: (() => void)[] = []
+/** Runs after setCharts — vastu.ts rebuilds its derived PLACEMENT_RULES here. */
+export function onChartsChanged(fn: () => void) { listeners.push(fn) }
+/** Replace the tables in place: consumers hold references to these very objects. */
+export function setCharts(c: Charts) {
+  if (c.zone_rules) {
+    for (const k of Object.keys(ZONE_RULES)) delete ZONE_RULES[k]
+    Object.assign(ZONE_RULES, c.zone_rules)
+  }
+  if (c.gate_quality) {
+    for (const k of Object.keys(GATE_QUALITY)) delete GATE_QUALITY[k]
+    Object.assign(GATE_QUALITY, c.gate_quality)
+  }
+  for (const fn of listeners) fn()
 }

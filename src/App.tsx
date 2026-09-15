@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useStore, DEFAULT_COMPASS, BOOT_ACTIVE_TAB_ID } from './store'
 import { CanvasStage } from './canvas/CanvasStage'
 import { requestFit } from './canvas/fit'
@@ -19,8 +19,11 @@ import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
 import { ProjectsModal } from './ui/ProjectsModal'
 import { ReportView } from './ui/ReportView'
-import { ActivationPage } from './ui/ActivationPage'
-import { initLicensing } from './license'
+import { LoginPage } from './auth/LoginPage'
+import { AdminPage } from './admin/AdminPage'
+import { BroadcastBar } from './auth/BroadcastBar'
+import { initAuth, logEvent } from './auth/session'
+import { AUTH_ENABLED } from './auth/supabase'
 import { formatLen, formatScale } from './format'
 import { syncNativeChrome } from './native'
 import type { ProjectFile } from './types'
@@ -77,6 +80,23 @@ export default function App() {
   const theme = useStore((s) => s.theme)
   const accent = useStore((s) => s.accent)
   const fileRef = useRef<HTMLInputElement>(null)
+  const auth = useStore((s) => s.auth)
+  const [hash, setHash] = useState(() => location.hash)
+  useEffect(() => {
+    const onHash = () => setHash(location.hash)
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
+  }, [])
+  /* usage stats: an outline closed = one plan analysed, the report opened = one report */
+  useEffect(() => {
+    let wasClosed = useStore.getState().closed
+    let wasReport = useStore.getState().reportOpen
+    return useStore.subscribe((s) => {
+      if (s.closed && !wasClosed) logEvent('analysis')
+      if (s.reportOpen && !wasReport) logEvent('report')
+      wasClosed = s.closed; wasReport = s.reportOpen
+    })
+  }, [])
 
   /* appearance: theme/accent live as plain data-attributes so pure CSS drives every colour;
      OS chrome (meta theme-color, native status bar) follows the same switch */
@@ -130,7 +150,7 @@ export default function App() {
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
       const s = useStore.getState()
       // modal surfaces own the keyboard while open — each closes itself on Escape
-      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen || s.activationOpen) return
+      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
@@ -240,7 +260,7 @@ export default function App() {
   /* autosave + restore: legacy localStorage migrates into the IndexedDB library once */
   useEffect(() => {
     requestPersistence()
-    initLicensing()
+    initAuth()
     const st = useStore.getState()
     const legacy = loadAutosave()
     if (legacy && (legacy.bg.kind !== 'none' || legacy.pts.length > 0)) {
@@ -301,6 +321,10 @@ export default function App() {
     ;(window as any).vastu = { loadDemo, importFiles, importFromUrl, store: useStore, fit: requestFit }
   }, [])
 
+  // the front door: with a project configured, nothing renders until this device holds a valid seat
+  if (AUTH_ENABLED && auth.status !== 'ok') return <LoginPage />
+  if (hash === '#/admin' && auth.status === 'ok' && auth.user.role === 'admin') return <AdminPage />
+
   return (
     <div className="app">
       <TopBar />
@@ -337,7 +361,7 @@ export default function App() {
       {mapOpen && <MapModal />}
       {projectsOpen && <ProjectsModal />}
       {reportOpen && <ReportView />}
-      <ActivationPage />
+      <BroadcastBar />
       <input
         ref={fileRef}
         type="file"

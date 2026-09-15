@@ -2197,3 +2197,24 @@ kbd {
   .tool-rail { max-height: calc(100% - 16px); overflow-y: auto; scrollbar-width: none; }
   .tool-rail::-webkit-scrollbar { display: none; }
 }
+
+/* ---- login page fields: the activation layout's input, without the key letter-spacing ---- */
+.act-field {
+  width: 100%; padding: 10px 12px;
+  border-radius: 10px; border: 1px solid var(--stroke-2);
+  background: var(--surface-1); color: var(--text);
+  font: inherit; font-size: 14px;
+}
+.act-field:focus { outline: none; border-color: color-mix(in srgb, var(--gold) 60%, transparent); }
+.act-sub b { color: var(--text); }
+/* a message from the studio, pinned above everything until dismissed */
+.broadcast-bar {
+  position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+  z-index: 60; max-width: min(720px, calc(100vw - 24px));
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 12px; border: 1px solid color-mix(in srgb, var(--gold) 45%, transparent);
+  background: var(--panel-solid); color: var(--text); box-shadow: var(--shadow);
+  font-size: 12.5px; line-height: 1.45;
+}
+.broadcast-bar > svg { color: var(--gold); flex: 0 0 auto; }
