@@ -122,8 +122,74 @@ export function CalibrateDialog() {
   )
 }
 
-import { MARKER_KINDS } from '../vastu'
-import type { MarkerKind } from '../types'
+import { GATE_QUALITY, PLACEMENT_RULES, markerKindMeta, type Verdict } from '../vastu'
+import { placementOf } from '../analysis'
+import { zoneEffect, zoneVerdict } from '../rules16'
+import { roomShapeAnchor } from '../evaluate'
+import { centroid, sampledPolygon } from '../geometry'
+import { KindPicker } from './KindPicker'
+import type { MarkerKind, Pt } from '../types'
+
+const cap = (k: string) => k.charAt(0).toUpperCase() + k.slice(1)
+/** True while the name is still one the app generated for this kind ("Bed", "Bed 2",
+ *  "Television") — those follow a kind change; anything the practitioner typed stays. */
+function isAutoLabel(label: string, kind: MarkerKind): boolean {
+  const l = label.trim().toLowerCase()
+  if (!l) return true
+  return [cap(kind), markerKindMeta(kind).name].some((n) => {
+    const base = n.toLowerCase()
+    return l === base || (l.startsWith(base + ' ') && /^\d+$/.test(l.slice(base.length + 1)))
+  })
+}
+function nextLabel(kind: MarkerKind, taken: string[]): string {
+  const base = markerKindMeta(kind).name
+  const has = (name: string) => taken.some((t) => t.trim().toLowerCase() === name.toLowerCase())
+  if (!has(base)) return base
+  let n = 2
+  while (has(`${base} ${n}`)) n++
+  return `${base} ${n}`
+}
+
+const VERDICT_WORD: Record<Verdict, string> = { ideal: 'ideal seat', good: 'good', neutral: 'neutral', caution: 'caution', avoid: 'avoid' }
+const VERDICT_CLASS: Record<Verdict, string> = { ideal: 'good', good: 'good', neutral: 'neutral', caution: 'warn', avoid: 'bad' }
+
+/** What this kind means at this point of the plan — live, so changing the kind answers
+ *  "and what would THAT be here?" before anything is saved. */
+function PlacementLine({ kind, p }: { kind: MarkerKind; p: Pt | null }) {
+  const pts = useStore((s) => s.pts)
+  const bulges = useStore((s) => s.bulges)
+  const closed = useStore((s) => s.closed)
+  const centerOverride = useStore((s) => s.centerOverride)
+  const northDeg = useStore((s) => s.northDeg)
+  if (!p || !closed || pts.length < 3) {
+    return <div className="place-line neutral">Close the plot outline to see which zone this sits in.</div>
+  }
+  const center = centerOverride ?? centroid(sampledPolygon(pts, bulges, true))
+  const pl = placementOf(p, center, northDeg)
+  if (kind === 'entrance') {
+    const q = GATE_QUALITY[pl.pada.code]
+    const v: Verdict = q?.v ?? 'neutral'
+    return (
+      <div className={`place-line ${VERDICT_CLASS[v]}`}>
+        <b>{pl.pada.code} · {pl.pada.devta}</b> — {VERDICT_WORD[v]}{q ? ` · ${q.note}` : ''}
+      </div>
+    )
+  }
+  if (kind === 'custom') {
+    return <div className="place-line neutral"><b>{pl.zone.key} · {pl.zone.name}</b> — {pl.zone.theme}</div>
+  }
+  const key = pl.zone.key
+  const rule = PLACEMENT_RULES[kind]
+  const v: Verdict = zoneVerdict(kind, key)
+    ?? (rule?.ideal.includes(key) ? 'ideal' : rule?.good.includes(key) ? 'good'
+      : rule?.avoid.includes(key) ? 'avoid' : rule?.caution.includes(key) ? 'caution' : 'neutral')
+  const eff = zoneEffect(kind, key) ?? rule?.why[v] ?? pl.zone.theme
+  return (
+    <div className={`place-line ${VERDICT_CLASS[v]}`}>
+      <b>{key} · {pl.zone.name}</b> — {VERDICT_WORD[v]} · {eff}
+    </div>
+  )
+}
 
 export function MarkerDialog() {
   const editing = useStore((s) => s.markerEditing)
@@ -141,6 +207,12 @@ export function MarkerDialog() {
 
   if (!editing || !m) return null
   const close = () => useStore.getState().setMarkerEditing(false)
+  const pickKind = (k: MarkerKind) => {
+    if (isAutoLabel(label, kind)) {
+      setLabel(nextLabel(k, useStore.getState().markers.filter((x) => x.id !== m.id).map((x) => x.label)))
+    }
+    setKind(k)
+  }
   const save = () => {
     useStore.getState().updateMarker(m.id, { label: label.trim() || m.label, note: note.trim() || undefined, kind })
     close()
@@ -148,14 +220,8 @@ export function MarkerDialog() {
 
   return (
     <Dialog title="Edit marker" onClose={close} width={380}>
-      <div className="marker-kind-grid">
-        {MARKER_KINDS.map((k2) => (
-          <button key={k2.kind} className={`chip ${kind === k2.kind ? 'on-gold' : ''}`}
-            onClick={() => setKind(k2.kind as MarkerKind)}>
-            {k2.name}
-          </button>
-        ))}
-      </div>
+      <KindPicker inline value={kind} onChange={pickKind} />
+      <PlacementLine kind={kind} p={m.p} />
       <div className="cal-row">
         <input type="text" value={label} placeholder="Name (e.g. Main door)"
           onChange={(e) => setLabel(e.target.value)}
@@ -188,6 +254,12 @@ export function RoomShapeDialog() {
 
   if (!editing || !r) return null
   const close = () => useStore.getState().setRoomShapeEditing(false)
+  const pickKind = (k: MarkerKind) => {
+    if (isAutoLabel(label, kind)) {
+      setLabel(nextLabel(k, useStore.getState().roomShapes.filter((x) => x.id !== r.id).map((x) => x.label)))
+    }
+    setKind(k)
+  }
   const save = () => {
     useStore.getState().updateRoomShape(r.id, { label: label.trim() || r.label, note: note.trim() || undefined, kind })
     close()
@@ -195,14 +267,8 @@ export function RoomShapeDialog() {
 
   return (
     <Dialog title="Edit room" onClose={close} width={380}>
-      <div className="marker-kind-grid">
-        {MARKER_KINDS.filter((k2) => k2.kind !== 'entrance').map((k2) => (
-          <button key={k2.kind} className={`chip ${kind === k2.kind ? 'on-gold' : ''}`}
-            onClick={() => setKind(k2.kind as MarkerKind)}>
-            {k2.name}
-          </button>
-        ))}
-      </div>
+      <KindPicker inline value={kind} onChange={pickKind} exclude={['entrance']} />
+      <PlacementLine kind={kind} p={roomShapeAnchor(r)} />
       <div className="cal-row">
         <input type="text" value={label} placeholder="Name (e.g. Bedroom 2)"
           onChange={(e) => setLabel(e.target.value)}

@@ -1591,7 +1591,26 @@ kbd {
   resize: vertical;
   outline: none;
 }
-.marker-kind-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+/* the edit dialogs: the same searchable kind list as the toolbar, laid in place */
+.kind-picker.inline {
+  padding: 8px;
+  margin-bottom: 4px;
+  border-radius: 14px;
+  border: 1px solid var(--stroke);
+  background: var(--surface-1);
+}
+.kind-picker.inline .kind-list { max-height: 196px; }
+/* live "what this kind means right here" line under the picker */
+.place-line {
+  margin: 8px 2px 12px;
+  font-size: 12px; line-height: 1.5;
+  color: var(--muted);
+}
+.place-line b { color: var(--text); font-weight: 650; }
+.place-line.good { color: var(--ok); }
+.place-line.warn { color: var(--warn); }
+.place-line.bad { color: var(--danger-fg); }
+.place-line.good b, .place-line.warn b, .place-line.bad b { color: inherit; }
 
 /* draw tool options */
 .draw-swatch {
