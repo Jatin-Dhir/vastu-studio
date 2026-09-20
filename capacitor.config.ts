@@ -5,10 +5,10 @@ const config: CapacitorConfig = {
   appName: 'Vastu Studio',
   webDir: 'dist',
   android: {
-    backgroundColor: '#0B0C10',
+    backgroundColor: '#F3F1EA',
   },
   ios: {
-    backgroundColor: '#0B0C10',
+    backgroundColor: '#F3F1EA',
     contentInset: 'never',
   },
 }

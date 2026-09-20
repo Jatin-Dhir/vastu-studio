@@ -15,6 +15,9 @@ export interface Toast {
 interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[]; roomShapes: RoomShape[]; texts?: TextNote[]; compass?: CompassState }
 
 export type ThemeMode = 'ink' | 'paper'
+/** the phone app's sections */
+export type MobileTab = 'plans' | 'studio' | 'compass' | 'report' | 'account'
+export type MobileSheet = null | 'tools' | 'analysis' | 'compass'
 export type AccentId = 'gold' | 'teal' | 'rose' | 'sage'
 const THEME_KEY = 'vastu-studio.theme.v2'
 /** v1 stored Ink as the default; v2 opens on Paper. Read once to carry every other pref across. */
@@ -146,6 +149,11 @@ export interface VastuStore {
   clearOpen: boolean
   appearanceOpen: boolean
   setMoreOpen: (open: boolean) => void
+  mobileTab: MobileTab
+  setMobileTab: (t: MobileTab) => void
+  /** the phone studio's open sheet — in the store so the Android back button can close it */
+  mobileSheet: MobileSheet
+  setMobileSheet: (s: MobileSheet) => void
   setClearOpen: (open: boolean) => void
   setAppearanceOpen: (open: boolean) => void
   currentProjectId: string | null
@@ -390,6 +398,10 @@ export const useStore = create<VastuStore>()((set, get) => {
     clearOpen: false,
     appearanceOpen: false,
     setMoreOpen: (moreOpen) => set({ moreOpen }),
+    mobileTab: 'plans',
+    setMobileTab: (mobileTab) => set({ mobileTab, mobileSheet: null }),
+    mobileSheet: null,
+    setMobileSheet: (mobileSheet) => set({ mobileSheet }),
     setClearOpen: (clearOpen) => set({ clearOpen }),
     setAppearanceOpen: (appearanceOpen) => set({ appearanceOpen }),
     currentProjectId: null,

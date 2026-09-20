@@ -157,7 +157,7 @@ function NorthRow() {
 
 /* ---------- rooms & objects: the assessment, one expandable row per item ---------- */
 
-function ItemsCard({ markers, roomShapes, center, northDeg }: {
+export function ItemsCard({ markers, roomShapes, center, northDeg }: {
   markers: Marker[]; roomShapes: RoomShape[]; center: Pt; northDeg: number
 }) {
   const metersPerPx = useStore((s) => s.metersPerPx)

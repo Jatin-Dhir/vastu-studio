@@ -32,6 +32,7 @@ export async function initNative(): Promise<void> {
       // peel one layer per press: dialogs → modals → selections → armed tool → home
       const s = useStore.getState()
       if (s.appearanceOpen) return s.setAppearanceOpen(false)
+      if (s.mobileSheet) return s.setMobileSheet(null)
       if (s.clearOpen) return s.setClearOpen(false)
       if (s.moreOpen) return s.setMoreOpen(false)
       if (s.calDialogOpen) return s.setCalDialogOpen(false)
@@ -56,6 +57,8 @@ export async function initNative(): Promise<void> {
       if (s.roomDraft) return s.setRoomDraft(s.roomDraft.length > 1 ? s.roomDraft.slice(0, -1) : null)
       if (s.selectedVertex != null || s.selectedEdge != null) return s.setSelection({ vertex: null, edge: null })
       if (s.tool !== 'select') return s.setTool('select')
+      // the phone app: back from any section returns to Plans before leaving the app
+      if (document.querySelector('.m-app') && s.mobileTab !== 'plans') return s.setMobileTab('plans')
       void App.minimizeApp()
     })
   } catch { /* plugin missing */ }

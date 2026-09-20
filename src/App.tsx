@@ -15,6 +15,8 @@ import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips, ZoneInfoCard } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
 import { consumeSafeBoot } from './ui/ErrorBoundary'
+import { MobileApp } from './mobile/MobileApp'
+import { isPhone, usePhone } from './mobile/phone'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
@@ -37,7 +39,7 @@ const EMPTY_PROJECT: ProjectFile = {
   compass: { ...DEFAULT_COMPASS },
 }
 
-function CalibrateBar() {
+export function CalibrateBar() {
   const tool = useStore((s) => s.tool)
   const calA = useStore((s) => s.calA)
   const calB = useStore((s) => s.calB)
@@ -81,6 +83,8 @@ export default function App() {
   const theme = useStore((s) => s.theme)
   const accent = useStore((s) => s.accent)
   const fileRef = useRef<HTMLInputElement>(null)
+  const cameraRef = useRef<HTMLInputElement>(null)
+  const phone = usePhone()
   const auth = useStore((s) => s.auth)
   const [hash, setHash] = useState(() => location.hash)
   useEffect(() => {
@@ -126,9 +130,11 @@ export default function App() {
     }
   }, [])
 
-  /* file picker trigger */
+  /* file picker trigger (and the phone's camera input) */
   useEffect(() => {
     const open = () => fileRef.current?.click()
+    const camera = () => cameraRef.current?.click()
+    window.addEventListener('vastu:open-camera', camera)
     const reset = () => {
       clearAutosave()
       const st = useStore.getState()
@@ -139,6 +145,7 @@ export default function App() {
     window.addEventListener('vastu:open-file', open)
     window.addEventListener('vastu:reset', reset)
     return () => {
+      window.removeEventListener('vastu:open-camera', camera)
       window.removeEventListener('vastu:open-file', open)
       window.removeEventListener('vastu:reset', reset)
     }
@@ -285,7 +292,7 @@ export default function App() {
         s2.loadProject(rec.data)
         s2.setProjectMeta({ id: rec.id, name: rec.name })
         setTimeout(requestFit, 120)
-        s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
+        if (!isPhone()) s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
           window.dispatchEvent(new CustomEvent('vastu:reset'))
         })
       })
@@ -297,7 +304,7 @@ export default function App() {
         s2.loadProject(rec.data)
         s2.setProjectMeta({ id: rec.id, name: rec.name })
         setTimeout(requestFit, 120)
-        s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
+        if (!isPhone()) s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
           window.dispatchEvent(new CustomEvent('vastu:reset'))
         })
       })
@@ -327,6 +334,13 @@ export default function App() {
   // the front door: with a project configured, nothing renders until this device holds a valid seat
   if (AUTH_ENABLED && auth.status !== 'ok') return <LoginPage />
   if (hash === '#/admin' && auth.status === 'ok' && auth.user.role === 'admin') return <AdminPage />
+
+  if (phone) {
+    return (
+      <MobileApp fileRef={fileRef} cameraRef={cameraRef}
+        onFiles={(files) => { void importFiles(files).then((ok) => { if (ok) useStore.getState().setMobileTab('studio') }) }} />
+    )
+  }
 
   return (
     <div className="app">

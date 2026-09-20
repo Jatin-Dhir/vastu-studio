@@ -102,10 +102,14 @@ export function solidPng(size = 64, color = INK) {
 }
 
 /** Splash with the mark centred at a modest size on solid ink. */
+// the splash matches the app's default Paper ground, so launch → first screen has no flash;
+// the launcher icon keeps its dark plate (that is the mark's identity on a home screen)
+const PAPER = [243, 241, 234]
+const GOLD_DEEP = [169, 120, 46]
 export function renderSplash(size) {
   const img = Buffer.alloc(size * size * 4)
   for (let i = 0; i < size * size; i++) {
-    img[i * 4] = INK[0]; img[i * 4 + 1] = INK[1]; img[i * 4 + 2] = INK[2]; img[i * 4 + 3] = 255
+    img[i * 4] = PAPER[0]; img[i * 4 + 1] = PAPER[1]; img[i * 4 + 2] = PAPER[2]; img[i * 4 + 3] = 255
   }
   const S = size
   const aa = 1.2
@@ -124,9 +128,9 @@ export function renderSplash(size) {
       const my = (y - S / 2) / k + S / 2
       const m = Math.abs(mx - S / 2) + Math.abs(my - S / 2)
       const dBand = (Math.abs(m - S * 0.34) - S * 0.028) * k
-      put(i, GOLD, smooth(dBand))
+      put(i, GOLD_DEEP, smooth(dBand))
       const dDot = (Math.hypot(mx - S / 2, my - S / 2) - S * 0.055) * k
-      put(i, CREAM, smooth(dDot))
+      put(i, GOLD_DEEP, smooth(dDot))
     }
   }
   return encodePng(S, S, img)

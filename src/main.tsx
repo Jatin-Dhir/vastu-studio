@@ -8,6 +8,9 @@ import App from './App'
 import { ErrorBoundary } from './ui/ErrorBoundary'
 import { initNative, isNative } from './native'
 import { useStore } from './store'
+import { rememberForcedPhone } from './mobile/phone'
+
+rememberForcedPhone()
 
 // dev-only handle for scripted UI checks (the map exposes itself the same way)
 if (import.meta.env.DEV) (window as unknown as { __vastu: typeof useStore }).__vastu = useStore

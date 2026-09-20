@@ -16,7 +16,7 @@ import type { TextSample } from '../roomDetect'
 /** Finds room labels on the current background and hands candidates to AutoDetectDialog
  *  for review — never commits a marker itself. DXF reads its own exact text layer; a
  *  raster/PDF background goes through OCR (src/ocr.ts, lands from a parallel task). */
-async function runDetect() {
+export async function runDetect() {
   const s = useStore.getState()
   if (s.bg.kind === 'none') { s.toast('Import a plan first', 'info'); return }
   s.setBusy('Scanning the plan for room labels…')
