@@ -193,7 +193,7 @@ function UserRow({ u, isMe, act }: { u: AdminUser; isMe: boolean; act: (label: s
       <td>
         <div className="admin-until">
           <input type="date" value={date} onChange={(e) => setDate(e.target.value)}
-            onBlur={() => { const iso = date ? new Date(date + 'T23:59:59').toISOString() : null; if (iso !== u.expires_at && (iso ?? '') !== (u.expires_at ?? '')) void setAccess(iso) }} />
+            onBlur={() => { if (date === toDateInput(u.expires_at)) return; void setAccess(date ? new Date(date + 'T23:59:59').toISOString() : null) }} />
           <button className="chip" title="Extend by 30 days" onClick={() => void setAccess(plusDays(u.expires_at, 30))}><Plus size={11} /> 30 d</button>
           <button className="chip" title="Extend by one year" onClick={() => void setAccess(plusDays(u.expires_at, 365))}><Plus size={11} /> 1 y</button>
         </div>

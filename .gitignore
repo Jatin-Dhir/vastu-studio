@@ -5,3 +5,9 @@ dist
 rules/
 src-tauri/gen/
 .mcp.json
+
+# never commit secrets or the proprietary rule write-ups
+.env
+.env.*
+!.env.example
+Vastu-Direction-Rules.*

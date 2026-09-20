@@ -5,6 +5,7 @@ import '@fontsource/cormorant-garamond/600.css'
 import './index.css'
 import './theme.css'
 import App from './App'
+import { ErrorBoundary } from './ui/ErrorBoundary'
 import { initNative, isNative } from './native'
 import { useStore } from './store'
 
@@ -13,7 +14,9 @@ if (import.meta.env.DEV) (window as unknown as { __vastu: typeof useStore }).__v
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <App />
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>
   </StrictMode>,
 )
 

@@ -1,60 +1,80 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { ArrowRight, LogOut, MonitorSmartphone, RefreshCw } from 'lucide-react'
-import { useStore } from '../store'
+import { DEFAULT_COMPASS, useStore } from '../store'
+import { Scene } from '../canvas/Scene'
+import { centroid, circumradius } from '../geometry'
+import type { CompassState, Marker, Pt, RoomShape } from '../types'
 import { signIn, signOut, takeSeat, check } from './session'
 
-/** The instrument dial — the product's own visual vocabulary as the page's one hero:
- *  a graduated ring of real tick marks (the same language as the app's north dial),
- *  turning once every two minutes. Killed by the global reduced-motion rule. */
-function Dial({ pulsing }: { pulsing: boolean }) {
-  const ticks = Array.from({ length: 32 }, (_, i) => i * 11.25)
+/* ------------------------------------------------------------------ hero -- */
+
+/** A sample plan, drawn by the studio's own renderer: what the product does is the
+ *  first thing on the page. World units are centimetres (1 px = 1 cm). */
+const PLAN_PTS: Pt[] = [{ x: 0, y: 0 }, { x: 1000, y: 0 }, { x: 1000, y: 780 }, { x: 0, y: 780 }]
+const PLAN_ROOMS: RoomShape[] = [
+  { id: 'lp-toilet', kind: 'toilet', shape: 'rect', label: 'Toilet', pts: [{ x: 60, y: 50 }, { x: 230, y: 150 }] },
+  { id: 'lp-study', kind: 'study', shape: 'rect', label: 'Study', pts: [{ x: 60, y: 190 }, { x: 300, y: 430 }] },
+  { id: 'lp-living', kind: 'living', shape: 'rect', label: 'Living', pts: [{ x: 340, y: 60 }, { x: 700, y: 320 }] },
+  { id: 'lp-pooja', kind: 'pooja', shape: 'rect', label: 'Pooja', pts: [{ x: 760, y: 60 }, { x: 940, y: 220 }] },
+  { id: 'lp-dining', kind: 'dining', shape: 'rect', label: 'Dining', pts: [{ x: 720, y: 260 }, { x: 940, y: 470 }] },
+  { id: 'lp-bed', kind: 'bed', shape: 'rect', label: 'Bedroom', pts: [{ x: 60, y: 470 }, { x: 360, y: 720 }] },
+  { id: 'lp-kitchen', kind: 'kitchen', shape: 'rect', label: 'Kitchen', pts: [{ x: 700, y: 510 }, { x: 940, y: 720 }] },
+]
+const PLAN_MARKERS: Marker[] = [{ id: 'lp-door', kind: 'entrance', label: 'Entrance', p: { x: 560, y: 0 } }]
+const PLAN_COMPASS: CompassState = { ...DEFAULT_COMPASS, id: 'zones16', labels: true, brahmasthan: true, devtas: false, degreeRing: false }
+
+function PlanPlate({ paper }: { paper: boolean }) {
+  const geo = useMemo(() => {
+    const center = centroid(PLAN_PTS)
+    const R = circumradius(center, PLAN_PTS)
+    // the wheel and its zone labels reach ~1.2R from the centre — the view holds all of it
+    const reach = R * 1.26
+    return { center, R, vb: { x: center.x - reach, y: center.y - reach, w: reach * 2, h: reach * 2 } }
+  }, [])
   return (
-    <svg className={`act-dial ${pulsing ? 'pulse' : ''}`} viewBox="0 0 200 200" aria-hidden>
-      <circle cx="100" cy="100" r="88" fill="none" stroke="var(--tick)" strokeWidth="1" opacity="0.7" />
-      <circle cx="100" cy="100" r="64" fill="none" stroke="var(--stroke-2)" strokeWidth="1" />
-      <g className="act-dial-spokes">
-        {ticks.map((a) => {
-          const cardinal = a % 90 === 0
-          const zone = a % 22.5 === 0
-          return (
-            <line key={a} x1="100" y1={cardinal ? 22 : zone ? 15 : 12} x2="100" y2="10"
-              transform={`rotate(${a} 100 100)`}
-              stroke={cardinal ? 'var(--gold)' : zone ? 'var(--tick)' : 'var(--stroke-2)'}
-              strokeWidth={cardinal ? 1.8 : zone ? 1.2 : 1} />
-          )
-        })}
-        {Array.from({ length: 16 }, (_, i) => i * 22.5).map((a) => (
-          <line key={`s${a}`} x1="100" y1="36" x2="100" y2="64"
-            transform={`rotate(${a + 11.25} 100 100)`}
-            stroke="var(--stroke-2)" strokeWidth="0.8" />
-        ))}
-        <circle className="act-dial-core" cx="100" cy="100" r="26" fill="var(--bg)" stroke="var(--gold)" strokeWidth="1.2" />
+    <svg className="login-plan" viewBox={`${geo.vb.x} ${geo.vb.y} ${geo.vb.w} ${geo.vb.h}`} preserveAspectRatio="xMidYMid meet" aria-hidden>
+      <g className="login-plan-settle" style={{ transformOrigin: `${geo.center.x}px ${geo.center.y}px` }}>
+        <Scene
+          bg={{ kind: 'none', w: 1000, h: 780, opacity: 1, grayscale: false, invert: false }}
+          dxf={null} pts={PLAN_PTS} bulges={[0, 0, 0, 0]} closed center={geo.center} R={geo.R}
+          northDeg={0} compass={PLAN_COMPASS} metersPerPx={0.01} unit="ft" k={0.72}
+          showEdgeLabels markers={PLAN_MARKERS} roomShapes={PLAN_ROOMS}
+          paper={paper} idPrefix="login"
+        />
       </g>
-      <circle cx="100" cy="100" r="3" fill="var(--gold)" />
-      {[['N', 100, 5.5], ['E', 196.5, 104], ['S', 100, 199.5], ['W', 3.5, 104]].map(([t, x, y]) => (
-        <text key={t as string} x={x as number} y={y as number} textAnchor="middle"
-          fill={t === 'N' ? 'var(--gold)' : 'var(--dim)'} fontSize="10" fontWeight="700">{t}</text>
-      ))}
+    </svg>
+  )
+}
+
+/** The mark from the favicon: a tilted square with its centre point. */
+function Mark() {
+  return (
+    <svg className="login-mark" viewBox="0 0 32 32" aria-hidden>
+      <rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" strokeWidth="2" />
+      <circle cx="16" cy="16" r="3" fill="currentColor" />
     </svg>
   )
 }
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
-/** Full-screen front door: sign in, or explain exactly why the studio is closed
- *  (another device holds the seat, the subscription ended, access switched off,
- *  or the server has been unreachable past the grace window). */
+/* ------------------------------------------------------------------ page -- */
+
+/** The front door: the studio's own drawing on the left, the account on the right —
+ *  sign in, or exactly why the studio is closed (another device holds the seat, the
+ *  subscription ended, access is switched off, or the server has been out of reach
+ *  past the grace window). */
 export function LoginPage() {
   const auth = useStore((s) => s.auth)
+  const theme = useStore((s) => s.theme)
   const [phone, setPhone] = useState('')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [justIn, setJustIn] = useState(false)
   const phoneRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    if (auth.status === 'signed-out') window.setTimeout(() => phoneRef.current?.focus(), 350)
+    if (auth.status === 'signed-out') window.setTimeout(() => phoneRef.current?.focus(), 400)
   }, [auth.status])
 
   const submit = async () => {
@@ -63,7 +83,6 @@ export function LoginPage() {
     const problem = await signIn(phone, password)
     setBusy(false)
     if (problem) { setError(problem); return }
-    setJustIn(true)
     setPassword('')
   }
 
@@ -77,100 +96,119 @@ export function LoginPage() {
   const who = blocked?.user ? (blocked.user.name || blocked.user.phone) : ''
 
   return (
-    <div className="activation" role="dialog" aria-modal="true" aria-label="Vastu Studio sign in">
-      <div className="act-identity">
-        <Dial pulsing={justIn} />
-        <div className="act-wordmark">Vastu <em>Studio</em></div>
-        <p className="act-tag">The practitioner’s drawing board — import a plan, trace it, and read its zones, gates and Brahmasthan to scale.</p>
+    <div className="login" role="dialog" aria-modal="true" aria-label="Vastu Studio sign in">
+      <div className="login-plate">
+        <PlanPlate paper={theme === 'paper'} />
+        <div className="login-caption">
+          <span>A sample plan — its 16 zones, gates and Brahmasthan read to scale.</span>
+          <span>10 m × 7.8 m · north 0°</span>
+        </div>
       </div>
 
-      <div className="act-card">
-        {auth.status === 'loading' && (
-          <>
-            <h2 className="act-head">Opening the studio…</h2>
-            <p className="act-sub">Checking your account.</p>
-          </>
-        )}
+      <div className="login-col">
+        <div className="login-brand">
+          <Mark />
+          <span className="login-wordmark">Vastu Studio</span>
+        </div>
+        <p className="login-tag">The practitioner’s drawing board.</p>
 
-        {auth.status === 'signed-out' && (
-          <>
-            <h2 className="act-head">Sign in</h2>
-            <p className="act-sub">Use the phone number and password your account was set up with.</p>
-            <label className="act-key-label" htmlFor="login-phone">Phone number</label>
-            <input id="login-phone" ref={phoneRef} className="act-field" value={phone} inputMode="tel"
-              autoComplete="tel" placeholder="98765 43210" spellCheck={false}
-              onChange={(e) => { setPhone(e.target.value); setError(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') void submit() }} />
-            <label className="act-key-label" htmlFor="login-password">Password</label>
-            <input id="login-password" className="act-field" type="password" value={password}
-              autoComplete="current-password"
-              onChange={(e) => { setPassword(e.target.value); setError(null) }}
-              onKeyDown={(e) => { if (e.key === 'Enter') void submit() }} />
-            {error && <div className="act-error" role="alert">{error}</div>}
-            <button className="btn-primary act-cta" disabled={busy || !phone.trim() || !password} onClick={() => void submit()}>
-              {busy ? 'Signing in…' : 'Sign in'} {!busy && <ArrowRight size={15} />}
-            </button>
-            <p className="act-trial-note">No account yet? Access is arranged directly with the studio — get in touch for a subscription.</p>
-          </>
-        )}
+        <div className="login-body">
+          {auth.status === 'loading' && (
+            <>
+              <h2 className="login-head">Opening the studio</h2>
+              <p className="login-sub">Checking your account.</p>
+            </>
+          )}
 
-        {blocked?.reason === 'other_device' && (
-          <>
-            <h2 className="act-head">Signed in elsewhere</h2>
-            <p className="act-sub">
-              {who ? <><b>{who}</b> is </> : 'This account is '}currently open on <b>{blocked.deviceName || 'another device'}</b>.
-              One device at a time — using it here signs that one out.
-            </p>
-            {error && <div className="act-error" role="alert">{error}</div>}
-            <button className="btn-primary act-cta" disabled={busy}
-              onClick={() => void run(async () => { const p = await takeSeat(); if (p) setError(p) })}>
-              <MonitorSmartphone size={15} /> Use it here instead
-            </button>
-            <button className="btn-ghost act-trial" disabled={busy} onClick={() => void run(signOut)}>
-              <LogOut size={14} /> Sign out
-            </button>
-          </>
-        )}
+          {auth.status === 'signed-out' && (
+            <form onSubmit={(e) => { e.preventDefault(); void submit() }}>
+              <h2 className="login-head">Sign in</h2>
+              <p className="login-sub">With the phone number and password your account was set up with.</p>
+              <label className="login-label" htmlFor="login-phone">Phone number</label>
+              <input id="login-phone" ref={phoneRef} className="login-field" value={phone} inputMode="tel"
+                autoComplete="tel" placeholder="98765 43210" spellCheck={false}
+                onChange={(e) => { setPhone(e.target.value); setError(null) }} />
+              <label className="login-label" htmlFor="login-password">Password</label>
+              <input id="login-password" className="login-field" type="password" value={password}
+                autoComplete="current-password"
+                onChange={(e) => { setPassword(e.target.value); setError(null) }} />
+              {error && <div className="login-error" role="alert">{error}</div>}
+              <div className="login-actions">
+                <button type="submit" className="btn-primary login-cta" disabled={busy}>
+                  {busy ? 'Signing in…' : 'Sign in'} {!busy && <ArrowRight size={15} />}
+                </button>
+              </div>
+            </form>
+          )}
 
-        {blocked?.reason === 'expired' && (
-          <>
-            <h2 className="act-head">Subscription ended</h2>
-            <p className="act-sub">
-              {who && <><b>{who}</b> — </>}access ended{blocked.user?.expiresAt ? ` on ${fmtDate(blocked.user.expiresAt)}` : ''}.
-              Renew with the studio and sign in again; your saved plans are untouched.
-            </p>
-            <button className="btn-ghost act-trial" disabled={busy} onClick={() => void run(check)}>
-              <RefreshCw size={14} /> Check again
-            </button>
-            <button className="btn-ghost act-trial" disabled={busy} onClick={() => void run(signOut)}>
-              <LogOut size={14} /> Sign out
-            </button>
-          </>
-        )}
+          {blocked?.reason === 'other_device' && (
+            <>
+              <h2 className="login-head">Signed in elsewhere</h2>
+              <p className="login-sub">
+                {who ? <><b>{who}</b> is </> : 'This account is '}open on <b>{blocked.deviceName || 'another device'}</b>.
+                One device at a time — using it here signs that one out.
+              </p>
+              {error && <div className="login-error" role="alert">{error}</div>}
+              <div className="login-actions">
+                <button className="btn-primary login-cta" disabled={busy}
+                  onClick={() => void run(async () => { const p = await takeSeat(); if (p) setError(p) })}>
+                  <MonitorSmartphone size={15} /> Use it here
+                </button>
+                <button className="btn-ghost login-alt" disabled={busy} onClick={() => void run(signOut)}>
+                  <LogOut size={14} /> Sign out
+                </button>
+              </div>
+            </>
+          )}
 
-        {(blocked?.reason === 'disabled' || blocked?.reason === 'no_profile') && (
-          <>
-            <h2 className="act-head">Access switched off</h2>
-            <p className="act-sub">This account can’t open the studio right now. If that’s unexpected, contact the studio.</p>
-            <button className="btn-ghost act-trial" disabled={busy} onClick={() => void run(check)}>
-              <RefreshCw size={14} /> Check again
-            </button>
-            <button className="btn-ghost act-trial" disabled={busy} onClick={() => void run(signOut)}>
-              <LogOut size={14} /> Sign out
-            </button>
-          </>
-        )}
+          {blocked?.reason === 'expired' && (
+            <>
+              <h2 className="login-head">Subscription ended</h2>
+              <p className="login-sub">
+                {who && <><b>{who}</b> — </>}access ended{blocked.user?.expiresAt ? ` on ${fmtDate(blocked.user.expiresAt)}` : ''}.
+                Renew with the studio and sign in again. Your saved plans are untouched.
+              </p>
+              <div className="login-actions">
+                <button className="btn-primary login-cta" disabled={busy} onClick={() => void run(check)}>
+                  <RefreshCw size={15} /> Check again
+                </button>
+                <button className="btn-ghost login-alt" disabled={busy} onClick={() => void run(signOut)}>
+                  <LogOut size={14} /> Sign out
+                </button>
+              </div>
+            </>
+          )}
 
-        {blocked?.reason === 'offline' && (
-          <>
-            <h2 className="act-head">Reconnect to continue</h2>
-            <p className="act-sub">The server hasn’t been reachable for more than three days, so the account needs a fresh check. Connect to the internet and try again.</p>
-            {error && <div className="act-error" role="alert">{error}</div>}
-            <button className="btn-primary act-cta" disabled={busy} onClick={() => void run(check)}>
-              <RefreshCw size={15} /> Try again
-            </button>
-          </>
-        )}
+          {(blocked?.reason === 'disabled' || blocked?.reason === 'no_profile') && (
+            <>
+              <h2 className="login-head">Access switched off</h2>
+              <p className="login-sub">This account can’t open the studio right now. If that’s unexpected, contact the studio.</p>
+              <div className="login-actions">
+                <button className="btn-primary login-cta" disabled={busy} onClick={() => void run(check)}>
+                  <RefreshCw size={15} /> Check again
+                </button>
+                <button className="btn-ghost login-alt" disabled={busy} onClick={() => void run(signOut)}>
+                  <LogOut size={14} /> Sign out
+                </button>
+              </div>
+            </>
+          )}
+
+          {blocked?.reason === 'offline' && (
+            <>
+              <h2 className="login-head">Reconnect to continue</h2>
+              <p className="login-sub">The server has been out of reach for more than three days, so the account needs a fresh check. Connect to the internet and try again.</p>
+              {error && <div className="login-error" role="alert">{error}</div>}
+              <div className="login-actions">
+                <button className="btn-primary login-cta" disabled={busy} onClick={() => void run(check)}>
+                  <RefreshCw size={15} /> Try again
+                </button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <p className="login-foot">Access is arranged directly with the studio.</p>
       </div>
     </div>
   )

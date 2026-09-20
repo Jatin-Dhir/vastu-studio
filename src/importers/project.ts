@@ -27,12 +27,43 @@ export function saveProjectFile() {
   downloadBlob(new Blob([data], { type: 'application/json' }), name)
 }
 
+const finite = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
+const isPt = (q: unknown): q is { x: number; y: number } =>
+  !!q && typeof q === 'object' && finite((q as { x: unknown }).x) && finite((q as { y: unknown }).y)
+const ptList = (v: unknown) => (Array.isArray(v) ? v.filter(isPt) : [])
+/** Embedded images must be images the app itself produced — never a remote URL the
+ *  renderer would fetch (tracking) or that would taint the export canvas. */
+const isDataImage = (v: unknown) => typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v)
+
 export function parseProject(text: string): ProjectFile {
   let p: any
   try { p = JSON.parse(text) } catch { throw new Error('This .vastu file is damaged or incomplete — re-export it and try again') }
   if (p?.app !== 'vastu-studio' || !Array.isArray(p.pts) || typeof p.bg?.kind !== 'string') throw new Error('Not a Vastu Studio project file')
   // > 1 rather than !== 1 so legacy files without a numeric version keep loading
   if (typeof p.version === 'number' && p.version > 1) throw new Error('Saved by a newer Vastu Studio — update the app to open it')
+
+  // every number the renderer divides by or indexes with is checked here, once, so a
+  // hand-edited or truncated file degrades to "empty" rather than a blank screen
+  p.pts = ptList(p.pts)
+  p.bulges = Array.isArray(p.bulges) && p.bulges.length === p.pts.length ? p.bulges.map((b: unknown) => (finite(b) ? b : 0)) : undefined
+  p.closed = !!p.closed && p.pts.length >= 3
+  p.centerOverride = isPt(p.centerOverride) ? p.centerOverride : null
+  p.northDeg = finite(p.northDeg) ? ((p.northDeg % 360) + 360) % 360 : 0
+  p.metersPerPx = finite(p.metersPerPx) && p.metersPerPx > 0 ? p.metersPerPx : null
+  p.unit = p.unit === 'm' ? 'm' : 'ft'
+  p.compass = p.compass && typeof p.compass === 'object' ? p.compass : {}
+  if (p.compass.customUrl != null && !isDataImage(p.compass.customUrl)) delete p.compass.customUrl
+  for (const k of ['scalePct', 'opacity', 'fillPct', 'brahmaPct', 'customRotDeg', 'customAspect'] as const) {
+    if (p.compass[k] != null && !finite(p.compass[k])) delete p.compass[k]
+  }
+  if (p.bg.dataUrl != null && !isDataImage(p.bg.dataUrl)) { p.bg = { ...p.bg, kind: 'none', dataUrl: undefined } }
+  if (!finite(p.bg.w) || !finite(p.bg.h)) { p.bg.w = 0; p.bg.h = 0 }
+  p.markers = Array.isArray(p.markers) ? p.markers.filter((m: any) => m && typeof m.kind === 'string' && isPt(m.p)) : []
+  p.roomShapes = Array.isArray(p.roomShapes)
+    ? p.roomShapes.map((r: any) => (r && typeof r.kind === 'string' ? { ...r, pts: ptList(r.pts) } : null)).filter((r: any) => r && r.pts.length >= 2)
+    : []
+  p.strokes = Array.isArray(p.strokes) ? p.strokes.map((st: any) => (st ? { ...st, pts: ptList(st.pts) } : null)).filter((st: any) => st && st.pts.length >= 1) : []
+  p.texts = Array.isArray(p.texts) ? p.texts.filter((t: any) => t && isPt(t.p) && typeof t.text === 'string').map((t: any) => ({ ...t, size: finite(t.size) && t.size > 0 ? t.size : 16 })) : []
   return p as ProjectFile
 }
 

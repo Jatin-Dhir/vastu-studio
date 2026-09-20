@@ -18,6 +18,7 @@ export function deviceId(): string {
 export function deviceName(): string {
   const ua = navigator.userAgent
   const os = /Android/i.test(ua) ? 'Android' : /iPhone|iPad/i.test(ua) ? 'iPhone/iPad' : /Mac/i.test(ua) ? 'Mac' : /Win/i.test(ua) ? 'Windows PC' : 'Device'
-  const app = (window as unknown as { __TAURI__?: unknown }).__TAURI__ ? 'Vastu Studio app' : 'Vastu Studio in the browser'
+  // __TAURI_INTERNALS__ is present in every Tauri 2 webview, with or without the global API
+  const app = (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ ? 'Vastu Studio app' : 'Vastu Studio in the browser'
   return `${app} · ${os}`
 }

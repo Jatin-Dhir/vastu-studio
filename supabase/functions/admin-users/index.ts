@@ -40,19 +40,30 @@ Deno.serve(async (req) => {
         const name = String(body.name ?? '').trim()
         if (!/^\+[1-9]\d{7,14}$/.test(phone)) return json({ error: 'phone must be in international form, e.g. +919876543210' }, 400)
         if (password.length < 8) return json({ error: 'password needs at least 8 characters' }, 400)
+        const expires = body.expires_at ? String(body.expires_at) : null
+        if (expires && Number.isNaN(Date.parse(expires))) return json({ error: 'expires_at must be a date' }, 400)
         // sign-in is by phone; the auth user behind it is <digits>@phone.vastustudio.app
         const email = `${phone.replace(/^\+/, '')}@phone.vastustudio.app`
         const { data, error } = await admin.auth.admin.createUser({
           email, password, email_confirm: true, user_metadata: { name, phone },
         })
-        if (error) return json({ error: /already/i.test(error.message) ? 'an account with that phone number already exists' : error.message }, 400)
+        if (error) {
+          return json({
+            error: /already/i.test(error.message)
+              ? 'an account with that phone number already exists — find it in the list to switch it on, or delete it and create again'
+              : error.message,
+          }, 400)
+        }
         const id = data.user.id
-        const expires = body.expires_at ? String(body.expires_at) : null
         // the trigger created the profile row switched off; the admin's create switches it on
         const { error: pErr } = await admin.from('profiles')
           .update({ name, phone, expires_at: expires, disabled: false, notes: body.notes ? String(body.notes) : null })
           .eq('id', id)
-        if (pErr) return json({ error: pErr.message }, 400)
+        if (pErr) {
+          // never leave an auth user behind that the admin cannot see or retry
+          await admin.auth.admin.deleteUser(id)
+          return json({ error: pErr.message }, 400)
+        }
         return json({ id })
       }
       case 'password': {

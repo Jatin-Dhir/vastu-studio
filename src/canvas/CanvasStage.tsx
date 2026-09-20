@@ -131,6 +131,8 @@ export function CanvasStage() {
   const wallColor = useStore((s) => s.wallColor)
   const wallWidthM = useStore((s) => s.wallWidthM)
   const wallOpacity = useStore((s) => s.wallOpacity)
+  // the drawing's own inks follow the ground: the Paper theme lays the stage on light paper
+  const theme = useStore((s) => s.theme)
   const roomDraft = useStore((s) => s.roomDraft)
 
   const [cursor, setCursor] = useState<Pt | null>(null)
@@ -1072,6 +1074,7 @@ export function CanvasStage() {
           roomShapes={roomShapes} selectedRoomShape={selectedRoomShape}
           texts={texts} selectedText={selectedText}
           wallColor={wallColor} wallWidthM={wallWidthM} wallOpacity={wallOpacity} idPrefix="live"
+          paper={theme === 'paper'}
         />
 
         {/* live ink preview + snap rings — attributes set imperatively so drawing/tracing never re-renders */}

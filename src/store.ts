@@ -16,7 +16,9 @@ interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Mark
 
 export type ThemeMode = 'ink' | 'paper'
 export type AccentId = 'gold' | 'teal' | 'rose' | 'sage'
-const THEME_KEY = 'vastu-studio.theme.v1'
+const THEME_KEY = 'vastu-studio.theme.v2'
+/** v1 stored Ink as the default; v2 opens on Paper. Read once to carry every other pref across. */
+const THEME_KEY_V1 = 'vastu-studio.theme.v1'
 /** Wall render prefs — an app-wide drawing preference (like angle snap), not per-project. */
 const WALL_DEFAULTS = { wallColor: '#C9C6BC', wallWidthM: 0.23, wallOpacity: 1 }
 type WallPrefs = typeof WALL_DEFAULTS
@@ -24,10 +26,18 @@ type WallPrefs = typeof WALL_DEFAULTS
 const RECENT_KINDS_DEFAULT: MarkerKind[] = ['kitchen', 'toilet', 'bed', 'pooja', 'living']
 type Prefs = { theme: ThemeMode; accent: AccentId; angleSnap: boolean; showEdgeLabels: boolean; recentKinds: MarkerKind[] } & WallPrefs
 function loadThemePrefs(): Prefs {
-  const base: Prefs = { theme: 'ink', accent: 'gold', angleSnap: true, showEdgeLabels: true, recentKinds: RECENT_KINDS_DEFAULT, ...WALL_DEFAULTS }
+  const base: Prefs = { theme: 'paper', accent: 'gold', angleSnap: true, showEdgeLabels: true, recentKinds: RECENT_KINDS_DEFAULT, ...WALL_DEFAULTS }
   try {
     const raw = localStorage.getItem(THEME_KEY)
     if (raw) return { ...base, ...JSON.parse(raw) }
+    // first run on v2: keep the old prefs, but everyone opens on Paper once; the
+    // Appearance sheet writes v2 from here on, so a later choice of Ink sticks
+    const old = localStorage.getItem(THEME_KEY_V1)
+    if (old) {
+      const migrated = { ...base, ...JSON.parse(old), theme: 'paper' as ThemeMode }
+      localStorage.setItem(THEME_KEY, JSON.stringify(migrated))
+      return migrated
+    }
   } catch { /* private mode or corrupt value */ }
   return base
 }
@@ -709,7 +719,7 @@ export const useStore = create<VastuStore>()((set, get) => {
         // the 8-direction and degree-dial wheels were retired — files that used them open on 16 Zones
         compass: {
           ...DEFAULT_COMPASS, ...p.compass,
-          id: ['chakra8', 'dial'].includes(String(p.compass?.id)) ? 'zones16' : p.compass.id,
+          id: !p.compass?.id || ['chakra8', 'dial'].includes(String(p.compass.id)) ? 'zones16' : p.compass.id,
         },
         locked: p.locked ?? false,
         markers: p.markers ?? [],

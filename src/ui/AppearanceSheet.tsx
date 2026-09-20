@@ -3,8 +3,8 @@ import { Check } from 'lucide-react'
 import { useStore, type AccentId, type ThemeMode } from '../store'
 
 const THEMES: { id: ThemeMode; label: string; sub: string; bg: string; fg: string }[] = [
-  { id: 'ink', label: 'Ink', sub: 'Dark — the default, easy on the eyes on site', bg: '#0B0C10', fg: '#E9EBF1' },
-  { id: 'paper', label: 'Paper', sub: 'Light — matches a printed report, bright rooms', bg: '#F3F1EA', fg: '#26251E' },
+  { id: 'ink', label: 'Ink', sub: 'Dark — easy on the eyes on site', bg: '#0B0C10', fg: '#E9EBF1' },
+  { id: 'paper', label: 'Paper', sub: 'Light — the default; matches the printed report', bg: '#F3F1EA', fg: '#26251E' },
 ]
 
 const ACCENTS: { id: AccentId; label: string; swatch: string }[] = [
@@ -15,11 +15,9 @@ const ACCENTS: { id: AccentId; label: string; swatch: string }[] = [
 ]
 
 /**
- * Appearance settings — theme and accent colour. Scoped honestly: this recolours
- * the app's chrome (panels, sheets, buttons, text). The plan/compass drawing
- * itself stays ink-dark regardless — it's the same SVG that gets rasterised for
- * the PNG export, so its colours are fixed constants, not something a CSS
- * toggle can reach without a separate rendering pass.
+ * Appearance settings — theme and accent colour. The chrome follows the CSS tokens;
+ * the plan/compass drawing follows the theme through Scene's `paper` inks (the same
+ * palette the PNG export and the report use on a light ground).
  */
 export function AppearanceSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const theme = useStore((s) => s.theme)
@@ -71,7 +69,7 @@ export function AppearanceSheet({ open, onClose }: { open: boolean; onClose: () 
         </div>
 
         <p className="appearance-note">
-          The plan and compass drawing itself stays a dark instrument — this only recolours the app around it.
+          Paper draws the plan on light paper, the way the report prints it; Ink keeps the dark drawing plate.
         </p>
 
         <button className="btn-primary appearance-done" onClick={onClose}>Done</button>

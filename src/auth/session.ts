@@ -117,31 +117,46 @@ export function logEvent(kind: string, meta?: Record<string, unknown>) {
 let lastCheckAt = 0
 let checking = false
 
+/** Out of reach: the grace window carries the last verified identity and the cached charts. */
+function fallbackToGrace(): void {
+  const ok = lastOk()
+  if (ok && Date.now() - ok.t < GRACE_MS) {
+    const cached = cachedCharts()
+    if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
+    setAuth({ status: 'ok', user: ok.user, offline: true })
+  } else {
+    setAuth({ status: 'blocked', reason: 'offline', user: ok?.user })
+  }
+}
+
+/** Every server verdict is asked under a sequence number; an older answer landing after a
+ *  newer one (a focus heartbeat racing "Use it here") is dropped, never applied. */
+let seq = 0
+
 /** Ask the server whether this device still holds a valid seat. Offline falls back
  *  to the grace window; a real "no" from the server always wins. */
 export async function check(): Promise<void> {
   if (!AUTH_ENABLED || checking) return
   checking = true
+  const my = ++seq
   try {
-    const { data: { session } } = await supabase().auth.getSession()
-    if (!session) { setAuth({ status: 'signed-out' }); return }
+    const { data: { session }, error } = await supabase().auth.getSession()
+    if (!session) {
+      // an expired token that could not refresh (no signal) is not a sign-out
+      if (error || !navigator.onLine) { fallbackToGrace(); return }
+      setAuth({ status: 'signed-out' }); return
+    }
     let res: StateRes
     try {
       res = await rpc<StateRes>('heartbeat', { p_device: deviceId() })
     } catch (e) {
+      if (my !== seq) return
       const msg = e instanceof Error ? e.message : String(e)
       if (/not signed in|JWT|jwt/i.test(msg)) { setAuth({ status: 'signed-out' }); return }
-      // unreachable: honour the grace window with the cached identity and charts
-      const ok = lastOk()
-      if (ok && Date.now() - ok.t < GRACE_MS) {
-        const cached = cachedCharts()
-        if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
-        setAuth({ status: 'ok', user: ok.user, offline: true })
-      } else {
-        setAuth({ status: 'blocked', reason: 'offline', user: ok?.user })
-      }
+      fallbackToGrace()
       return
     }
+    if (my !== seq) return
     apply(res)
     lastCheckAt = Date.now()
     if (res.state === 'ok') {
@@ -170,6 +185,8 @@ export async function signIn(phone: string, password: string): Promise<string | 
 export async function takeSeat(): Promise<string | null> {
   try {
     const res = await rpc<StateRes>('claim_device', { p_device: deviceId(), p_name: deviceName() })
+    // a claim is always the newest word: apply it, and retire any heartbeat still in flight
+    seq += 1
     apply(res)
     lastCheckAt = Date.now()
     if (res.state === 'ok') {
@@ -185,7 +202,9 @@ export async function takeSeat(): Promise<string | null> {
 
 export async function signOut(): Promise<void> {
   try { await rpc('release_device', { p_device: deviceId() }) } catch { /* released locally regardless */ }
-  try { await supabase().auth.signOut() } catch { /* already gone */ }
+  // local scope: signing out here must not revoke the same account's session on another
+  // device (the default 'global' scope kills every refresh token the user holds)
+  try { await supabase().auth.signOut({ scope: 'local' }) } catch { /* already gone */ }
   forgetOk()
   chartsLoadedAt = 0
   useStore.getState().setChartsReady(false)
@@ -208,20 +227,30 @@ export function initAuth(): void {
   if (!AUTH_ENABLED) { setAuth({ status: 'off' }); loadDevCharts(); return }
   setAuth({ status: 'loading' })
   void (async () => {
-    // a returning user opens straight into the studio: the last verified identity and the
-    // cached charts carry the first second, the heartbeat confirms (or revokes) right after
-    const { data: { session } } = await supabase().auth.getSession()
-    const ok = lastOk()
-    if (session && ok && Date.now() - ok.t < GRACE_MS) {
-      const cached = cachedCharts()
-      if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
-      setAuth({ status: 'ok', user: ok.user })
+    try {
+      // a returning user opens straight into the studio: the last verified identity and the
+      // cached charts carry the first second, the heartbeat confirms (or revokes) right after
+      const { data: { session }, error } = await supabase().auth.getSession()
+      const ok = lastOk()
+      if ((session || error) && ok && Date.now() - ok.t < GRACE_MS) {
+        const cached = cachedCharts()
+        if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
+        setAuth({ status: 'ok', user: ok.user })
+      }
+      await check()
+      if (useStore.getState().auth.status === 'ok') logEvent('open')
+    } catch {
+      // the auth client itself failed to start (blocked storage, a broken token): never
+      // leave the door on "Opening the studio…"
+      if (useStore.getState().auth.status === 'loading') fallbackToGrace()
     }
-    await check()
-    if (useStore.getState().auth.status === 'ok') logEvent('open')
   })()
   supabase().auth.onAuthStateChange((event) => {
-    if (event === 'SIGNED_OUT') setAuth({ status: 'signed-out' })
+    if (event === 'SIGNED_OUT') {
+      forgetOk()
+      useStore.getState().setChartsReady(false)
+      setAuth({ status: 'signed-out' })
+    }
   })
   window.setInterval(() => { if (document.visibilityState === 'visible') void check() }, HEARTBEAT_MS)
   const onWake = () => { if (Date.now() - lastCheckAt > 30_000) void check() }

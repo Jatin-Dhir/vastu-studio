@@ -14,6 +14,7 @@ import { AutoDetectDialog } from './ui/AutoDetectDialog'
 import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips, ZoneInfoCard } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
+import { consumeSafeBoot } from './ui/ErrorBoundary'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave } from './importers/project'
 import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
@@ -262,8 +263,10 @@ export default function App() {
     requestPersistence()
     initAuth()
     const st = useStore.getState()
+    // after a render crash the next boot stays blank instead of reopening the plan that broke
+    const safe = consumeSafeBoot()
     const legacy = loadAutosave()
-    if (legacy && (legacy.bg.kind !== 'none' || legacy.pts.length > 0)) {
+    if (!safe && legacy && (legacy.bg.kind !== 'none' || legacy.pts.length > 0)) {
       const id = newProjectId()
       const name = legacy.bg.name?.replace(/\.[^.]+$/, '') || 'Migrated plan'
       void putProject({ id, name, updatedAt: Date.now(), data: legacy }).then(() => clearAutosave())
@@ -273,7 +276,7 @@ export default function App() {
       st.toast('Restored your last session', 'info', 'Start fresh', () => {
         window.dispatchEvent(new CustomEvent('vastu:reset'))
       })
-    } else if (BOOT_ACTIVE_TAB_ID) {
+    } else if (!safe && BOOT_ACTIVE_TAB_ID) {
       // resume whichever tab was active when the tab list was last saved, not just "most recent"
       void getProject(BOOT_ACTIVE_TAB_ID).then((rec) => {
         if (!rec) return
@@ -286,7 +289,7 @@ export default function App() {
           window.dispatchEvent(new CustomEvent('vastu:reset'))
         })
       })
-    } else {
+    } else if (!safe) {
       void getMostRecent().then((rec) => {
         if (!rec) return
         const s2 = useStore.getState()
@@ -316,9 +319,9 @@ export default function App() {
     return () => { unsub(); window.clearTimeout(timer) }
   }, [])
 
-  /* dev/test hooks */
+  /* dev/test hooks — never in a build (importFromUrl would fetch any address handed to it) */
   useEffect(() => {
-    ;(window as any).vastu = { loadDemo, importFiles, importFromUrl, store: useStore, fit: requestFit }
+    if (import.meta.env.DEV) (window as any).vastu = { loadDemo, importFiles, importFromUrl, store: useStore, fit: requestFit }
   }, [])
 
   // the front door: with a project configured, nothing renders until this device holds a valid seat
