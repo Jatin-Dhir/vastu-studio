@@ -27,13 +27,22 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - run: npm run build
+      - name: Build the studio
+        run: npm run build
         env:
           VITE_SUPABASE_URL: ${{ secrets.VITE_SUPABASE_URL }}
           VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+      - name: Build the site
+        run: npm run build:site
+      # The site is the front door at /vastu-studio/; the studio itself is served under /app/.
+      - name: Compose the Pages tree
+        run: |
+          rm -rf pages && mkdir -p pages/app
+          cp -r dist-site/. pages/
+          cp -r dist/. pages/app/
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: pages
       - id: deployment
         uses: actions/deploy-pages@v4

@@ -35,10 +35,7 @@ export default defineConfig({
   build: {
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
-      input: {
-        main: resolve(__dirname, 'index.html'),
-        landing: resolve(__dirname, 'landing.html'),
-      },
+      input: { main: resolve(__dirname, 'index.html') },
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],

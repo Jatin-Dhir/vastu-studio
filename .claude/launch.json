@@ -37,6 +37,15 @@
         "5175"
       ],
       "port": 5175
+    },
+    {
+      "name": "vastu-site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": [
+        "run",
+        "dev:site"
+      ],
+      "port": 5180
     }
   ]
 }

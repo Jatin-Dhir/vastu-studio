@@ -12,6 +12,24 @@ npm run dev        # http://localhost:5173
 npm run build      # production build in dist/
 ```
 
+## The site and the studio
+
+Two Vite builds live in this repo:
+
+- **The studio** (`index.html`, `src/`) — `npm run dev` / `npm run build` → `dist/`. The Windows
+  shell (Tauri) and the Android/iOS shells (Capacitor) bundle this directory as-is.
+- **The site** (`site/`) — `npm run dev:site` (port 5180) / `npm run build:site` → `dist-site/`.
+  The marketing and download page. It imports only the studio's pure drawing components
+  (`Scene`, `CompassDial`), so every visual on it is the product's own render; the screenshots in
+  `site/shots/` were taken from the running studio.
+
+On GitHub Pages the deploy workflow composes both: the site at
+`https://jatin-dhir.github.io/vastu-studio/` and the studio under `/vastu-studio/app/`. Old
+`#/…` deep links and the `?m=1` phone preview redirect from the site to the studio. Downloads
+link to the latest GitHub Release, whose installers keep the stable names
+`VastuStudio-Setup-x64.exe` and `VastuStudio-android.apk`; the site reads the version and sizes
+from the release feed at runtime. The WhatsApp/email contact for seats is `site/config.ts`.
+
 ## Workflow
 
 1. **Import** — drop a PDF, AutoCAD DXF, or image; paste a screenshot (Ctrl+V); or capture

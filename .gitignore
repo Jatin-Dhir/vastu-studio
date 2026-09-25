@@ -11,3 +11,6 @@ src-tauri/gen/
 .env.*
 !.env.example
 Vastu-Direction-Rules.*
+
+dist-site
+pages

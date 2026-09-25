@@ -39,7 +39,9 @@ export function CompassDial({ headingDeg, size = 320, paper }: { headingDeg: num
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headingDeg])
 
-  useEffect(() => () => { if (raf.current != null) cancelAnimationFrame(raf.current) }, [])
+  // reset the handle too: under StrictMode's mount-unmount-mount the next heading would otherwise
+  // see a stale id, assume the loop is running, and the rose would never turn
+  useEffect(() => () => { if (raf.current != null) { cancelAnimationFrame(raf.current); raf.current = null; lastT.current = null } }, [])
 
   function syncZone() {
     const zi = zone8IndexFor(display.current)

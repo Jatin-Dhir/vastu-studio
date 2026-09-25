@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Vastu Studio — the drawing board for Vastu practitioners</title>
+  <meta name="description" content="Import a floor plan, trace its boundary, and read the 16 zones, 32 gates and the Brahmasthan to scale — with a verdict for every room. Windows, Android and the browser." />
+  <meta name="theme-color" content="#F3F1EA" />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="./app/icons/icon-180.png" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Vastu Studio — the drawing board for Vastu" />
+  <meta property="og:description" content="Trace any floor plan and read its zones, gates and Brahmasthan to scale, with a verdict for every room. Windows, Android and the browser." />
+  <meta property="og:image" content="https://jatin-dhir.github.io/vastu-studio/og.png" />
+  <meta property="og:url" content="https://jatin-dhir.github.io/vastu-studio/" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <!-- Old deep links into the studio (the admin panel's #/ routes, the ?m=1 phone preview) now live under app/. -->
+  <script>
+    (function () {
+      var h = location.hash, q = location.search
+      if (/^#\//.test(h) || /[?&]m=1\b/.test(q)) location.replace('app/' + q + h)
+    })()
+  </script>
+  <script type="module" src="./main.tsx"></script>
+</head>
+<body>
+  <div id="root"></div>
+  <noscript>
+    <div style="max-width:40rem;margin:4rem auto;padding:0 1.25rem;font:17px/1.5 system-ui,sans-serif;color:#26251E">
+      <h1 style="font-family:Georgia,serif;font-weight:600;font-size:2.4rem;margin:0 0 .5rem">Vastu Studio</h1>
+      <p>The drawing board for Vastu practitioners. Import a floor plan, trace its boundary, and read the 16 zones, 32 gates and the Brahmasthan to scale — with a verdict for every room.</p>
+      <p><a href="./app/">Open the studio</a> · <a href="https://github.com/Jatin-Dhir/vastu-studio/releases/latest">Downloads for Windows and Android</a></p>
+    </div>
+  </noscript>
+</body>
+</html>

@@ -7,6 +7,9 @@
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
+    "dev:site": "vite --config vite.site.config.ts",
+    "build:site": "tsc --noEmit -p tsconfig.site.json && vite build --config vite.site.config.ts",
+    "preview:site": "vite preview --config vite.site.config.ts --port 5181",
     "samples": "node scripts/gen-sample-pdf.mjs"
   },
   "dependencies": {
@@ -23,6 +26,7 @@
     "@tauri-apps/plugin-process": "^2.3.1",
     "@tauri-apps/plugin-updater": "^2.11.0",
     "dxf-parser": "^1.1.2",
+    "gsap": "^3.15.0",
     "jspdf": "^4.2.1",
     "leaflet": "^1.9.4",
     "lucide-react": "^0.475.0",
