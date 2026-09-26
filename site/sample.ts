@@ -46,7 +46,7 @@ export type Verdict = 'ideal' | 'good' | 'neutral' | 'caution' | 'avoid'
 export const CALLOUTS: { id: string; label: string; verdict: Verdict; where: string; at: Pt; to: Pt }[] = [
   { id: 'r3', label: 'Bath', verdict: 'avoid', where: '19% NE · on the Brahmasthan', at: { x: -430, y: 250 }, to: { x: 830, y: 741 } },
   { id: 'm1', label: 'Main door', verdict: 'avoid', where: 'gate N2 · Naga', at: { x: 150, y: -560 }, to: { x: 600, y: -12 } },
-  { id: 'r5', label: 'Bedroom', verdict: 'neutral', where: '30% ESE', at: { x: 2420, y: 380 }, to: { x: 1960, y: 860 } },
+  { id: 'r5', label: 'Bedroom', verdict: 'neutral', where: '30% ESE', at: { x: 2420, y: 380 }, to: { x: 1700, y: 1040 } },
   { id: 'r4', label: 'Kitchen', verdict: 'ideal', where: '37% SSE', at: { x: 700, y: 2330 }, to: { x: 1000, y: 1460 } },
 ]
 
