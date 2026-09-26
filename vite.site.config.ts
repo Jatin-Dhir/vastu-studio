@@ -20,7 +20,7 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
-      output: { manualChunks: { react: ['react', 'react-dom'], gsap: ['gsap'] } },
+      output: { manualChunks: { react: ['react', 'react-dom'], gsap: ['gsap', 'lenis'], three: ['three'] } },
     },
   },
 })

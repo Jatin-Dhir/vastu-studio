@@ -1,4 +1,4 @@
 {
   "extends": "./tsconfig.json",
-  "include": ["site", "src/canvas/Scene.tsx", "src/compass", "src/vastu.ts", "src/geometry.ts", "src/analysis.ts", "src/format.ts", "src/types.ts", "src/native.ts", "src/importers/dxf.ts"]
+  "include": ["site", "src/canvas/Scene.tsx", "src/compass", "src/vastu.ts", "src/geometry.ts", "src/analysis.ts", "src/format.ts", "src/types.ts", "src/native.ts", "src/importers/dxf.ts", "src/rules16.ts"]
 }

@@ -98,9 +98,9 @@ export function heroIntro(root: HTMLElement): () => void {
     if (h) splitWords(h)
     const tl = gsap.timeline({ defaults: { ease: 'power4.out' } })
     tl.from(root.querySelectorAll('[data-hero-nav]'), { y: -12, autoAlpha: 0, duration: 0.7 }, 0.1)
-      .from(root.querySelectorAll('[data-hero-eyebrow]'), { y: 14, autoAlpha: 0, duration: 0.7 }, 0.3)
-      .from(h ? h.querySelectorAll('.wi') : [], { yPercent: 110, duration: 1.1, stagger: 0.06 }, 0.4)
-      .from(root.querySelectorAll('[data-hero-copy] > :not(h1):not(.eyebrow)'), { y: 20, autoAlpha: 0, duration: 0.8, stagger: 0.09 }, 0.95)
+    if (h) tl.from(h.querySelectorAll('.wi'), { yPercent: 110, duration: 1.1, stagger: 0.06 }, 0.4)
+    const rest = root.querySelectorAll('[data-hero-copy] > :not(h1)')
+    if (rest.length) tl.from(rest, { y: 20, autoAlpha: 0, duration: 0.8, stagger: 0.09 }, 0.95)
   }, root)
   return () => ctx.revert()
 }
