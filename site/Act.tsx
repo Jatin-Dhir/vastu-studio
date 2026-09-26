@@ -7,15 +7,15 @@ import { APP_URL, DOWNLOADS } from './config'
 import { CALLOUTS } from './sample'
 
 /* The opening act. A real instrument on a table: the studio's own drawing on paper, the sixteen-
- * zone acetate over it in a brass rim, a sun that crosses the sky as the page scrolls. The visitor
+ * zone acetate over it in a brass rim, a lamp that travels across as the page scrolls. The visitor
  * turns the acetate to the drawing's north with their hand — the thing every practitioner does
- * with a printed chakra sheet — and the rooms give up their verdicts. Then, still pinned, the sun
- * climbs while the acetate becomes the thirty-two gates and the mandala prints on the sheet. */
+ * with a printed chakra sheet — and the rooms give up their verdicts. Then, still pinned, the
+ * acetate becomes the thirty-two gates and lifts away as the mandala prints on the sheet. */
 
 const ACTS = [
   { key: 'zones', num: '16', word: 'zones', body: 'Sixteen directions, each with what it governs, clipped to the plot around a Brahmasthan found by area. A room’s verdict is how much of it sits in which.' },
   { key: 'gates', num: '32', word: 'gates', body: 'The entrance ring: thirty-two padas of 11¼° each, with their devtas. A door reads by the pada it falls in, and the favourable gates on the same wall are named.' },
-  { key: 'padas', num: '81', word: 'padas', body: 'The nine-by-nine Vastu Purusha Mandala, fitted to the plot’s own orientation with all forty-five devtas in place — printed on the sheet for the report.' },
+  { key: 'padas', num: '81', word: 'padas', body: 'The nine-by-nine Vastu Purusha Mandala, fitted to the plot’s own orientation with all forty-five devtas in place, printed on the sheet for the report.' },
 ]
 const phaseOf = (p: number) => (p < 0.24 ? 0 : p < 0.5 ? 1 : p < 0.76 ? 2 : 3)
 
@@ -41,56 +41,56 @@ export function Act({ version, returning }: { version: string; returning: boolea
     if (!live || !stage.current || !section.current) return
     const el = stage.current
     const sec = section.current
-    let it: Instrument | null = null
     let cancelled = false
     let cleanup: (() => void) | null = null
+    const wire = (it: Instrument) => {
+      it.ready.then(() => setReady(true)).catch(() => setReady(true))
+      it.onAligned = () => setAligned(true)
+      it.onFrame = (project) => {
+        if (!it.aligned) return
+        CALLOUTS.forEach((c, i) => {
+          const node = labels.current[i]
+          if (!node) return
+          const p = project(c.to.x, c.to.y)
+          const flip = p.x + 12 + node.offsetWidth > el.clientWidth - 8 // a tag that would run off the edge hangs to the left
+          node.classList.toggle('flip', flip)
+          node.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)${flip ? ' translateX(-100%)' : ''}`
+          node.style.opacity = p.visible ? '1' : '0'
+        })
+      }
+      it.setSun(0.08)
+      const io = new IntersectionObserver(([e]) => it.setActive(e.isIntersecting), { threshold: 0 })
+      io.observe(sec)
+      let last = 0
+      const off = storyProgress(sec, (p) => {
+        it.setSun(0.08 + p * 0.88)
+        const ph = phaseOf(p)
+        if (ph >= 1 && !it.aligned) it.setNorth() // scrolling on is setting north: the acts need it
+        it.setDisc(ph >= 2 ? 'gates32' : 'zones16')
+        it.setSheet(ph === 3 ? 'grid9' : ph === 2 ? 'gates32' : it.aligned || ph >= 1 ? 'zones16' : 'plain')
+        it.setMandala(ph === 3)
+        it.setDolly(ph === 0 ? 0 : 1)
+        if (ph !== last) { last = ph; setPhase(ph) }
+      })
+      return () => { off(); io.disconnect(); it.dispose(); inst.current = null }
+    }
     void import('./instrument/Instrument').then(({ Instrument }) => {
       if (cancelled) return
-      it = new Instrument(el, () => window.innerWidth >= 1000)
+      const it = new Instrument(el, () => window.innerWidth >= 1000)
       inst.current = it
       if (import.meta.env.DEV) (window as unknown as { __inst?: Instrument }).__inst = it
       cleanup = wire(it)
     })
-    const wire = (it: Instrument) => {
-    it.ready.then(() => setReady(true)).catch(() => setReady(true))
-    it.onAligned = () => setAligned(true)
-    it.onFrame = (project) => {
-      if (!it.aligned) return
-      CALLOUTS.forEach((c, i) => {
-        const node = labels.current[i]
-        if (!node) return
-        const p = project(c.to.x, c.to.y)
-        const flip = p.x + 12 + node.offsetWidth > el.clientWidth - 8 // a tag that would run off the edge hangs to the left
-        node.classList.toggle('flip', flip)
-        node.style.transform = `translate(${p.x.toFixed(1)}px, ${p.y.toFixed(1)}px)${flip ? ' translateX(-100%)' : ''}`
-        node.style.opacity = p.visible ? '1' : '0'
-      })
-    }
-    it.setSun(0.08)
-    const io = new IntersectionObserver(([e]) => it.setActive(e.isIntersecting), { threshold: 0 })
-    io.observe(sec)
-    let last = 0
-    const off = storyProgress(sec, (p) => {
-      it.setSun(0.08 + p * 0.88)
-      const ph = phaseOf(p)
-      if (ph >= 1 && !it.aligned) it.setNorth() // scrolling on is setting north: the acts need it
-      it.setDisc(ph >= 2 ? 'gates32' : 'zones16')
-      it.setSheet(ph === 3 ? 'grid9' : ph === 2 ? 'gates32' : it.aligned || ph >= 1 ? 'zones16' : 'plain')
-      it.setMandala(ph === 3)
-      it.setDolly(ph === 0 ? 0 : 1)
-      if (ph !== last) { last = ph; setPhase(ph) }
-    })
-    return () => { off(); io.disconnect(); it.dispose(); inst.current = null }
-    }
     return () => { cancelled = true; cleanup?.() }
   }, [live])
 
   return (
-    <section className={`act ${live ? 'live' : 'still'} ${ready ? 'ready' : ''} ${aligned ? 'aligned' : ''} ${phase <= 1 ? 'tags-on' : ''}`} id="top" ref={section} data-nav="ink" style={live ? { height: '520vh' } : undefined}>
+    <section className={`act ${live ? 'live' : 'still'} ${ready ? 'ready' : ''} ${aligned ? 'aligned' : ''} ${phase <= 1 ? 'tags-on' : ''}`} id="top" ref={section} style={live ? { height: '520vh' } : undefined}>
       <div className="act-pin">
         <div className="act-stage" ref={stage}>
           {!live && <PlanStage state={FINAL_STATE} paper={false} className="act-fallback" />}
         </div>
+        {live && <div className="act-vignette" aria-hidden="true" />}
 
         {/* verdict tags ride on the paper once north is set */}
         {live && (
@@ -120,7 +120,8 @@ export function Act({ version, returning }: { version: string; returning: boolea
         <div className="act-copy">
           <div className={`act-open ${phase === 0 ? 'on' : ''}`} data-hero-copy>
             <h1 data-hero-title>Vastu Studio</h1>
-            <p className="act-lede">The instrument for Vastu practitioners. Lay the chakra over any plan, set north, and read every room to the degree — with a verdict and the move that fixes it.</p>
+            <p className="act-kicker">The instrument for Vastu practitioners.</p>
+            <p className="act-lede">Lay the chakra over any plan, set north, and read every room to the degree, with a verdict and the move that fixes it.</p>
             <div className="hero-ctas">
               <a className="btn-gold lg" href={DOWNLOADS.windows}><Monitor size={17} aria-hidden="true" /> Download for Windows</a>
               <a className="btn-line lg" href={DOWNLOADS.android}><Smartphone size={17} aria-hidden="true" /> Get it on Android</a>

@@ -79,6 +79,13 @@ export function armReveals(root: HTMLElement): () => void {
         scrollTrigger: { trigger: el, start: 'top 84%', once: true },
       })
     })
+    // an image arrives the way a print comes off the table: unmasked from the bottom, settling
+    root.querySelectorAll<HTMLElement>('[data-reveal-img]').forEach((fig) => {
+      const img = fig.querySelector('img')
+      const tl = gsap.timeline({ scrollTrigger: { trigger: fig, start: 'top 84%', once: true } })
+      tl.fromTo(fig, { clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0% 0)', duration: 1.15, ease: 'power4.out' })
+      if (img) tl.fromTo(img, { scale: 1.06 }, { scale: 1, duration: 1.3, ease: 'power4.out' }, 0)
+    })
     root.querySelectorAll<HTMLElement>('[data-parallax]').forEach((el) => {
       const speed = Number(el.dataset.parallax || 0.12)
       gsap.to(el, {

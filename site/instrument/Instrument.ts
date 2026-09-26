@@ -1,7 +1,7 @@
-/* The instrument on the table: the plan on paper, a brass-rimmed acetate over it, a sun that
- * crosses the sky. One WebGL context, rendered only when something changed, driven by GSAP's
- * ticker so it shares the page's one frame loop. The scene is the pitch: this is the act a
- * practitioner performs with a printed chakra sheet, and the studio's own drawing underneath. */
+/* The instrument on the table: the plan on a sheet of paper, a glass acetate in a brass rim over
+ * it, one lamp that travels across as the page scrolls. One WebGL context, rendered only when
+ * something changed, on GSAP's ticker so it shares the page's single frame loop. The scene is the
+ * pitch: the act a practitioner performs with a printed chakra sheet, lit like a product. */
 import * as THREE from 'three'
 import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
 import gsap from 'gsap'
@@ -11,7 +11,7 @@ import { NORTH_DEG } from '../sample'
 export type Disc = 'zones16' | 'gates32'
 export interface Projected { x: number; y: number; visible: boolean }
 
-const UMBER = 0x100d0a
+const GROUND = 0x0b0908
 const PW = 10 // the paper's width in world units
 const PH = PW * (PAPER_H / PAPER_W)
 const R_DISC = (R_PLOT / PAPER_W) * PW
@@ -20,14 +20,29 @@ const START_ROT = -38
 
 const shortest = (a: number) => ((a + 540) % 360) - 180
 
+/** a soft dark pool under the sheet, so it sits on the table instead of floating */
+function contactShadowTexture(): THREE.CanvasTexture {
+  const c = document.createElement('canvas')
+  c.width = 256; c.height = 256
+  const ctx = c.getContext('2d')!
+  const g = ctx.createRadialGradient(128, 128, 20, 128, 128, 128)
+  g.addColorStop(0, 'rgba(0,0,0,0.62)'); g.addColorStop(0.6, 'rgba(0,0,0,0.35)'); g.addColorStop(1, 'rgba(0,0,0,0)')
+  ctx.fillStyle = g; ctx.fillRect(0, 0, 256, 256)
+  const t = new THREE.CanvasTexture(c)
+  t.colorSpace = THREE.SRGBColorSpace
+  return t
+}
+
 export class Instrument {
   readonly canvas: HTMLCanvasElement
   private renderer: THREE.WebGLRenderer
   private scene = new THREE.Scene()
   private camera: THREE.PerspectiveCamera
-  private sun: THREE.DirectionalLight
+  private lamp: THREE.SpotLight
   private acetate = new THREE.Group()
-  private disc!: THREE.Mesh<THREE.CircleGeometry, THREE.MeshPhysicalMaterial>
+  private glass!: THREE.Mesh<THREE.CircleGeometry, THREE.MeshPhysicalMaterial>
+  private tint!: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>
+  private print!: THREE.Mesh<THREE.CircleGeometry, THREE.MeshBasicMaterial>
   private bezel!: THREE.Mesh<THREE.TorusGeometry, THREE.MeshPhysicalMaterial>
   private paper!: THREE.Mesh<THREE.PlaneGeometry, THREE.MeshStandardMaterial>
   private sheets: Partial<Record<Sheet, THREE.CanvasTexture>> = {}
@@ -42,7 +57,6 @@ export class Instrument {
   private settle: { t0: number; from: number } | null = null
   private drag: { angle0: number; rot0: number; moved: boolean; id: number } | null = null
   private touchIntent: { x: number; y: number; decided: boolean; rotate: boolean } | null = null
-  private sunT = 0.08
   private discAlpha = 1
   private discAlphaTarget = 1
   private dolly = 0
@@ -64,66 +78,81 @@ export class Instrument {
     this.canvas.className = 'instrument-canvas'
     container.appendChild(this.canvas)
     this.renderer = new THREE.WebGLRenderer({ canvas: this.canvas, antialias: true, powerPreference: 'high-performance' })
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5))
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75))
     this.renderer.shadowMap.enabled = true
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping
-    this.renderer.toneMappingExposure = 1.3
+    this.renderer.toneMappingExposure = 1.15
     this.renderer.outputColorSpace = THREE.SRGBColorSpace
 
-    this.scene.background = new THREE.Color(UMBER)
-    this.scene.fog = new THREE.Fog(UMBER, 16, 34) // rescaled to the camera distance in resize()
+    this.scene.background = new THREE.Color(GROUND)
+    this.scene.fog = new THREE.Fog(GROUND, 16, 34) // rescaled to the camera distance in resize()
     const pmrem = new THREE.PMREMGenerator(this.renderer)
     this.scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture
-    this.scene.environmentIntensity = 0.5
+    this.scene.environmentIntensity = 0.55
     pmrem.dispose()
 
-    this.camera = new THREE.PerspectiveCamera(30, 1, 0.5, 80)
+    this.camera = new THREE.PerspectiveCamera(26, 1, 0.5, 80)
 
-    // the sun, and the little light the room gives back
-    this.sun = new THREE.DirectionalLight(0xffb36b, 2.6)
-    this.sun.castShadow = true
-    this.sun.shadow.mapSize.set(window.innerWidth < 900 ? 1024 : 2048, window.innerWidth < 900 ? 1024 : 2048)
-    this.sun.shadow.camera.near = 1; this.sun.shadow.camera.far = 50
-    this.sun.shadow.camera.left = -9; this.sun.shadow.camera.right = 9; this.sun.shadow.camera.top = 9; this.sun.shadow.camera.bottom = -9
-    this.sun.shadow.bias = -0.0005; this.sun.shadow.normalBias = 0.02
-    this.sun.shadow.radius = 3
-    this.scene.add(this.sun, this.sun.target)
-    this.scene.add(new THREE.HemisphereLight(0x9a8d78, 0x1a120c, 1.25))
-    // a soft fill from the reader's side, so the sheet reads even at dawn
-    const fill = new THREE.DirectionalLight(0xfff1dd, 0.55)
-    fill.position.set(-4, 9, 10)
+    // one lamp over the table (the key), a cool whisper from the far side, and the room's own dark
+    this.lamp = new THREE.SpotLight(0xffe4c2, 90, 0, 0.62, 0.75, 1.35)
+    this.lamp.castShadow = true
+    const small = window.innerWidth < 900
+    this.lamp.shadow.mapSize.set(small ? 1024 : 2048, small ? 1024 : 2048)
+    this.lamp.shadow.camera.near = 2; this.lamp.shadow.camera.far = 40
+    this.lamp.shadow.bias = -0.0004; this.lamp.shadow.normalBias = 0.02
+    this.lamp.shadow.radius = 4
+    this.scene.add(this.lamp, this.lamp.target)
+    const fill = new THREE.DirectionalLight(0x8fa6c8, 0.35)
+    fill.position.set(-8, 6, 9)
     this.scene.add(fill)
+    this.scene.add(new THREE.HemisphereLight(0x2c2823, 0x050403, 0.55))
 
     // the table
-    const table = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x1d1712, roughness: 0.94, metalness: 0 }))
+    const table = new THREE.Mesh(new THREE.PlaneGeometry(60, 60, 24, 24), new THREE.MeshStandardMaterial({ color: 0x0e0c0a, roughness: 0.96, metalness: 0 }))
     table.rotation.x = -Math.PI / 2
     table.receiveShadow = true
     this.scene.add(table)
 
-    // the paper, the acetate, the brass
-    this.paper = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.92, metalness: 0 }))
+    // the sheet: a thin cream slab for its edge, the studio's drawing on its face, a pool of shadow under it
+    const pool = new THREE.Mesh(new THREE.PlaneGeometry(PW * 1.22, PH * 1.26), new THREE.MeshBasicMaterial({ map: contactShadowTexture(), transparent: true, depthWrite: false }))
+    pool.rotation.x = -Math.PI / 2
+    pool.position.set(0.12, 0.006, 0.18)
+    this.scene.add(pool)
+    const slab = new THREE.Mesh(new THREE.BoxGeometry(PW, 0.04, PH), new THREE.MeshStandardMaterial({ color: 0xe9e1cd, roughness: 0.9, metalness: 0 }))
+    slab.position.y = 0.02
+    slab.castShadow = true
+    slab.receiveShadow = true
+    this.scene.add(slab)
+    this.paper = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.86, metalness: 0 }))
     this.paper.rotation.x = -Math.PI / 2
-    this.paper.position.y = 0.012
+    this.paper.position.y = 0.05
     this.paper.receiveShadow = true
-    this.paper.castShadow = true
     this.scene.add(this.paper)
 
-    this.disc = new THREE.Mesh(new THREE.CircleGeometry(R_DISC, 160), new THREE.MeshPhysicalMaterial({
-      color: 0xffffff, transparent: true, roughness: 0.18, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.12, depthWrite: false, side: THREE.DoubleSide,
+    // the acetate: glass that only adds its highlights, a breath of milk, the ink, and the brass rim
+    this.glass = new THREE.Mesh(new THREE.CircleGeometry(R_DISC, 160), new THREE.MeshPhysicalMaterial({
+      color: 0x000000, roughness: 0.05, metalness: 0, clearcoat: 1, clearcoatRoughness: 0.05, ior: 1.5, envMapIntensity: 2.2,
+      transparent: true, opacity: 1, blending: THREE.AdditiveBlending, depthWrite: false,
     }))
-    this.disc.rotation.x = -Math.PI / 2
-    this.bezel = new THREE.Mesh(new THREE.TorusGeometry(R_DISC + 0.07, 0.07, 24, 200), new THREE.MeshPhysicalMaterial({
-      color: 0xb8903e, metalness: 1, roughness: 0.32, clearcoat: 0.4, clearcoatRoughness: 0.2, envMapIntensity: 1.3, emissive: 0x3a2a08, emissiveIntensity: 0,
+    this.glass.rotation.x = -Math.PI / 2
+    this.glass.position.y = 0.004
+    this.tint = new THREE.Mesh(new THREE.CircleGeometry(R_DISC, 160), new THREE.MeshBasicMaterial({ color: 0xfff1d8, transparent: true, opacity: 0.045, depthWrite: false }))
+    this.tint.rotation.x = -Math.PI / 2
+    this.print = new THREE.Mesh(new THREE.CircleGeometry(R_DISC, 160), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, depthWrite: false }))
+    this.print.rotation.x = -Math.PI / 2
+    this.print.position.y = 0.002
+    this.bezel = new THREE.Mesh(new THREE.TorusGeometry(R_DISC + 0.075, 0.075, 28, 220), new THREE.MeshPhysicalMaterial({
+      color: 0xc9a24a, metalness: 1, roughness: 0.26, clearcoat: 0.5, clearcoatRoughness: 0.15, envMapIntensity: 1.6, emissive: 0x3a2a08, emissiveIntensity: 0,
       transparent: true, opacity: 1,
     }))
     this.bezel.rotation.x = -Math.PI / 2
     this.bezel.castShadow = true
-    const lug = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.05, 0.42), this.bezel.material)
-    lug.position.set(0, 0.02, -(R_DISC + 0.07))
+    const lug = new THREE.Mesh(new THREE.BoxGeometry(0.075, 0.05, 0.44), this.bezel.material)
+    lug.position.set(0, 0.02, -(R_DISC + 0.075))
     lug.castShadow = true
-    this.acetate.add(this.disc, this.bezel, lug)
-    this.acetate.position.set(this.dx(CENTER.x), 0.062, this.dz(CENTER.y))
+    this.acetate.add(this.tint, this.print, this.glass, this.bezel, lug)
+    this.acetate.position.set(this.dx(CENTER.x), 0.1, this.dz(CENTER.y))
     this.acetate.rotation.y = -THREE.MathUtils.degToRad(this.rot)
     this.scene.add(this.acetate)
     this.centre.copy(this.acetate.position)
@@ -152,7 +181,7 @@ export class Instrument {
     this.sheets.plain = this.tex(plain)
     this.acetates.zones = this.tex(zonesA)
     this.paper.material.map = this.sheets.plain; this.paper.material.needsUpdate = true
-    this.disc.material.map = this.acetates.zones; this.disc.material.needsUpdate = true
+    this.print.material.map = this.acetates.zones; this.print.material.needsUpdate = true
     this.dirty = true
     void Promise.all([planTexture('zones16', px), planTexture('gates32', px), planTexture('grid9', px), gatesTexture(apx)]).then(([z, g, m, ga]) => {
       if (this.disposed) return
@@ -170,25 +199,24 @@ export class Instrument {
 
   /* ---------- state the page drives ---------- */
 
-  /** 0 = dawn in the north-east, 0.5 = noon in the south, 1 = dusk in the west */
+  /** the lamp's travel: 0 = low in the north-east, 0.5 = high in the south, 1 = low in the west */
   setSun(t: number) {
-    this.sunT = t
     const az = THREE.MathUtils.lerp(52, 285, t) // degrees clockwise from north
-    const el = THREE.MathUtils.degToRad(10 + 58 * Math.sin(Math.PI * t))
+    const el = THREE.MathUtils.degToRad(34 + 34 * Math.sin(Math.PI * t))
     const a = THREE.MathUtils.degToRad(az)
-    const r = 18
+    const r = 13
     // north is -z; east is +x
-    this.sun.position.set(r * Math.cos(el) * Math.sin(a), r * Math.sin(el), -r * Math.cos(el) * Math.cos(a))
-    this.sun.target.position.set(this.centre.x, 0, this.centre.z)
-    const warm = new THREE.Color(0xffb36b), noon = new THREE.Color(0xfff3e2)
-    const w = Math.pow(Math.abs(t - 0.5) * 2, 1.6)
-    this.sun.color.copy(noon).lerp(warm, w)
-    this.sun.intensity = 3.0 + 2.4 * Math.sin(Math.PI * t)
+    this.lamp.position.set(this.centre.x + r * Math.cos(el) * Math.sin(a), 2 + r * Math.sin(el), this.centre.z - r * Math.cos(el) * Math.cos(a))
+    this.lamp.target.position.set(this.centre.x, 0, this.centre.z)
+    const warm = new THREE.Color(0xffc98a), white = new THREE.Color(0xfff0dc)
+    const w = Math.pow(Math.abs(t - 0.5) * 2, 1.4)
+    this.lamp.color.copy(white).lerp(warm, w * 0.7)
+    this.lamp.intensity = 80 + 40 * Math.sin(Math.PI * t)
     this.dirty = true
   }
   setDisc(kind: Disc) {
     const m = kind === 'zones16' ? this.acetates.zones : this.acetates.gates
-    if (m && this.disc.material.map !== m) { this.disc.material.map = m; this.disc.material.needsUpdate = true; this.dirty = true }
+    if (m && this.print.material.map !== m) { this.print.material.map = m; this.print.material.needsUpdate = true; this.dirty = true }
   }
   /** the mandala is fitted to the plot, so it prints on the paper and the acetate lifts away */
   setMandala(on: boolean) { this.discAlphaTarget = on ? 0 : 1; this.dirty = true }
@@ -263,24 +291,23 @@ export class Instrument {
     const h = this.container.clientHeight || window.innerHeight
     this.renderer.setSize(w, h, false)
     this.camera.aspect = w / h
-    // the acetate must fit whichever side is tighter; on a wide screen it sits right of the copy
+    // wide: the acetate sits right of the copy with air around it; narrow: the whole sheet fits
     const need = this.wide() ? (R_DISC + 1.2) * 2 : PW * 1.04
     const vfov = THREE.MathUtils.degToRad(this.camera.fov)
     const distH = (need / 2) / Math.tan(vfov / 2)
     const distW = (need / 2) / (Math.tan(vfov / 2) * this.camera.aspect)
     this.baseDist = Math.max(distH, distW) * 1.02
     const fog = this.scene.fog as THREE.Fog
-    fog.near = this.baseDist * 1.25; fog.far = this.baseDist * 2.4
+    fog.near = this.baseDist * 1.3; fog.far = this.baseDist * 2.6
     const wide = this.wide()
-    // wide: the acetate sits right of the copy; narrow: it sits in the upper half, above the copy
     const hh = this.baseDist * Math.tan(vfov / 2)
-    this.lookAt.set(this.centre.x + (wide ? -3.4 : 0), 0, this.centre.z + (wide ? -0.15 : 0.36 * hh))
+    this.lookAt.set(this.centre.x + (wide ? -3.9 : 0), 0, this.centre.z + (wide ? -0.15 : 0.36 * hh))
     this.camera.updateProjectionMatrix()
     this.placeCamera()
   }
   private placeCamera() {
-    const d = this.baseDist * (1 - 0.14 * this.dolly)
-    const tilt = THREE.MathUtils.degToRad(24) // from the vertical: a sheet seen from above, with a little depth
+    const d = this.baseDist * (1 - 0.1 * this.dolly)
+    const tilt = THREE.MathUtils.degToRad(30) // from the vertical: a sheet seen from above, with a little depth
     const px = this.pointer.x * 0.35, py = this.pointer.y * 0.2
     this.camera.position.set(this.lookAt.x + px * 1.4, d * Math.cos(tilt) + py, this.lookAt.z + d * Math.sin(tilt) + px * 0.2)
     this.camera.lookAt(this.lookAt.x, 0, this.lookAt.z)
@@ -288,16 +315,15 @@ export class Instrument {
 
   /** drawing units on the paper → screen pixels within the canvas */
   project(dx: number, dy: number): Projected {
-    const v = new THREE.Vector3(this.dx(dx), 0.08, this.dz(dy)).project(this.camera)
+    const v = new THREE.Vector3(this.dx(dx), 0.12, this.dz(dy)).project(this.camera)
     const w = this.canvas.clientWidth, h = this.canvas.clientHeight
     return { x: (v.x + 1) / 2 * w, y: (1 - v.y) / 2 * h, visible: v.z < 1 }
   }
 
   private frame(t: number) {
     if (this.disposed || !this.active) { this.lastT = t; return }
-    // real elapsed time, clamped, so the spring settles in the same second on every machine
+    // real elapsed time for the eases, so they run on the clock at any frame rate
     const real = this.lastT ? Math.min(0.5, Math.max(0.004, (t - this.lastT) / 1000)) : 1 / 60
-    const dt = Math.min(0.05, real)
     this.lastT = t
     let moving = false
     // the pointer's parallax settles softly
@@ -305,7 +331,7 @@ export class Instrument {
     const nx = this.pointer.x + (this.pointer.tx - this.pointer.x) * pe
     const ny = this.pointer.y + (this.pointer.ty - this.pointer.y) * pe
     if (Math.abs(nx - this.pointer.x) > 1e-4 || Math.abs(ny - this.pointer.y) > 1e-4) { this.pointer.x = nx; this.pointer.y = ny; moving = true }
-    // the acetate eases onto north when released near it — on the clock, whatever the frame rate
+    // the acetate eases onto north when released near it
     if (this.settle) {
       const span = shortest(this.rotTarget - this.settle.from)
       const k = Math.min(1, (t - this.settle.t0) / 900)
@@ -330,9 +356,11 @@ export class Instrument {
 
     if (this.dirty || moving) {
       this.acetate.rotation.y = -THREE.MathUtils.degToRad(this.rot)
-      this.acetate.position.y = 0.062 + (1 - this.discAlpha) * 1.4
+      this.acetate.position.y = 0.1 + (1 - this.discAlpha) * 1.4
       this.acetate.visible = this.discAlpha > 0.02
-      this.disc.material.opacity = this.discAlpha
+      this.print.material.opacity = this.discAlpha
+      this.tint.material.opacity = 0.045 * this.discAlpha
+      this.glass.material.opacity = this.discAlpha
       this.bezel.material.opacity = this.discAlpha
       this.bezel.castShadow = this.discAlpha > 0.5
       this.placeCamera()
@@ -350,9 +378,8 @@ export class Instrument {
     c.removeEventListener('pointerup', this.onUp); c.removeEventListener('pointercancel', this.onUp); c.removeEventListener('pointerleave', this.onUp)
     window.removeEventListener('pointermove', this.onHover); window.removeEventListener('resize', this.onResize)
     Object.values(this.sheets).forEach((m) => m?.dispose()); Object.values(this.acetates).forEach((m) => m?.dispose())
-    this.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); const mat = m.material as THREE.Material | undefined; if (mat && 'dispose' in mat) mat.dispose() })
+    this.scene.traverse((o) => { const m = o as THREE.Mesh; if (m.geometry) m.geometry.dispose(); const mat = m.material as THREE.Material | THREE.Material[] | undefined; if (Array.isArray(mat)) mat.forEach((x) => x.dispose()); else if (mat && 'dispose' in mat) mat.dispose() })
     this.renderer.dispose()
     c.remove()
   }
 }
-

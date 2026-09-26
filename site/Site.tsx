@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { ArrowRight, ArrowUpRight, Check, Download, Globe, MessageCircle, Mail, Monitor, Smartphone } from 'lucide-react'
 import { Act } from './Act'
 import { DialDemo } from './DialDemo'
-import { armReveals, fanPages, heroIntro, initSmoothScroll, navTheme, refreshTriggers, reducedMotion, scrubSection } from './motion'
+import { armReveals, fanPages, heroIntro, initSmoothScroll, refreshTriggers, reducedMotion, scrubSection } from './motion'
 import { APP_URL, ASSET_NAMES, CONTACT, DOWNLOADS, FALLBACK_RELEASE, REPO, REPO_API } from './config'
 import { ZONES16 } from '../src/vastu'
 import shotVerdicts from './shots/desktop-verdicts.webp'
@@ -80,7 +80,7 @@ function ZoneStrip() {
     return scrubSection(el, (p) => { el.style.setProperty('--shift', `${(-p * 18).toFixed(2)}%`) })
   }, [])
   return (
-    <div className="zone-strip" ref={ref} aria-label="The sixteen zones and what each governs" data-nav="paper">
+    <div className="zone-strip" ref={ref} aria-label="The sixteen zones and what each governs">
       <div className="zone-track">
         {ZONES16.map((z) => (
           <div className="zone" key={z.key}>
@@ -108,10 +108,17 @@ const FAQ = [
 
 export function Site({ returning }: { returning: boolean }) {
   const root = useRef<HTMLDivElement>(null)
-  const nav = useRef<HTMLElement>(null)
   const compassSec = useRef<HTMLElement>(null)
   const pages = useRef<HTMLDivElement>(null)
   const rel = useRelease()
+  const [scrolled, setScrolled] = useState(false)
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 40)
+    onScroll()
+    window.addEventListener('scroll', onScroll, { passive: true })
+    return () => window.removeEventListener('scroll', onScroll)
+  }, [])
 
   useEffect(() => {
     const r = root.current
@@ -120,11 +127,10 @@ export function Site({ returning }: { returning: boolean }) {
     const offHero = heroIntro(r)
     const offReveals = armReveals(r)
     const offFan = pages.current ? fanPages(pages.current) : () => {}
-    const offNav = nav.current ? navTheme(nav.current, Array.from(r.querySelectorAll<HTMLElement>('[data-nav]'))) : () => {}
     document.fonts?.ready.then(refreshTriggers).catch(() => {})
     r.querySelectorAll('img').forEach((im) => im.addEventListener('load', refreshTriggers, { once: true }))
     window.addEventListener('load', refreshTriggers, { once: true })
-    return () => { offHero(); offReveals(); offFan(); offNav(); offScroll() }
+    return () => { offHero(); offReveals(); offFan(); offScroll() }
   }, [])
 
   const whatsapp = CONTACT.whatsapp ? `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent('Hello — I would like a Vastu Studio seat.')}` : ''
@@ -134,7 +140,7 @@ export function Site({ returning }: { returning: boolean }) {
     <div ref={root} className="site">
       <a className="skip" href="#read">Skip to content</a>
 
-      <header className="nav" ref={nav} data-on="ink" data-hero-nav>
+      <header className={`nav ${scrolled ? 'scrolled' : ''}`} data-hero-nav>
         <a className="nav-brand" href="#top" aria-label="Vastu Studio, top of page"><Mark /> Vastu <em>Studio</em></a>
         <nav className="nav-links" aria-label="Sections">
           <a href="#read">Verdicts</a><a href="#compass">Compass</a><a href="#report">Report</a><a href="#why">Why</a><a href="#faq">Questions</a>
@@ -150,7 +156,7 @@ export function Site({ returning }: { returning: boolean }) {
       <ZoneStrip />
 
       {/* ———— verdicts ———— */}
-      <section className="chapter" id="read" data-nav="paper">
+      <section className="chapter" id="read">
         <div className="wrap">
           <ChapterHead title="What the studio says."
             lede="These are the studio's own sentences for the plan above: how much of each room sits in which zone, judged against the charts, with the move that fixes it in your units and your direction." />
@@ -171,7 +177,7 @@ export function Site({ returning }: { returning: boolean }) {
               <p>Naga breeds enmity and jealousy. Favourable gates on this wall: N3 Mukhya, N4 Bhallata.</p>
             </article>
           </div>
-          <figure className="frame-desktop">
+          <figure className="frame-desktop" data-reveal-img>
             <img src={shotVerdicts} alt="The Windows studio: the plan with the sixteen-zone wheel, and the Rooms & objects panel listing each room with its zone shares and verdict." width={2880} height={1800} loading="lazy" decoding="async" />
             <figcaption>The Windows studio. Tap a row for the why and the move.</figcaption>
           </figure>
@@ -179,7 +185,7 @@ export function Site({ returning }: { returning: boolean }) {
       </section>
 
       {/* ———— compass ———— */}
-      <section className="chapter ink compass" id="compass" ref={compassSec} data-nav="ink">
+      <section className="chapter compass" id="compass" ref={compassSec}>
         <div className="wrap">
           <ChapterHead title="The compass, in your hand."
             lede="Point the phone at a wall and read its zone, corrected to true north for where you stand, with the ruler, deity, colour, best use and remedy of that direction and the pada under the needle." />
@@ -199,7 +205,7 @@ export function Site({ returning }: { returning: boolean }) {
       </section>
 
       {/* ———— report ———— */}
-      <section className="chapter" id="report" data-nav="paper">
+      <section className="chapter" id="report">
         <div className="wrap">
           <ChapterHead title="A report your client can hold."
             lede="One tap builds a PDF set in the studio's own faces: the plan with its zones, the room-by-room verdicts, the entrance reading, the zone balance and the written assessment, ready for WhatsApp or print." />
@@ -216,12 +222,12 @@ export function Site({ returning }: { returning: boolean }) {
       </section>
 
       {/* ———— everywhere ———— */}
-      <section className="chapter ink desk" id="everywhere" data-nav="ink">
+      <section className="chapter desk" id="everywhere">
         <div className="wrap">
           <ChapterHead title="On the desk, on site, in the browser."
             lede="One seat opens the same studio on every platform. Plans live on the device they were drawn on; the charts, the compass tables and the reports come with the seat." />
         </div>
-        <figure className="desk-shot">
+        <figure className="desk-shot" data-reveal-img>
           <img src={shotInk} alt="The Windows studio in the Ink theme, the sample residence traced with its zones." width={2880} height={1800} loading="lazy" decoding="async" data-parallax="0.06" />
         </figure>
         <div className="wrap">
@@ -248,7 +254,7 @@ export function Site({ returning }: { returning: boolean }) {
       </section>
 
       {/* ———— why ———— */}
-      <section className="chapter why" id="why" data-nav="paper">
+      <section className="chapter why" id="why">
         <div className="wrap">
           <ChapterHead title="Not a calculator."
             lede="Upload-and-score tools give a number and no way to argue with it. Vastu Studio is an instrument: it measures, shows its geometry, and leaves the judgement to the practitioner." />
@@ -262,7 +268,7 @@ export function Site({ returning }: { returning: boolean }) {
       </section>
 
       {/* ———— questions ———— */}
-      <section className="chapter faq" id="faq" data-nav="paper">
+      <section className="chapter faq" id="faq">
         <div className="wrap">
           <ChapterHead title="Questions practitioners ask." lede="" />
           <div className="faq-list">
@@ -277,7 +283,7 @@ export function Site({ returning }: { returning: boolean }) {
       </section>
 
       {/* ———— get ———— */}
-      <section className="chapter get" id="get" data-nav="paper">
+      <section className="chapter get" id="get">
         <div className="wrap">
           <ChapterHead title="Get Vastu Studio."
             lede={`Version ${rel.version}${rel.live ? `, released ${fmtDate(rel.publishedAt)}` : ''}. Install it, then sign in with the seat your studio issued.`} />
@@ -326,7 +332,7 @@ export function Site({ returning }: { returning: boolean }) {
         </div>
       </section>
 
-      <footer className="foot" data-nav="ink">
+      <footer className="foot">
         <div className="wrap">
           <div className="foot-brand"><Mark size={20} /> Vastu <em>Studio</em></div>
           <p className="foot-line">The instrument for Vastu practitioners. Made in India.</p>
