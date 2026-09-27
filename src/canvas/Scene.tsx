@@ -894,7 +894,8 @@ export function Scene(props: SceneProps) {
           </clipPath>
         )}
       </defs>
-      <Background bg={bg} dxf={dxf} k={k} paper={props.paper} />
+      {/* ids let the touch magnifier re-use just the drawing and the outline */}
+      <g id={`${idPrefix}-bg`}><Background bg={bg} dxf={dxf} k={k} paper={props.paper} /></g>
       <g key={drawn?.compass.id ?? compass.id} className="compass-enter" opacity={(drawn?.compass ?? compass).opacity}
         display={props.compassHidden ? 'none' : undefined}>
         {drawn && drawn.compass.id === 'custom' && <CustomLayer {...drawn} />}
@@ -915,9 +916,9 @@ export function Scene(props: SceneProps) {
           </g>
         )
       })()}
-      <Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
+      <g id={`${idPrefix}-outline`}><Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr}
-        wallColor={props.wallColor} wallWidthM={props.wallWidthM} wallOpacity={props.wallOpacity} />
+        wallColor={props.wallColor} wallWidthM={props.wallWidthM} wallOpacity={props.wallOpacity} /></g>
       <StrokesLayer strokes={props.strokes ?? []} />
       <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} />
       <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} />

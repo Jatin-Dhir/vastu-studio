@@ -1588,8 +1588,13 @@ export function CanvasStage() {
         const sy = v.ty + v.k * (wp.x * sinR + wp.y * cosR)
         const R2 = 62, MAG = 2.4, M = 16
         const svgW = svgRef.current?.clientWidth ?? 400
-        const nearLeft = sx < R2 * 2 + M * 2 && sy < R2 * 2 + M * 2
-        const cx = nearLeft ? svgW - R2 - M : R2 + M
+        // on a touch tablet the desktop tool rail (and the rotate chip above it) sit in the
+        // top-left corner — start the magnifier past them rather than under them
+        const svgRect = svgRef.current?.getBoundingClientRect()
+        const rail = document.querySelector('.tool-rail')?.getBoundingClientRect()
+        const left = svgRect && rail && rail.width > 0 && rail.left - svgRect.left < svgW / 3 ? rail.right - svgRect.left + M : M
+        const nearLeft = sx < left + R2 * 2 + M && sy < R2 * 2 + M * 2
+        const cx = nearLeft ? svgW - R2 - M : left + R2
         const cy = R2 + M
         return (
           <g pointerEvents="none">
@@ -1600,7 +1605,14 @@ export function CanvasStage() {
             <circle cx={cx} cy={cy} r={R2 + 2.5} fill="#0B0C10" />
             <g clipPath="url(#loupe-clip)">
               <rect x={cx - R2} y={cy - R2} width={R2 * 2} height={R2 * 2} fill="#101318" />
-              <use href="#world" transform={`translate(${cx - MAG * sx} ${cy - MAG * sy}) scale(${MAG})`} />
+              {/* just the drawing and the outline — cloning all of #world (compass, labels,
+                  markers) doubled the cost of every touch-drag frame */}
+              <g transform={`translate(${cx - MAG * sx} ${cy - MAG * sy}) scale(${MAG})`}>
+                <g transform={`translate(${v.tx} ${v.ty}) scale(${v.k}) rotate(${v.rot})`}>
+                  <use href="#live-bg" />
+                  <use href="#live-outline" />
+                </g>
+              </g>
             </g>
             <line x1={cx - 11} y1={cy} x2={cx + 11} y2={cy} stroke="#F26B57" strokeWidth={1.4} />
             <line x1={cx} y1={cy - 11} x2={cx} y2={cy + 11} stroke="#F26B57" strokeWidth={1.4} />
