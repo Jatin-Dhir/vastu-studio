@@ -32,6 +32,24 @@ function devSave(): Plugin {
  *  which precaches them at install (every surface that loads on first use must also open
  *  offline) and prunes the files earlier builds left behind. Font subsets for scripts the app
  *  never shows (Cyrillic, Greek, Vietnamese) and the legacy .woff copies are left out. */
+/** Build only: preload the Latin Inter file. Fonts were only requested after React rendered,
+ *  landing 1.2–1.5 s later and forcing a relayout; one preload of the face every screen uses
+ *  moved LCP ~650 ms earlier in the audit's measurements. */
+function preloadInter(): Plugin {
+  return {
+    name: 'vastu-preload-inter',
+    apply: 'build',
+    transformIndexHtml: {
+      order: 'post',
+      handler(html, ctx) {
+        const file = Object.keys(ctx.bundle ?? {}).find((f) => /^assets\/inter-latin-wght-normal-[\w-]+\.woff2$/.test(f))
+        if (!file) return html
+        return html.replace('</head>', `    <link rel="preload" as="font" type="font/woff2" crossorigin href="./${file}">\n  </head>`)
+      },
+    },
+  }
+}
+
 function swPrecache(): Plugin {
   let outDir = 'dist'
   let files: string[] = []
@@ -54,7 +72,7 @@ function swPrecache(): Plugin {
 
 export default defineConfig({
   base: './',
-  plugins: [react(), devSave(), swPrecache()],
+  plugins: [react(), devSave(), preloadInter(), swPrecache()],
   server: { port: 5173 },
   build: {
     // Safari 15 (iPhone 6s/7 on iOS 15), Chrome/Edge/WebView 99, Firefox 99: syntax newer than
@@ -65,10 +83,12 @@ export default defineConfig({
     rollupOptions: {
       input: { main: resolve(__dirname, 'index.html') },
       output: {
-        manualChunks: {
-          react: ['react', 'react-dom'],
-          pdfjs: ['pdfjs-dist/legacy/build/pdf.mjs'],
-          leaflet: ['leaflet'],
+        // all of React (react-dom/client and the scheduler were landing in main, so every
+        // deploy re-downloaded them), pdf.js and leaflet each in their own long-lived chunk
+        manualChunks(id) {
+          if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+          if (/[\\/]node_modules[\\/]pdfjs-dist[\\/]/.test(id)) return 'pdfjs'
+          if (/[\\/]node_modules[\\/]leaflet[\\/]/.test(id)) return 'leaflet'
         },
       },
     },
