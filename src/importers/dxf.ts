@@ -9,6 +9,8 @@ export interface DxfImport {
   metersPerPx: number | null
   /** Largest extent of the drawing in its own (possibly unitless) drawing units. */
   unitsMaxDim: number
+  /** the drawing was larger than the importer draws — some of it was left out */
+  truncated: boolean
 }
 
 interface XY { x: number; y: number }
@@ -136,14 +138,25 @@ export function importDxf(text: string): DxfImport {
   const polylines: XY[][] = []
   const rawTexts: { p: XY; size: number; str: string; rotDeg: number }[] = []
   let entityCount = 0
+  let truncated = false
+  // paper space holds the sheet's title block and viewports, drawn at a different scale —
+  // mixing it in shrank a 10 m plan to a sliver of a 420 mm title block. It is only read
+  // when the model space turns out to be empty.
+  let includePaper = false
 
   const blocks: Record<string, any> = (dxf as any).blocks ?? {}
 
-  function walk(entities: any[], m: Mat, depth: number) {
+  // an entity whose extrusion points down (0,0,−1) lives in a mirrored object coordinate
+  // system: its x runs the other way in the world (mirrored arcs, polylines and blocks)
+  const mirrored = (ent: any) => ((ent.extrusionDirectionZ ?? ent.extrusionDirection?.z ?? 1) as number) < 0
+
+  function walk(entities: any[], m0: Mat, depth: number) {
     if (!entities || depth > 5) return
     for (const ent of entities) {
-      if (entityCount > 60000) return
+      if (entityCount > 60000) { truncated = true; return }
+      if (depth === 0 && ent.inPaperSpace && !includePaper) continue
       entityCount++
+      const m = ent.type !== 'LINE' && mirrored(ent) ? mul(m0, scaleXY(-1, 1)) : m0
       try {
         switch (ent.type) {
           case 'LINE': {
@@ -214,7 +227,8 @@ export function importDxf(text: string): DxfImport {
             const bp = block.position ?? { x: 0, y: 0 }
             let t = mul(m, translate(ent.position?.x ?? 0, ent.position?.y ?? 0))
             t = mul(t, rotateDeg(ent.rotation ?? 0))
-            t = mul(t, scaleXY(ent.xScale ?? 1, ent.yScale ?? ent.xScale ?? 1))
+            // DXF's default Y scale is 1, not the X scale (an INSERT scaled 3 in x only drew 3×3)
+            t = mul(t, scaleXY(ent.xScale ?? 1, ent.yScale ?? 1))
             t = mul(t, translate(-bp.x, -bp.y))
             walk(block.entities, t, depth + 1)
             break
@@ -243,6 +257,11 @@ export function importDxf(text: string): DxfImport {
   }
 
   walk((dxf as any).entities ?? [], IDENT, 0)
+  if (polylines.length === 0 && rawTexts.length === 0) {
+    includePaper = true
+    entityCount = 0
+    walk((dxf as any).entities ?? [], IDENT, 0)
+  }
 
   if (polylines.length === 0 && rawTexts.length === 0) {
     throw new Error('No drawable geometry found in this DXF')
@@ -269,6 +288,7 @@ export function importDxf(text: string): DxfImport {
   const h = (maxY - minY) * s
   const mapPt = (p: XY): XY => ({ x: (p.x - minX) * s, y: (maxY - p.y) * s })
 
+  if (polylines.length > 20000 || rawTexts.length > 2000) truncated = true
   const paths: string[] = []
   for (const line of polylines.slice(0, 20000)) {
     const mapped = line.map(mapPt)
@@ -286,5 +306,5 @@ export function importDxf(text: string): DxfImport {
   const unitM = UNIT_METERS[insunits]
   const metersPerPx = unitM ? unitM / s : null
 
-  return { paths, texts, w, h, metersPerPx, unitsMaxDim: Math.max(maxX - minX, maxY - minY) }
+  return { paths, texts, w, h, metersPerPx, unitsMaxDim: Math.max(maxX - minX, maxY - minY), truncated }
 }

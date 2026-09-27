@@ -92,6 +92,9 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
         'ok',
       )
       afterImportGuide()
+      if (dxf.truncated) {
+        s.toast('This drawing is very large — only part of it was drawn. Purge unused layers or export just the floor plan to see all of it', 'warn')
+      }
       if (!dxf.metersPerPx) {
         // no $INSUNITS — offer the most plausible unit, sized so the user can sanity-check
         const extU = dxf.unitsMaxDim
