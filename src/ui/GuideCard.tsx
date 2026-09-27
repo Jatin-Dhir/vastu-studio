@@ -21,11 +21,13 @@ export function GuideCard() {
   const hasBg = useStore((s) => s.bg.kind !== 'none')
   const suggestion = useStore((s) => s.scaleSuggestion)
   const unit = useStore((s) => s.unit)
-  const [hidden, setHidden] = useState(() => sessionStorage.getItem(HIDE_KEY) === '1')
+  // sessionStorage throws outright when the browser blocks site data — the guide then
+  // simply forgets its dismissal at reload instead of taking the whole app down
+  const [hidden, setHidden] = useState(() => { try { return sessionStorage.getItem(HIDE_KEY) === '1' } catch { return false } })
 
   useEffect(() => {
     const show = () => {
-      sessionStorage.removeItem(HIDE_KEY)
+      try { sessionStorage.removeItem(HIDE_KEY) } catch { /* blocked storage */ }
       setHidden(false)
     }
     window.addEventListener('vastu:show-guide', show)
@@ -39,7 +41,7 @@ export function GuideCard() {
 
   const s = useStore.getState()
   const dismiss = () => {
-    sessionStorage.setItem(HIDE_KEY, '1')
+    try { sessionStorage.setItem(HIDE_KEY, '1') } catch { /* blocked storage */ }
     setHidden(true)
   }
 

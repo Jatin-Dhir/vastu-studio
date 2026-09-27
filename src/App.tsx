@@ -136,6 +136,7 @@ export default function App() {
     const camera = () => cameraRef.current?.click()
     window.addEventListener('vastu:open-camera', camera)
     const reset = () => {
+      autosave() // the debounce may still hold the last edit — keep it in the library first
       clearAutosave()
       const st = useStore.getState()
       st.loadProject({ ...EMPTY_PROJECT, unit: st.unit })
@@ -246,8 +247,15 @@ export default function App() {
   /* paste + drag-drop */
   useEffect(() => {
     const onPaste = (e: ClipboardEvent) => {
+      // pasting into a field is typing, never an import (cells copied from a spreadsheet
+      // carry an image too, which used to replace the whole plan behind the report)
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
       const items = e.clipboardData?.items
       if (!items) return
+      // text alongside an image is copied content (a sheet, a document); a screenshot or a
+      // "Copy image" carries no plain text — only those are plans someone meant to paste
+      if (e.clipboardData?.types?.includes('text/plain')) return
       for (const it of items) {
         if (it.type.startsWith('image/')) {
           const blob = it.getAsFile()
@@ -285,7 +293,7 @@ export default function App() {
     if (!safe && legacy && (legacy.bg.kind !== 'none' || legacy.pts.length > 0)) {
       const id = newProjectId()
       const name = legacy.bg.name?.replace(/\.[^.]+$/, '') || 'Migrated plan'
-      void putProject({ id, name, updatedAt: Date.now(), data: legacy }).then(() => clearAutosave())
+      void putProject({ id, name, updatedAt: Date.now(), data: legacy }).then(() => clearAutosave()).catch(() => { /* keep the legacy copy */ })
       st.loadProject(legacy)
       st.setProjectMeta({ id, name })
       setTimeout(requestFit, 120)
@@ -306,7 +314,7 @@ export default function App() {
         if (!isPhone()) s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
           window.dispatchEvent(new CustomEvent('vastu:reset'))
         })
-      })
+      }).catch(() => { /* library unavailable: start blank */ })
     } else if (!safe) {
       void getMostRecent().then((rec) => {
         if (!rec) return
@@ -320,7 +328,7 @@ export default function App() {
         if (!isPhone()) s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
           window.dispatchEvent(new CustomEvent('vastu:reset'))
         })
-      })
+      }).catch(() => { /* library unavailable: start blank */ })
     }
     let timer = 0
     const unsub = useStore.subscribe((s, prev) => {

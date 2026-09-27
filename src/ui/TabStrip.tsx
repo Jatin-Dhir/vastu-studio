@@ -16,7 +16,10 @@ export function TabStrip() {
     <div className={`tab-strip ${collapsed ? 'collapsed' : ''}`} inert={collapsed}>
       {openTabs.map((t) => (
         <span key={t.id} className={`tab-item ${t.id === currentProjectId ? 'active' : ''}`}>
-          <button className="tab-name" onClick={() => { void switchToProject(t.id).then(() => setTimeout(requestFit, 120)) }}>
+          <button className="tab-name" onClick={() => {
+            void switchToProject(t.id).then(() => setTimeout(requestFit, 120))
+              .catch(() => useStore.getState().toast('That project could not be opened — browser storage refused', 'warn'))
+          }}>
             {t.name}
           </button>
           <button className="tab-close" aria-label={`Close ${t.name}`}

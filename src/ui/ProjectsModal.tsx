@@ -29,8 +29,11 @@ export function ProjectsModal() {
   const refresh = () => { void listProjects().then(setRows).catch(() => setRows([])) }
   useEffect(refresh, [])
 
+  const failed = () => useStore.getState().toast('The project library could not be read — browser storage refused. Save projects as .vastu files to keep them safe', 'warn')
+
   const open = async (id: string) => {
-    const rec = await switchToProject(id)
+    let rec
+    try { rec = await switchToProject(id) } catch { failed(); return }
     useStore.getState().setProjectsOpen(false)
     if (!rec) return // already the open tab — nothing else to do
     setTimeout(requestFit, 120)
@@ -38,10 +41,12 @@ export function ProjectsModal() {
   }
 
   const duplicate = async (id: string) => {
-    const rec = await getProject(id)
-    if (!rec) return
-    const copy = { ...rec, id: newProjectId(), name: `${rec.name} (copy)`, updatedAt: Date.now() }
-    await putProject(copy)
+    try {
+      const rec = await getProject(id)
+      if (!rec) return
+      const copy = { ...rec, id: newProjectId(), name: `${rec.name} (copy)`, updatedAt: Date.now() }
+      await putProject(copy)
+    } catch { failed() }
     refresh()
   }
 
@@ -61,16 +66,19 @@ export function ProjectsModal() {
         else window.dispatchEvent(new CustomEvent('vastu:reset'))
       }
       refresh()
-    })
+    }).catch(failed)
   }
 
   const rename = async (id: string) => {
     const name = renameVal.trim()
     setRenaming(null)
     if (!name) return
-    const rec = await getProject(id)
-    if (!rec) return
-    await putProject({ ...rec, name })
+    let rec
+    try {
+      rec = await getProject(id)
+      if (!rec) return
+      await putProject({ ...rec, name })
+    } catch { failed(); return }
     const st = useStore.getState()
     if (st.currentProjectId === id) st.setProjectMeta({ id, name })
     else st.renameOpenTab(id, name)
