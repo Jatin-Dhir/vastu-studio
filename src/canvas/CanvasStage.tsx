@@ -11,10 +11,13 @@ import { at } from './svgText'
 import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
 
-const COARSE = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
-const CLOSE_PX = COARSE ? 20 : 13
-const HIT_PX = COARSE ? 18 : 12
-const TAP_SLOP = COARSE ? 9 : 4
+/** Finger-sized targets and slop while the last press was a finger. It starts from the primary
+ *  pointer, then follows the pointer actually in use: a Windows touch laptop, a Surface with its
+ *  keyboard, an iPad with a trackpad all switch between fine and coarse input mid-session. */
+let COARSE = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+const closePx = () => (COARSE ? 20 : 13)
+const hitPx = () => (COARSE ? 18 : 12)
+const tapSlop = () => (COARSE ? 9 : 4)
 const pushHistory = () => useStore.getState().pushHistory()
 
 /** One hint per session when geometry edits happen while the centre is pinned. */
@@ -163,7 +166,10 @@ export function CanvasStage() {
   const snapDotsRef = useRef<SVGGElement>(null)
   const penCursorRef = useRef<Pt | null>(null)
   const drag = useRef<DragState>({ mode: 'idle', idx: -1, markerId: null, rsid: null, txid: null, strokeId: null, handle: null, orig: null, zoneIdx: null, startX: 0, startY: 0, lastX: 0, lastY: 0, moved: false, pushed: false, grabbed: null })
-  const pointers = useRef(new Map<number, { x: number; y: number }>())
+  const pointers = useRef(new Map<number, { x: number; y: number; type?: string }>())
+  const lastPointerType = useRef<string>('mouse')
+  // bumps a render when input switches between fine and coarse, so target sizes follow
+  const [, setCoarseTick] = useState(0)
   const lastTap = useRef<{ t: number; x: number; y: number } | null>(null)
   const lastPinch = useRef<{ d: number; mx: number; my: number; ang: number; twist: number; rotating: boolean } | null>(null)
 
@@ -374,23 +380,61 @@ export function CanvasStage() {
   useEffect(() => {
     const svg = svgRef.current
     if (!svg) return
+    const zoomAt = (mx: number, my: number, factor: number) => {
+      const v = viewRef.current
+      const nk = Math.min(60, Math.max(0.02, v.k * factor))
+      setViewLive({ tx: mx - ((mx - v.tx) * nk) / v.k, ty: my - ((my - v.ty) * nk) / v.k, k: nk, rot: v.rot })
+    }
+    // A mouse wheel zooms (the CAD habit). A touchpad's two-finger scroll pans and its pinch —
+    // which browsers send as ctrl+wheel — zooms. A wheel notch arrives in lines or pages, as a
+    // whole multiple of 120 in wheelDeltaY, or as a big integer step with no sideways part;
+    // anything finer is a touchpad. A stream that started as a touchpad stays one, so a fast
+    // swipe's occasional round number never becomes a zoom step.
+    let padUntil = 0
     const onWheel = (e: WheelEvent) => {
       e.preventDefault()
-      const v = viewRef.current
       const rect = svg.getBoundingClientRect()
       const mx = e.clientX - rect.left, my = e.clientY - rect.top
-      const factor = Math.exp(-e.deltaY * (e.ctrlKey ? 0.006 : 0.0016))
-      const nk = Math.min(60, Math.max(0.02, v.k * factor))
-      setViewLive({
-        tx: mx - ((mx - v.tx) * nk) / v.k,
-        ty: my - ((my - v.ty) * nk) / v.k,
-        k: nk,
-        rot: v.rot,
-      })
+      const wd = (e as WheelEvent & { wheelDeltaY?: number }).wheelDeltaY
+      const notch = e.deltaMode !== 0
+        || (e.deltaX === 0 && wd != null && wd !== 0 && wd % 120 === 0)
+        || (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50)
+      const now = performance.now()
+      if (!e.ctrlKey && (!notch || now < padUntil)) {
+        padUntil = now + 140
+        const v = viewRef.current
+        setViewLive({ tx: v.tx - e.deltaX, ty: v.ty - e.deltaY, k: v.k, rot: v.rot })
+        commitViewDebounced()
+        return
+      }
+      const dy = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaMode === 2 ? e.deltaY * 400 : e.deltaY
+      zoomAt(mx, my, Math.exp(-dy * (e.ctrlKey ? 0.006 : 0.0016)))
       commitViewDebounced()
     }
+    // Safari reports a trackpad pinch as its own gesture events (not ctrl+wheel) and zooms the
+    // whole page unless they are taken. Touch pinches on iPad arrive as pointers too — those
+    // are left to the pointer pinch.
+    let gScale = 1
+    const onGestureStart = (e: Event) => { e.preventDefault(); gScale = 1 }
+    const onGestureChange = (e: Event) => {
+      e.preventDefault()
+      if (pointers.current.size > 0) return
+      const g = e as Event & { scale: number; clientX: number; clientY: number }
+      const rect = svg.getBoundingClientRect()
+      zoomAt(g.clientX - rect.left, g.clientY - rect.top, g.scale / gScale)
+      gScale = g.scale
+    }
+    const onGestureEnd = (e: Event) => { e.preventDefault(); commitViewDebounced() }
     svg.addEventListener('wheel', onWheel, { passive: false })
-    return () => svg.removeEventListener('wheel', onWheel)
+    svg.addEventListener('gesturestart', onGestureStart, { passive: false })
+    svg.addEventListener('gesturechange', onGestureChange, { passive: false })
+    svg.addEventListener('gestureend', onGestureEnd, { passive: false })
+    return () => {
+      svg.removeEventListener('wheel', onWheel)
+      svg.removeEventListener('gesturestart', onGestureStart)
+      svg.removeEventListener('gesturechange', onGestureChange)
+      svg.removeEventListener('gestureend', onGestureEnd)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -437,9 +481,14 @@ export function CanvasStage() {
   }
 
   const onPointerDown = (e: React.PointerEvent<SVGSVGElement>) => {
+    // palm rejection: a hand resting on the screen while a pen is down is not a second finger
+    if (e.pointerType === 'touch' && [...pointers.current.values()].some((p) => p.type === 'pen')) return
+    lastPointerType.current = e.pointerType
+    const touchy = e.pointerType === 'touch'
+    if (touchy !== COARSE) { COARSE = touchy; setCoarseTick((n) => n + 1) }
     const svg = svgRef.current!
     try { svg.setPointerCapture(e.pointerId) } catch { /* synthetic or stale pointer */ }
-    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+    pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType })
     setGestureBusy(true)
     if (pointers.current.size >= 2) {
       // another finger aborts any in-flight gesture — clear its live preview too, not just its mode
@@ -584,7 +633,7 @@ export function CanvasStage() {
   const onPointerMove = (e: React.PointerEvent<SVGSVGElement>) => {
     const s = useStore.getState()
     if (pointers.current.has(e.pointerId)) {
-      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY })
+      pointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType })
     }
     // pinch: zoom + pan + (after intent) twist-to-rotate — all direct to the DOM
     if (pointers.current.size >= 2) {
@@ -620,7 +669,7 @@ export function CanvasStage() {
     if (needCursor) setCursor(world)
     if (d.mode === 'idle') return
     const movedPx = Math.hypot(e.clientX - d.startX, e.clientY - d.startY)
-    if (movedPx > TAP_SLOP) d.moved = true
+    if (movedPx > tapSlop()) d.moved = true
 
     if (d.mode === 'maybe-pan' && d.moved) d.mode = 'pan'
     if (d.mode === 'pan') {
@@ -952,7 +1001,7 @@ export function CanvasStage() {
         if (s.roomDrawMode !== 'polygon') break
         const draft = s.roomDraft ?? []
         // close by tapping the first corner again — the same gesture as the outline
-        if (draft.length >= 3 && dist(world, draft[0]) < CLOSE_PX / k) { haptic('success'); s.closeRoomDraft(); break }
+        if (draft.length >= 3 && dist(world, draft[0]) < closePx() / k) { haptic('success'); s.closeRoomDraft(); break }
         haptic('light')
         s.setRoomDraft([...draft, world])
         break
@@ -982,7 +1031,7 @@ export function CanvasStage() {
           }
           break
         }
-        if (s.pts.length >= 3 && dist(world, s.pts[0]) < CLOSE_PX / k) { haptic('success'); s.closePolygon(); break }
+        if (s.pts.length >= 3 && dist(world, s.pts[0]) < closePx() / k) { haptic('success'); s.closePolygon(); break }
         let p = world
         // snap a new corner onto an already-placed one, or onto an edge it's crossing —
         // catches the "close a notch" / "align with the wall I just drew" cases
@@ -1065,6 +1114,9 @@ export function CanvasStage() {
 
   const onContextMenu = (e: React.MouseEvent<SVGSVGElement>) => {
     e.preventDefault()
+    // Android and Windows touch screens fire contextmenu on press-and-hold — that must not
+    // delete the corner someone is about to drag; right-click deletion is a mouse gesture
+    if (lastPointerType.current !== 'mouse') return
     const s = useStore.getState()
     if (s.locked) return
     const target = (e.target as Element).closest('[data-vidx]')
@@ -1088,7 +1140,7 @@ export function CanvasStage() {
       ? { ...compass, id: 'none' as const }
       : compass
   const tracing = tool === 'trace' && !closed
-  const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < CLOSE_PX / k
+  const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < closePx() / k
   const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
   const liveTo = tracing && cursor && pts.length > 0
     ? (useStore.getState().angleSnap ? snapPoint(pts[pts.length - 1], cursor) : cursor)
@@ -1415,7 +1467,7 @@ export function CanvasStage() {
           const sel = selectedVertex === i
           return (
             <g key={i} data-vidx={i} style={{ cursor: 'grab' }}>
-              <circle cx={p.x} cy={p.y} r={HIT_PX / k} fill="rgba(0,0,0,0)" data-vidx={i} />
+              <circle cx={p.x} cy={p.y} r={hitPx() / k} fill="rgba(0,0,0,0)" data-vidx={i} />
               {(highlight || sel) && (
                 <circle cx={p.x} cy={p.y} r={11 / k} fill="none" stroke={GOLD}
                   strokeWidth={1.5 / k} opacity={0.85} />
@@ -1457,7 +1509,7 @@ export function CanvasStage() {
                 strokeLinecap="round" strokeLinejoin="round" opacity={0.3} pointerEvents="none" />
               {hs.map((h) => (
                 <g key={h.id} data-sh={h.id} data-strokeid={s2.id} style={{ cursor: HANDLE_CURSOR[h.id] ?? 'grab' }}>
-                  <circle cx={h.p.x} cy={h.p.y} r={HIT_PX / k} fill="rgba(0,0,0,0)" />
+                  <circle cx={h.p.x} cy={h.p.y} r={hitPx() / k} fill="rgba(0,0,0,0)" />
                   <circle cx={h.p.x} cy={h.p.y} r={5 / k} fill="#FFFFFF" stroke={GOLD} strokeWidth={1.7 / k} />
                 </g>
               ))}
@@ -1478,7 +1530,7 @@ export function CanvasStage() {
             <g>
               {hs.map((h2) => (
                 <g key={h2.id} data-rh={h2.id} data-rsid={r.id} style={{ cursor: HANDLE_CURSOR[h2.id] ?? 'grab' }}>
-                  <circle cx={h2.p.x} cy={h2.p.y} r={HIT_PX / k} fill="rgba(0,0,0,0)" />
+                  <circle cx={h2.p.x} cy={h2.p.y} r={hitPx() / k} fill="rgba(0,0,0,0)" />
                   {r.shape === 'polygon'
                     ? <circle cx={h2.p.x} cy={h2.p.y} r={5 / k} fill="#FFFFFF" stroke={GOLD} strokeWidth={1.7 / k} />
                     : <rect x={h2.p.x - 4.5 / k} y={h2.p.y - 4.5 / k} width={9 / k} height={9 / k} rx={1.5 / k}
