@@ -1,6 +1,7 @@
-import { useEffect } from 'react'
+import { useId, useRef } from 'react'
 import { Check } from 'lucide-react'
 import { useStore, type AccentId, type ThemeMode } from '../store'
+import { useModalFocus } from './useModalFocus'
 
 const THEMES: { id: ThemeMode; label: string; sub: string; bg: string; fg: string }[] = [
   { id: 'ink', label: 'Ink', sub: 'Dark — easy on the eyes on site', bg: '#0B0C10', fg: '#E9EBF1' },
@@ -24,26 +25,25 @@ export function AppearanceSheet({ open, onClose }: { open: boolean; onClose: () 
   const accent = useStore((s) => s.accent)
   const setTheme = useStore((s) => s.setTheme)
   const setAccent = useStore((s) => s.setAccent)
+  const boxRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  useModalFocus(boxRef, onClose, { active: open })
 
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
   if (!open) return null
   return (
     <div className="asheet-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="asheet" role="dialog" aria-label="Appearance" onClick={(e) => e.stopPropagation()}>
+      <div ref={boxRef} className="asheet" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}>
         <div className="asheet-head">
-          <span>Appearance</span>
+          <span id={titleId}>Appearance</span>
         </div>
 
         <div className="appearance-section">
           <span className="appearance-label">Theme</span>
-          <div className="appearance-themes">
+          <div className="appearance-themes" role="group" aria-label="Theme">
             {THEMES.map((t) => (
               <button key={t.id} className={`theme-swatch ${theme === t.id ? 'on' : ''}`}
+                aria-pressed={theme === t.id}
                 style={{ background: t.bg, color: t.fg }}
                 onClick={() => setTheme(t.id)}>
                 <span className="theme-swatch-name">{t.label}</span>
@@ -56,10 +56,10 @@ export function AppearanceSheet({ open, onClose }: { open: boolean; onClose: () 
 
         <div className="appearance-section">
           <span className="appearance-label">Accent</span>
-          <div className="appearance-accents">
+          <div className="appearance-accents" role="group" aria-label="Accent">
             {ACCENTS.map((a) => (
               <button key={a.id} className={`accent-swatch ${accent === a.id ? 'on' : ''}`}
-                aria-label={a.label} title={a.label}
+                aria-label={a.label} title={a.label} aria-pressed={accent === a.id}
                 style={{ background: a.swatch }}
                 onClick={() => setAccent(a.id)}>
                 {accent === a.id && <Check size={13} strokeWidth={3} color="#14151A" />}

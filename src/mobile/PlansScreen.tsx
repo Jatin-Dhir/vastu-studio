@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Camera, Copy, FileUp, Map as MapIcon, MoreHorizontal, Pencil, PenLine, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { deleteProjectRecord, getProject, listProjects, newProjectId, putProject } from '../db'
@@ -31,6 +31,8 @@ export function PlansScreen() {
   const [renaming, setRenaming] = useState<Row | null>(null)
   const [renameVal, setRenameVal] = useState('')
   const [confirmDelete, setConfirmDelete] = useState<Row | null>(null)
+  // the Dialog focuses this itself — autoFocus would take focus before the Dialog notes its opener
+  const renameRef = useRef<HTMLInputElement>(null)
 
   const refresh = () => { void listProjects().then(setRows).catch(() => setRows([])) }
   useEffect(refresh, [currentId])
@@ -120,9 +122,10 @@ export function PlansScreen() {
       ] : []} />
 
       {renaming && (
-        <Dialog title="Rename plan" onClose={() => setRenaming(null)} width={360}>
-          <input className="m-input" autoFocus value={renameVal} onChange={(e) => setRenameVal(e.target.value)}
-            onKeyDown={(e) => { if (e.key === 'Enter') void rename() }} />
+        <Dialog title="Rename plan" onClose={() => setRenaming(null)} width={360} initialFocus={renameRef}>
+          <input ref={renameRef} className="m-input" aria-label={`New name for ${renaming.name}`} value={renameVal}
+            onChange={(e) => setRenameVal(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void rename() } }} />
           <div className="m-dialog-actions">
             <button className="btn-ghost" onClick={() => setRenaming(null)}>Cancel</button>
             <button className="btn-primary" onClick={() => void rename()}>Save</button>

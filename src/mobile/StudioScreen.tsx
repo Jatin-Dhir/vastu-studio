@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useId, useMemo, useRef } from 'react'
 import { Check, ChevronLeft, Crosshair, Eraser, Grid2x2, Lock, LockOpen, MapPin, Maximize2, MoreHorizontal, MousePointer2, Navigation, Pencil, PenLine, Redo2, Ruler, Square, Undo2, Wand2 } from 'lucide-react'
 import { useStore } from '../store'
 import { CanvasStage } from '../canvas/CanvasStage'
@@ -15,17 +15,21 @@ import { COMPASS_META } from '../vastu'
 import { formatArea } from '../format'
 import { polygonArea } from '../geometry'
 import { haptic } from '../native'
+import { useModalFocus } from '../ui/useModalFocus'
 import type { CompassId, Tool } from '../types'
 
 type StepId = 'outline' | 'scale' | 'north' | 'rooms' | 'read'
 
 /** A bottom sheet of the studio's own — scrim, grabber, scrollable body. */
 function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  const boxRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  useModalFocus(boxRef, onClose)
   return (
     <div className="m-sheet-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="m-sheet" role="dialog" aria-label={title}>
+      <div ref={boxRef} className="m-sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}>
         <div className="m-grab" aria-hidden />
-        <div className="m-sheet-head"><h2>{title}</h2><button className="btn-ghost m-sheet-done" onClick={onClose}>Done</button></div>
+        <div className="m-sheet-head"><h2 id={titleId}>{title}</h2><button className="btn-ghost m-sheet-done" onClick={onClose}>Done</button></div>
         {children}
       </div>
     </div>
@@ -202,9 +206,9 @@ export function StudioScreen() {
 
       {hasContent && (
         <footer className="m-steps">
-          <div className="m-stepstrip" role="tablist" aria-label="Steps">
+          <div className="m-stepstrip" role="group" aria-label="Steps">
             {steps.map((s) => (
-              <button key={s.id} role="tab" aria-selected={s.id === active}
+              <button key={s.id} aria-current={s.id === active ? 'step' : undefined} aria-label={s.done ? `${s.label} (done)` : undefined}
                 className={`m-step ${s.done ? 'done' : ''} ${s.id === active ? 'active' : ''}`} onClick={() => jump(s.id)}>
                 {s.done && s.id !== active && <Check size={12} strokeWidth={3} />}{s.label}
               </button>
@@ -282,7 +286,8 @@ function CompassBody() {
     <div className="m-compass-opts">
       <div className="m-grid2">
         {COMPASS_META.filter((c) => c.id !== 'custom').map((c) => (
-          <button key={c.id} className={`m-choice ${compass.id === c.id ? 'on' : ''}`} onClick={() => setCompass({ id: c.id as CompassId })}>
+          <button key={c.id} className={`m-choice ${compass.id === c.id ? 'on' : ''}`} aria-pressed={compass.id === c.id}
+            onClick={() => setCompass({ id: c.id as CompassId })}>
             <b>{c.label}</b><small>{c.sub}</small>
           </button>
         ))}

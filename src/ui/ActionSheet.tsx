@@ -1,7 +1,8 @@
-import { useEffect } from 'react'
+import { useId, useRef } from 'react'
 import type { ReactNode } from 'react'
 import { X } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { useModalFocus } from './useModalFocus'
 
 export interface SheetRow {
   icon: LucideIcon
@@ -32,42 +33,50 @@ export function ActionSheet({
   rows: SheetRow[]
   onClose: () => void
 }) {
-  useEffect(() => {
-    if (!open) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [open, onClose])
+  const boxRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  useModalFocus(boxRef, onClose, { active: open })
   if (!open) return null
   return (
     <div className="asheet-scrim" onPointerDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
-      <div className="asheet" role="dialog" aria-label={title} onClick={(e) => e.stopPropagation()}>
+      <div ref={boxRef} className="asheet" role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
+        onClick={(e) => e.stopPropagation()}>
         <div className="asheet-head">
-          <span>{title}</span>
+          <span id={titleId}>{title}</span>
           <button className="icon-btn" aria-label="Close" onClick={onClose}>
             <X size={15} strokeWidth={2.2} />
           </button>
         </div>
-        {rows.map((r) => (
-          <button
-            key={r.label}
-            className={`asheet-row ${r.danger ? 'danger' : ''}`}
-            disabled={r.disabled}
-            onClick={() => {
-              if (r.onTap) {
-                if (!r.keepOpen) onClose()
-                r.onTap()
-              }
-            }}
-          >
-            <span className="asheet-ic"><r.icon size={17} strokeWidth={1.9} /></span>
-            <span className="asheet-text">
-              <b>{r.label}</b>
-              {r.sub && <small>{r.sub}</small>}
-            </span>
-            {r.right}
-          </button>
-        ))}
+        {rows.map((r) => {
+          const tap = () => {
+            if (r.onTap) {
+              if (!r.keepOpen) onClose()
+              r.onTap()
+            }
+          }
+          const body = (
+            <>
+              <span className="asheet-ic"><r.icon size={17} strokeWidth={1.9} /></span>
+              <span className="asheet-text">
+                <b>{r.label}</b>
+                {r.sub && <small>{r.sub}</small>}
+              </span>
+              {r.right}
+            </>
+          )
+          // a row carrying its own control can't itself be a button (a button inside a button
+          // is invalid) — that control is the keyboard path; a tap elsewhere on the row still works
+          return r.right ? (
+            <div key={r.label} className={`asheet-row ${r.danger ? 'danger' : ''}`} onClick={tap}
+              style={r.onTap ? { cursor: 'pointer', userSelect: 'none', touchAction: 'manipulation' } : undefined}>
+              {body}
+            </div>
+          ) : (
+            <button key={r.label} className={`asheet-row ${r.danger ? 'danger' : ''}`} disabled={r.disabled} onClick={tap}>
+              {body}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

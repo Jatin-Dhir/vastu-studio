@@ -6,6 +6,7 @@ import { useHeading } from './useHeading'
 import { LIFE_ASPECTS_16, PADAS32, ZONES8 } from './data'
 import { compassPointLabel, normalizeDeg, padaIndexFor, point16IndexFor, zone8IndexFor } from './math'
 import { haptic } from '../native'
+import { radioGroupKeys } from '../ui/useModalFocus'
 
 /* The live compass: face a wall, read the zone. True north by default (magnetic heading
  * corrected with the WMM declination for the phone's position); magnetic on request.
@@ -72,9 +73,9 @@ export function CompassScreen({ active }: { active: boolean }) {
         <p>Point the top of the phone at a wall or a door to read its zone.</p>
       </header>
 
-      <div className="m-seg" role="tablist" aria-label="North reference">
-        <button role="tab" aria-selected={trueNorth} className={trueNorth ? 'on' : ''} onClick={() => setTrueNorth(true)}>True north</button>
-        <button role="tab" aria-selected={!trueNorth} className={!trueNorth ? 'on' : ''} onClick={() => setTrueNorth(false)}>Magnetic</button>
+      <div className="m-seg" role="radiogroup" aria-label="North reference" onKeyDown={radioGroupKeys}>
+        <button role="radio" aria-checked={trueNorth} tabIndex={trueNorth ? 0 : -1} className={trueNorth ? 'on' : ''} onClick={() => setTrueNorth(true)}>True north</button>
+        <button role="radio" aria-checked={!trueNorth} tabIndex={!trueNorth ? 0 : -1} className={!trueNorth ? 'on' : ''} onClick={() => setTrueNorth(false)}>Magnetic</button>
       </div>
 
       <div className="m-dial-wrap">
@@ -136,7 +137,7 @@ export function CompassScreen({ active }: { active: boolean }) {
             <button className="btn-ghost m-btn" onClick={() => setLabelling(true)}><Bookmark size={15} /> Save this reading</button>
           ) : (
             <div className="m-savebar">
-              <input className="m-input" autoFocus placeholder="Main door, kitchen window…" value={label}
+              <input className="m-input" autoFocus placeholder="Main door, kitchen window…" aria-label="Name this reading" value={label}
                 onChange={(e) => setLabel(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
               <button className="btn-primary" onClick={save}>Save {Math.round(heading)}°</button>
               <button className="btn-ghost" onClick={() => { setLabelling(false); setLabel('') }}>Cancel</button>

@@ -1,5 +1,5 @@
-import { Fragment, useEffect, useMemo, useState } from 'react'
-import type { ReactNode } from 'react'
+import { Fragment, useEffect, useId, useMemo, useRef, useState } from 'react'
+import type { CSSProperties, ReactNode } from 'react'
 import { FileDown, Printer, Share2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { requireLicense } from '../auth/gate'
@@ -14,8 +14,15 @@ import { evaluateVastu, roomShapeAnchor, SEV_OF } from '../evaluate'
 import type { Finding, Severity } from '../evaluate'
 import { capFirst, fmtPct, moveSentence, verdictWord, type Assessment as ItemAssessment } from '../assess'
 import { useChartsVersion } from './useChartsVersion'
+import { useModalFocus } from './useModalFocus'
 import type { Marker, NorthSource, Pt, ScaleSource } from '../types'
 import './report.css'
+
+/** Read by screen readers, invisible on screen and on paper. */
+const SR_ONLY: CSSProperties = {
+  position: 'absolute', width: 1, height: 1, padding: 0, margin: -1, overflow: 'hidden',
+  clip: 'rect(0 0 0 0)', clipPath: 'inset(50%)', whiteSpace: 'nowrap', border: 0,
+}
 
 /* ------------------------------------------------------------------ */
 /* Small presentational helpers, local to the report.                  */
@@ -144,6 +151,13 @@ export function ReportView() {
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
+
+  // a full-screen modal: focus starts at the title, Escape closes (the app's own key handler
+  // stands down while the report is open), and the app behind goes inert until it closes
+  const rootRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLHeadingElement>(null)
+  const titleId = useId()
+  useModalFocus(rootRef, () => setReportOpen(false), { initial: titleRef, inertSiblings: true })
 
   useEffect(() => {
     let cancelled = false
@@ -382,7 +396,7 @@ export function ReportView() {
   }
 
   return (
-    <div className="report-backdrop">
+    <div ref={rootRef} className="report-backdrop" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="report-actions no-print">
         <button className="btn-primary" disabled={pdfBusy} onClick={() => void doSavePdf()}>
           <FileDown size={15} />
@@ -399,9 +413,10 @@ export function ReportView() {
       </div>
 
       <div className="report-page">
-        <header className="report-head">
+        <div className="report-head">
           <div>
-            <h1>Vastu Analysis Report</h1>
+            {/* focus lands here on open — a heading, not a control, so no ring */}
+            <h1 ref={titleRef} id={titleId} tabIndex={-1} style={{ outline: 'none' }}>Vastu Analysis Report</h1>
             <div className="report-sub">{projectName}</div>
             <div className="report-coverline">
               <span><b>Date</b> {dateStr}</span>
@@ -414,7 +429,7 @@ export function ReportView() {
               fill="none" stroke="#B8963E" strokeWidth="2" />
             <circle cx="16" cy="16" r="2.6" fill="#B8963E" />
           </svg>
-        </header>
+        </div>
 
         <div className="report-meta">
           {/* .print-value twins: print engines clip form controls to their box, so each
@@ -628,7 +643,7 @@ export function ReportView() {
             <h2>Zone balance (16 zones)</h2>
             <div className="report-table-wrap">
               <table className="report-table">
-                <thead><tr><th></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}<th>Status</th></tr></thead>
+                <thead><tr><th><span style={SR_ONLY}>Colour</span></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}<th>Status</th></tr></thead>
                 <tbody>
                   {rows.map((r, i) => {
                     const flag = shapeFindingByZone.get(i)

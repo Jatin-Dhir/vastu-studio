@@ -1,38 +1,23 @@
 import { useEffect, useRef, useState } from 'react'
+import type { RefObject } from 'react'
 import { X } from 'lucide-react'
 import { useStore } from '../store'
 import { dist } from '../geometry'
 import { M_PER_FT, formatScale } from '../format'
 import { haptic } from '../native'
+import { radioGroupKeys, useModalFocus } from './useModalFocus'
 
-const FOCUSABLE = 'button:not(:disabled), [href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex]:not([tabindex="-1"])'
-
-export function Dialog(props: { title: string; onClose: () => void; children: React.ReactNode; width?: number; className?: string }) {
+export function Dialog(props: {
+  title: string; onClose: () => void; children: React.ReactNode; width?: number; className?: string
+  /** where focus lands on open — the first control (Close) unless a field should take it straight away */
+  initialFocus?: RefObject<HTMLElement | null>
+}) {
   const boxRef = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') props.onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-  useEffect(() => {
-    const prev = document.activeElement as HTMLElement | null
-    boxRef.current?.focus()
-    return () => prev?.focus()
-  }, [])
-  // keep Tab inside the dialog — the scrim only blocks pointers, not focus
-  const trapTab = (e: React.KeyboardEvent) => {
-    if (e.key !== 'Tab' || !boxRef.current) return
-    const items = boxRef.current.querySelectorAll<HTMLElement>(FOCUSABLE)
-    if (items.length === 0) return
-    const first = items[0]
-    const last = items[items.length - 1]
-    if (e.shiftKey && (e.target === first || e.target === boxRef.current)) { e.preventDefault(); last.focus() }
-    else if (!e.shiftKey && e.target === last) { e.preventDefault(); first.focus() }
-  }
+  // the scrim only blocks pointers — focus is kept inside, and handed back on close
+  useModalFocus(boxRef, props.onClose, { initial: props.initialFocus })
   return (
     <div className="dialog-backdrop" onPointerDown={(e) => { if (e.target === e.currentTarget) props.onClose() }}>
-      <div ref={boxRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={props.title} onKeyDown={trapTab}
+      <div ref={boxRef} tabIndex={-1} role="dialog" aria-modal="true" aria-label={props.title}
         className={`dialog ${props.className ?? ''}`} style={props.width ? { width: props.width, maxWidth: 'calc(100vw - 20px)' } : undefined}>
         <div className="dialog-head">
           <h3>{props.title}</h3>
@@ -104,13 +89,16 @@ export function CalibrateDialog() {
         <input
           ref={inputRef}
           type="number" min="0" step="any" placeholder="e.g. 24"
+          aria-label="Real length of the drawn line"
           value={value}
           onChange={(e) => setValue(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') apply() }}
+          // preventDefault: closing hands focus back mid-keystroke, and the Enter's keypress would press the opener
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); apply() } }}
         />
-        <div className="seg">
+        <div className="seg" role="radiogroup" aria-label="Unit" onKeyDown={radioGroupKeys}>
           {CAL_UNITS.map((u) => (
-            <button key={u.id} className={calUnit === u.id ? 'on' : ''} onClick={() => setCalUnit(u.id)}>
+            <button key={u.id} role="radio" aria-checked={calUnit === u.id} tabIndex={calUnit === u.id ? 0 : -1}
+              className={calUnit === u.id ? 'on' : ''} onClick={() => setCalUnit(u.id)}>
               {u.label}
             </button>
           ))}
@@ -226,10 +214,10 @@ export function MarkerDialog() {
       <KindPicker inline value={kind} onChange={pickKind} />
       <PlacementLine kind={kind} p={m.p} />
       <div className="cal-row">
-        <input type="text" value={label} placeholder="Name (e.g. Main door)"
+        <input type="text" value={label} placeholder="Name (e.g. Main door)" aria-label="Name"
           onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
-        <textarea className="marker-note" value={note} rows={3}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
+        <textarea className="marker-note" value={note} rows={3} aria-label="Notes or remedy"
           placeholder="Notes / remedy (goes into the report)…"
           onChange={(e) => setNote(e.target.value)} />
       </div>
@@ -273,10 +261,10 @@ export function RoomShapeDialog() {
       <KindPicker inline value={kind} onChange={pickKind} exclude={['entrance']} />
       <PlacementLine kind={kind} p={roomShapeAnchor(r)} poly={roomPolygon(r)} />
       <div className="cal-row">
-        <input type="text" value={label} placeholder="Name (e.g. Bedroom 2)"
+        <input type="text" value={label} placeholder="Name (e.g. Bedroom 2)" aria-label="Name"
           onChange={(e) => setLabel(e.target.value)}
-          onKeyDown={(e) => { if (e.key === 'Enter') save() }} />
-        <textarea className="marker-note" value={note} rows={3}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save() } }} />
+        <textarea className="marker-note" value={note} rows={3} aria-label="Notes or remedy"
           placeholder="Notes / remedy (goes into the report)…"
           onChange={(e) => setNote(e.target.value)} />
       </div>
@@ -319,7 +307,7 @@ export function TextDialog() {
   return (
     <Dialog title="Note on the plan" onClose={close} width={380}>
       <div className="cal-row">
-        <textarea ref={areaRef} className="marker-note" value={text} rows={3}
+        <textarea ref={areaRef} className="marker-note" value={text} rows={3} aria-label="Note text"
           placeholder="e.g. Shift the mirror to the north wall"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); save() } }} />
@@ -336,8 +324,10 @@ const SHORTCUTS: [string, string][] = [
   ['V', 'Select · pan'], ['T', 'Trace outline'], ['R', 'Draw a room or area'], ['P', 'Mark doors & objects'],
   ['D', 'Draw on the plan — pen & lines'],
   ['C', 'Set scale'], ['N', 'Align north'], ['M', 'Pin centre'],
-  ['F', 'Fit view'], ['Enter', 'Close outline'], ['Esc / Backspace', 'Undo last point · dismiss'],
-  ['Ctrl+Z / Ctrl+Y', 'Undo · redo'], ['Double-click edge', 'Insert point'], ['Right-click point', 'Delete point'],
+  ['F', 'Fit view'], ['Enter', 'Close an open outline'], ['Esc / Backspace', 'Undo last point · dismiss'],
+  ['Delete', 'Delete the selection'], ['Arrows / Shift+Arrows', 'Nudge the selection 1 px · 10 px'],
+  ['Ctrl+Z', 'Undo'], ['Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
+  ['Double-click edge', 'Insert point'], ['Right-click point', 'Delete point'],
   ['?', 'This help'],
 ]
 

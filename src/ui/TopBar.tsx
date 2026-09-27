@@ -11,7 +11,21 @@ import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
 import { AppearanceSheet } from './AppearanceSheet'
 import { goToStep, useGuide } from './steps'
+import { radioGroupKeys } from './useModalFocus'
 import type { TextSample } from '../roomDetect'
+import type { Unit } from '../types'
+
+/** ft | m as one radio group — the top bar and the More sheet's Units row share it. */
+function UnitSeg({ unit, setUnit, ...rest }: { unit: Unit; setUnit: (u: Unit) => void } & React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div {...rest} role="radiogroup" aria-label="Units" onKeyDown={radioGroupKeys}>
+      {(['ft', 'm'] as const).map((u) => (
+        <button key={u} role="radio" aria-checked={unit === u} tabIndex={unit === u ? 0 : -1}
+          className={unit === u ? 'on' : ''} onClick={() => setUnit(u)}>{u}</button>
+      ))}
+    </div>
+  )
+}
 
 /** Finds room labels on the current background and hands candidates to AutoDetectDialog
  *  for review — never commits a marker itself. DXF reads its own exact text layer; a
@@ -141,12 +155,7 @@ export function TopBar() {
       sub: unit === 'ft' ? 'Feet & inches' : 'Metres',
       keepOpen: true,
       onTap: () => setUnit(unit === 'ft' ? 'm' : 'ft'),
-      right: (
-        <span className="seg" onClick={(e) => e.stopPropagation()}>
-          <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>
-          <button className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>m</button>
-        </span>
-      ),
+      right: <UnitSeg className="seg" unit={unit} setUnit={setUnit} onClick={(e) => e.stopPropagation()} />,
     },
     { icon: Palette, label: 'Appearance', sub: 'Theme and accent colour', onTap: () => setAppearanceOpen(true) },
     { icon: Maximize2, label: 'Fit to screen', sub: 'Bring the whole plan into view', onTap: requestFit },
@@ -185,12 +194,15 @@ export function TopBar() {
         <span className="brand-name hide-mobile">Vastu <em>Studio</em></span>
       </div>
 
-      <nav className="steps">
+      <nav className="steps" aria-label="Steps">
         {track.map((t, i) => (
           <button
             key={t.id}
             className={`step ${t.done ? 'done' : ''} ${t.skipped ? 'skipped' : ''} ${i === active ? 'active' : ''}`}
             disabled={!hasBg && t.id !== 'import'}
+            aria-current={i === active ? 'step' : undefined}
+            // named in full: mid-width bars hide .step-label, which would leave just the number
+            aria-label={`${t.label}${t.done ? ' (done)' : t.skipped ? ' (skipped)' : ''}`}
             onClick={() => goToStep(t.id)}
           >
             <span className="step-num">{t.done ? <Check size={11} strokeWidth={3.5} /> : t.skipped ? '–' : i + 1}</span>
@@ -222,10 +234,7 @@ export function TopBar() {
           data-tip={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}>
           {locked ? <Lock size={15} /> : <LockOpen size={15} />}
         </button>
-        <div className="seg hide-mobile">
-          <button className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>ft</button>
-          <button className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>m</button>
-        </div>
+        <UnitSeg className="seg hide-mobile" unit={unit} setUnit={setUnit} />
         <button className="icon-btn" disabled={undoLen === 0 || locked} onClick={undo}
           aria-label="Undo" data-tip="Undo (Ctrl+Z)">
           <Undo2 size={16} />

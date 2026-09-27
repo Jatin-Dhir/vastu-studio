@@ -3,6 +3,7 @@ import { useStore } from '../store'
 import { signOut } from '../auth/session'
 import { AUTH_ENABLED } from '../auth/supabase'
 import { ShortcutsDialog } from '../ui/Dialogs'
+import { radioGroupKeys } from '../ui/useModalFocus'
 
 const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
 
@@ -40,14 +41,14 @@ export function AccountScreen() {
 
       <section className="m-card">
         <h2 className="m-card-title">Appearance</h2>
-        <div className="m-seg" role="tablist" aria-label="Theme">
-          <button role="tab" aria-selected={theme === 'paper'} className={theme === 'paper' ? 'on' : ''} onClick={() => setTheme('paper')}>Paper</button>
-          <button role="tab" aria-selected={theme === 'ink'} className={theme === 'ink' ? 'on' : ''} onClick={() => setTheme('ink')}>Ink</button>
+        <div className="m-seg" role="radiogroup" aria-label="Theme" onKeyDown={radioGroupKeys}>
+          <button role="radio" aria-checked={theme === 'paper'} tabIndex={theme === 'paper' ? 0 : -1} className={theme === 'paper' ? 'on' : ''} onClick={() => setTheme('paper')}>Paper</button>
+          <button role="radio" aria-checked={theme === 'ink'} tabIndex={theme === 'ink' ? 0 : -1} className={theme === 'ink' ? 'on' : ''} onClick={() => setTheme('ink')}>Ink</button>
         </div>
         <h2 className="m-card-title">Units</h2>
-        <div className="m-seg" role="tablist" aria-label="Units">
-          <button role="tab" aria-selected={unit === 'ft'} className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>Feet</button>
-          <button role="tab" aria-selected={unit === 'm'} className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>Metres</button>
+        <div className="m-seg" role="radiogroup" aria-label="Units" onKeyDown={radioGroupKeys}>
+          <button role="radio" aria-checked={unit === 'ft'} tabIndex={unit === 'ft' ? 0 : -1} className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>Feet</button>
+          <button role="radio" aria-checked={unit === 'm'} tabIndex={unit === 'm' ? 0 : -1} className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>Metres</button>
         </div>
       </section>
 

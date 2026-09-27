@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Copy, Download, FilePlus2, FolderOpen, Pencil, Trash2, X } from 'lucide-react'
 import { Dialog } from './Dialogs'
 import { useStore } from '../store'
@@ -25,6 +25,18 @@ export function ProjectsModal() {
   const [renaming, setRenaming] = useState<string | null>(null)
   const [renameVal, setRenameVal] = useState('')
   const [confirming, setConfirming] = useState<string | null>(null)
+  const listRef = useRef<HTMLDivElement>(null)
+  // renaming, cancelling, deleting and closing a tab each remove the control that had focus —
+  // this row's name button takes it next ('' = no rows left: the New button), never <body>
+  const [focusRow, setFocusRow] = useState<string | null>(null)
+  useEffect(() => {
+    if (focusRow == null) return
+    const list = listRef.current
+    const target = (focusRow && list?.querySelector<HTMLElement>(`[data-row="${CSS.escape(focusRow)}"] .proj-name`))
+      || list?.closest('[role="dialog"]')?.querySelector<HTMLElement>('.proj-toolbar button')
+    target?.focus()
+    setFocusRow(null)
+  }, [focusRow])
 
   const refresh = () => { void listProjects().then(setRows).catch(() => setRows([])) }
   useEffect(refresh, [])
@@ -54,6 +66,8 @@ export function ProjectsModal() {
   // action, and auto-dismissed — easy to miss entirely)
   const doDelete = (id: string) => {
     setConfirming(null)
+    const i = rows.findIndex((r) => r.id === id)
+    setFocusRow((rows[i + 1] ?? rows[i - 1])?.id ?? '')
     // delete from IDB FIRST — closeTab/switchToProject both flush the live drawing back to
     // IDB under its own id, which would silently resurrect it if run before the delete
     void deleteProjectRecord(id).then(async () => {
@@ -106,18 +120,20 @@ export function ProjectsModal() {
         </button>
       </div>
 
-      <div className="proj-list">
+      <div className="proj-list" ref={listRef}>
         {rows.length === 0 && <div className="lbl dim proj-empty">No saved projects yet — everything you work on lands here automatically.</div>}
         {rows.map((r) => {
           const isCurrent = r.id === currentProjectId
           const isOpen = isCurrent || openTabs.some((t) => t.id === r.id)
           if (confirming === r.id) {
+            const cancel = () => { setConfirming(null); setFocusRow(r.id) }
             return (
-              <div key={r.id} className="proj-row proj-confirm" role="alertdialog" aria-label={`Delete ${r.name}?`}>
+              // its own key: a fresh element, so Cancel's autoFocus actually fires
+              <div key={`confirm-${r.id}`} data-row={r.id} className="proj-row proj-confirm" role="alertdialog" aria-label={`Delete ${r.name}?`}>
                 <span className="proj-confirm-q">Delete <b>{r.name}</b> permanently?</span>
                 <button className="btn-ghost" autoFocus
-                  onClick={() => setConfirming(null)}
-                  onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); setConfirming(null) } }}>
+                  onClick={cancel}
+                  onKeyDown={(e) => { if (e.key === 'Escape') { e.stopPropagation(); cancel() } }}>
                   Cancel
                 </button>
                 <button className="btn-danger" onClick={() => doDelete(r.id)}>
@@ -127,15 +143,16 @@ export function ProjectsModal() {
             )
           }
           return (
-            <div key={r.id} className={`proj-row ${isCurrent ? 'current' : ''}`}>
+            <div key={r.id} data-row={r.id} className={`proj-row ${isCurrent ? 'current' : ''}`}>
               {renaming === r.id ? (
-                <input autoFocus className="proj-rename" value={renameVal}
+                <input autoFocus className="proj-rename" value={renameVal} aria-label={`New name for ${r.name}`}
                   onChange={(e) => setRenameVal(e.target.value)}
                   onBlur={() => void rename(r.id)}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') void rename(r.id)
+                    // preventDefault: focus moves to the name button before this Enter's keypress, which would open it
+                    if (e.key === 'Enter') { e.preventDefault(); void rename(r.id); setFocusRow(r.id) }
                     // stop Escape here or the Dialog's window listener closes the whole modal
-                    if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null) }
+                    if (e.key === 'Escape') { e.stopPropagation(); setRenaming(null); setFocusRow(r.id) }
                   }} />
               ) : (
                 <button className="proj-name" onClick={() => void open(r.id)}>
@@ -145,7 +162,7 @@ export function ProjectsModal() {
               )}
               {isOpen && (
                 <button className="icon-btn" aria-label="Close tab" data-tip="Close tab — keeps it saved"
-                  onClick={() => void closeTab(r.id)}><X size={13} /></button>
+                  onClick={() => { void closeTab(r.id); setFocusRow(r.id) }}><X size={13} /></button>
               )}
               <button className="icon-btn" aria-label="Rename" data-tip="Rename"
                 onClick={() => { setRenaming(r.id); setRenameVal(r.name) }}><Pencil size={13} /></button>
