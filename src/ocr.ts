@@ -44,6 +44,23 @@ const MIN_CHARS = 2
  * frame Tesseract's own bboxes come back in — used here only to clamp against, since OCR
  * occasionally returns a box a hair outside the source bitmap at the edges.
  */
+/** The self-hosted Tesseract core is the WebAssembly-SIMD build. Engines without SIMD (Safari
+ *  before 16.4, Android WebView before 91) fail to compile it and createWorker never settles —
+ *  "Scanning the plan…" stayed up forever. Refuse up front, and give the start a ceiling. */
+function wasmSimd(): boolean {
+  try {
+    return WebAssembly.validate(new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11]))
+  } catch { return false }
+}
+
+async function startWorker<C extends (...a: any[]) => Promise<any>>(createWorker: C, ...args: Parameters<C>): Promise<Awaited<ReturnType<C>>> {
+  if (!wasmSimd()) throw new Error('Reading the plan needs a newer browser — update Safari or Chrome, or use the desktop app')
+  return Promise.race([
+    createWorker(...args),
+    new Promise<never>((_, reject) => setTimeout(() => reject(new Error('The text reader did not start — reload and try again')), 45_000)),
+  ])
+}
+
 export async function ocrExtractText(
   imageDataUrl: string,
   imgW: number,
@@ -53,7 +70,7 @@ export async function ocrExtractText(
   const { createWorker, PSM } = await import('tesseract.js')
   let worker: Awaited<ReturnType<typeof createWorker>> | null = null
   try {
-    worker = await createWorker('eng', 1 /* OEM.LSTM_ONLY — matches the simd-lstm core */, {
+    worker = await startWorker(createWorker, 'eng', 1 /* OEM.LSTM_ONLY — matches the simd-lstm core */, {
       workerPath: `${TESSDATA_BASE}/worker.min.js`,
       corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
       langPath: TESSDATA_BASE,
@@ -127,7 +144,7 @@ export async function ocrRefineDimensions(
   await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = imageDataUrl })
   let worker: Awaited<ReturnType<typeof createWorker>> | null = null
   try {
-    worker = await createWorker('eng', 1, {
+    worker = await startWorker(createWorker, 'eng', 1, {
       workerPath: `${TESSDATA_BASE}/worker.min.js`,
       corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
       langPath: TESSDATA_BASE,
@@ -227,7 +244,7 @@ export async function ocrRecoverLabels(
   let worker: Awaited<ReturnType<typeof createWorker>> | null = null
   const out: { p: { x: number; y: number }; text: string }[] = []
   try {
-    worker = await createWorker('eng', 1, {
+    worker = await startWorker(createWorker, 'eng', 1, {
       workerPath: `${TESSDATA_BASE}/worker.min.js`,
       corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
       langPath: TESSDATA_BASE,

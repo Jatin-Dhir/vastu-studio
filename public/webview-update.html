@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Vastu Studio — update needed</title>
+    <!-- Shown by the Android app (Capacitor server.errorPath) when the phone's system WebView is
+         too old to run the studio. Plain HTML and inline styles only: nothing here may need the
+         engine features the studio itself needs. -->
+    <style>
+      html, body { margin: 0; height: 100%; background: #F3F1EA; color: #1E1D18; }
+      body { font: 16px/1.55 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; display: flex; align-items: center; justify-content: center; }
+      main { max-width: 26rem; padding: 32px 24px; }
+      .mark { width: 40px; height: 40px; margin-bottom: 20px; }
+      h1 { font: 600 26px/1.2 Georgia, 'Times New Roman', serif; margin: 0 0 12px; }
+      p { margin: 0 0 14px; color: #4A483D; }
+      a.btn { display: inline-block; margin-top: 8px; padding: 12px 18px; border-radius: 10px; background: #8A6424; color: #fff; text-decoration: none; font-weight: 600; }
+      small { display: block; margin-top: 18px; color: #6A6856; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <svg class="mark" viewBox="0 0 32 32" aria-hidden="true"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="#B08A36" stroke-width="2" /><circle cx="16" cy="16" r="3" fill="#B08A36" /></svg>
+      <h1>One update, then the studio opens</h1>
+      <p>Vastu Studio draws with your phone's built-in web engine, <b>Android System WebView</b>, and the version on this phone is too old to run it.</p>
+      <p>Update <b>Android System WebView</b> and <b>Chrome</b> from the Play Store, then open Vastu Studio again. Your plans are untouched.</p>
+      <a class="btn" href="market://details?id=com.google.android.webview">Open in Play Store</a>
+      <small>No Play Store on this phone? The studio also runs in any up-to-date browser.</small>
+    </main>
+  </body>
+</html>

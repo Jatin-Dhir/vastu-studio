@@ -1,12 +1,20 @@
 import { useStore } from './store'
 import { newProjectId } from './db'
 import { importRaster } from './importers/raster'
-import { detectPdfScaleRatio, openPdf, renderPdfPage } from './importers/pdf'
-import { importDxf } from './importers/dxf'
+import { isNative } from './native'
 import { generateDemoPlan } from './importers/demo'
 import { parseProject, prepareForNewContent } from './importers/project'
 import { requestFit } from './canvas/fit'
 import { formatLen, formatScale } from './format'
+
+/** What the file pickers accept. Desktop browsers get the real filter; on iOS, Android and in
+ *  the native shells an extension list greys out or silently drops .dxf, .dwg and .vastu (a
+ *  .vastu saved through the share sheet could not be picked again), so they accept everything
+ *  and importFiles sorts the file out. */
+const MOBILE = typeof navigator !== 'undefined' && (
+  /iPad|iPhone|iPod|Android/i.test(navigator.userAgent) ||
+  (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1))
+export const PLAN_ACCEPT = MOBILE || isNative() ? '*/*' : '.pdf,.dxf,.dwg,.vastu,.json,image/*'
 
 function freshBgDefaults() {
   return { opacity: 1, grayscale: false, invert: false }
@@ -43,6 +51,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
     }
     if (ext === 'pdf' || file.type === 'application/pdf') {
       s.setBusy('Rendering PDF…')
+      const { detectPdfScaleRatio, openPdf, renderPdfPage } = await import('./importers/pdf')
       const data = await file.arrayBuffer()
       const pdfKey = `${name}|${file.size}|${(file as File).lastModified ?? 0}`
       const pages = await openPdf(data, pdfKey)
@@ -77,6 +86,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
     }
     if (ext === 'dxf') {
       s.setBusy('Parsing DXF…')
+      const { importDxf } = await import('./importers/dxf')
       const text = await (file as File).text()
       const dxf = importDxf(text) // validates and throws before anything on screen is touched
       prepareForNewContent()

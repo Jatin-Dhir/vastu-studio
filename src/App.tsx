@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, useEffect, useRef, useState } from 'react'
+import { lazyNamed } from './lazyNamed'
 import { useStore, DEFAULT_COMPASS, BOOT_ACTIVE_TAB_ID } from './store'
 import { CanvasStage } from './canvas/CanvasStage'
 import { requestFit } from './canvas/fit'
@@ -10,20 +11,14 @@ import { RightPanel } from './ui/RightPanel'
 import { EmptyState } from './ui/EmptyState'
 import { Toasts } from './ui/Toasts'
 import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, ShortcutsDialog, TextDialog } from './ui/Dialogs'
-import { AutoDetectDialog } from './ui/AutoDetectDialog'
-import { MapModal } from './ui/MapModal'
 import { CloseChip, MarkerChips, QuickBar, RoomCloseChip, RoomShapeChips, RotateChip, SelectionChips, StrokeChips, TextChips, ZoneInfoCard } from './ui/CanvasOverlays'
 import { GuideCard } from './ui/GuideCard'
 import { consumeSafeBoot } from './ui/ErrorBoundary'
-import { MobileApp } from './mobile/MobileApp'
 import { isPhone, usePhone } from './mobile/phone'
-import { importFiles, importFromUrl, loadDemo } from './importFile'
+import { PLAN_ACCEPT, importFiles, importFromUrl, loadDemo } from './importFile'
 import { autosave, clearAutosave, loadAutosave, sanitizeProject } from './importers/project'
 import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
-import { ProjectsModal } from './ui/ProjectsModal'
-import { ReportView } from './ui/ReportView'
 import { LoginPage } from './auth/LoginPage'
-import { AdminPage } from './admin/AdminPage'
 import { BroadcastBar } from './auth/BroadcastBar'
 import { initAuth, logEvent } from './auth/session'
 import { AUTH_ENABLED } from './auth/supabase'
@@ -31,6 +26,13 @@ import { formatLen, formatScale } from './format'
 import { sampledPolygon, selfIntersects } from './geometry'
 import { syncNativeChrome } from './native'
 import type { ProjectFile } from './types'
+
+const AutoDetectDialog = lazyNamed(() => import('./ui/AutoDetectDialog'), 'AutoDetectDialog')
+const MapModal = lazyNamed(() => import('./ui/MapModal'), 'MapModal')
+const MobileApp = lazyNamed(() => import('./mobile/MobileApp'), 'MobileApp')
+const ProjectsModal = lazyNamed(() => import('./ui/ProjectsModal'), 'ProjectsModal')
+const ReportView = lazyNamed(() => import('./ui/ReportView'), 'ReportView')
+const AdminPage = lazyNamed(() => import('./admin/AdminPage'), 'AdminPage')
 
 const EMPTY_PROJECT: ProjectFile = {
   app: 'vastu-studio', version: 1,
@@ -81,6 +83,7 @@ export default function App() {
   const mapOpen = useStore((s) => s.mapOpen)
   const projectsOpen = useStore((s) => s.projectsOpen)
   const reportOpen = useStore((s) => s.reportOpen)
+  const detecting = useStore((s) => s.detectedRooms != null)
   const theme = useStore((s) => s.theme)
   const accent = useStore((s) => s.accent)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -163,6 +166,9 @@ export default function App() {
       // keys pressed inside a dialog, sheet, menu or slider belong to it, never to the plan behind
       if (t?.closest?.('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="slider"]')) return
       const s = useStore.getState()
+      // on a Hindi, Russian or Greek layout e.key is not a Latin letter, so Ctrl+Z and the tool
+      // letters did nothing — read the physical key (KeyZ, KeyT, …) whenever e.key is not a–z
+      const key = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : /^Key[A-Z]$/.test(e.code) && e.key.length === 1 && !/[?+=_-]/.test(e.key) ? e.code.slice(3).toLowerCase() : e.key
       // modal surfaces own the keyboard while open — each closes itself on Escape
       if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen ||
         s.moreOpen || s.clearOpen || s.appearanceOpen || s.detectedRooms || s.mobileSheet) return
@@ -170,20 +176,20 @@ export default function App() {
       // (Enter on "Help" must not also close the outline)
       const onControl = !!t && t !== document.body && !!t.closest?.('button, a, [role="button"], [role="tab"], [tabindex]:not(svg)')
       if (onControl && (e.key === 'Enter' || e.key === ' ' || e.key.startsWith('Arrow'))) return
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
+      if ((e.ctrlKey || e.metaKey) && key === 'z') {
         e.preventDefault()
         // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
         if (isGestureActive()) return
         if (e.shiftKey) s.redo(); else s.undo()
         return
       }
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'y') {
+      if ((e.ctrlKey || e.metaKey) && key === 'y') {
         e.preventDefault()
         if (!isGestureActive()) s.redo()
         return
       }
       if (e.ctrlKey || e.metaKey || e.altKey) return
-      switch (e.key) {
+      switch (key) {
         case 'v': case 'V': s.setTool('select'); break
         case 'c': case 'C': s.setTool('calibrate'); break
         case 't': case 'T': s.setTool('trace'); break
@@ -386,12 +392,14 @@ export default function App() {
 
   // the front door: with a project configured, nothing renders until this device holds a valid seat
   if (AUTH_ENABLED && auth.status !== 'ok') return <LoginPage />
-  if (hash === '#/admin' && auth.status === 'ok' && auth.user.role === 'admin') return <AdminPage />
+  if (hash === '#/admin' && auth.status === 'ok' && auth.user.role === 'admin') return <Suspense fallback={null}><AdminPage /></Suspense>
 
   if (phone) {
     return (
-      <MobileApp fileRef={fileRef} cameraRef={cameraRef}
-        onFiles={(files) => { void importFiles(files).then((ok) => { if (ok) useStore.getState().setMobileTab('studio') }) }} />
+      <Suspense fallback={null}>
+        <MobileApp fileRef={fileRef} cameraRef={cameraRef}
+          onFiles={(files: FileList) => { void importFiles(files).then((ok) => { if (ok) useStore.getState().setMobileTab('studio') }) }} />
+      </Suspense>
     )
   }
 
@@ -427,15 +435,17 @@ export default function App() {
       <RoomShapeDialog />
       <ShortcutsDialog />
       <DwgDialog />
-      <AutoDetectDialog />
-      {mapOpen && <MapModal />}
-      {projectsOpen && <ProjectsModal />}
-      {reportOpen && <ReportView />}
+      <Suspense fallback={null}>
+        {detecting && <AutoDetectDialog />}
+        {mapOpen && <MapModal />}
+        {projectsOpen && <ProjectsModal />}
+        {reportOpen && <ReportView />}
+      </Suspense>
       <BroadcastBar />
       <input
         ref={fileRef}
         type="file"
-        accept=".pdf,.dxf,.dwg,.vastu,.json,image/*"
+        accept={PLAN_ACCEPT}
         hidden
         onChange={(e) => {
           if (e.target.files?.length) void importFiles(e.target.files)

@@ -4,9 +4,19 @@
 // its own polyfills and reads the same files.
 import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
 import type { PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs'
-import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
+// The worker is bundled by Vite (`?worker&url`), so it is transpiled to the app's own browser
+// target like everything else — imported as a plain `?url` it was copied as-is, and its class
+// static blocks and private methods would not parse on Safari 15 or older WebViews. It runs as
+// a classic worker handed to pdf.js as a port: module workers are missing from older Firefox.
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url'
 
-pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+let port: Worker | null = null
+function ensureWorker() {
+  if (port) return
+  // the build emits a classic (iife) script; the dev server serves the same file as a module
+  port = new Worker(workerUrl, { type: import.meta.env.DEV ? 'module' : 'classic' })
+  pdfjs.GlobalWorkerOptions.workerPort = port
+}
 
 // Safari has no async iteration on ReadableStream, and pdf.js reads a page's text layer with
 // `for await` over one — so the printed "1 : 100" scale was never found there. Only the
@@ -30,17 +40,12 @@ if (typeof ReadableStream !== 'undefined' && !(Symbol.asyncIterator in ReadableS
   })
 }
 
-// pdfjs fetches the worker lazily, so a PDF imported for the first time offline would fail —
-// warm the service-worker cache once it controls the page (the native shell has no SW; no-op there)
-if (import.meta.env.PROD && typeof navigator !== 'undefined' && 'serviceWorker' in navigator) {
-  void navigator.serviceWorker.ready.then(() => fetch(workerUrl)).catch(() => {})
-}
-
 let currentDoc: PDFDocumentProxy | null = null
 let currentKey: string | null = null
 
 export async function openPdf(data: ArrayBuffer, key: string): Promise<number> {
   if (currentDoc) { void currentDoc.destroy().catch(() => {}); currentDoc = null; currentKey = null }
+  ensureWorker()
   currentDoc = await pdfjs.getDocument({ data }).promise
   currentKey = key
   return currentDoc.numPages
@@ -56,7 +61,10 @@ export async function renderPdfPage(pageNum: number): Promise<{ dataUrl: string;
   if (!currentDoc) throw new Error('No PDF open')
   const page = await currentDoc.getPage(pageNum)
   const base = page.getViewport({ scale: 1 })
-  const scale = Math.min(6, Math.max(1, 3000 / Math.max(base.width, base.height)))
+  const want = Math.min(6, Math.max(1, 3000 / Math.max(base.width, base.height)))
+  // iOS refuses canvases over ~16.7 megapixels (the plan comes out blank), so a very large
+  // sheet is rendered at whatever scale keeps it under that, even below 1
+  const scale = Math.min(want, Math.sqrt(16_000_000 / (base.width * base.height)))
   const vp = page.getViewport({ scale })
   const canvas = document.createElement('canvas')
   canvas.width = Math.round(vp.width)
@@ -66,7 +74,10 @@ export async function renderPdfPage(pageNum: number): Promise<{ dataUrl: string;
   ctx.fillRect(0, 0, canvas.width, canvas.height)
   // print intent renders via setTimeout, so it completes even in hidden/background tabs
   await page.render({ canvas, canvasContext: ctx, viewport: vp, intent: 'print' }).promise
-  return { dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height, pxPerPt: scale }
+  const out = { dataUrl: canvas.toDataURL('image/png'), w: canvas.width, h: canvas.height, pxPerPt: scale }
+  // give the pixels back now — iOS caps the total canvas memory a page may hold
+  canvas.width = 0; canvas.height = 0
+  return out
 }
 
 /**

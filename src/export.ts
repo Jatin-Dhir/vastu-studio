@@ -1,6 +1,7 @@
-import { createElement } from 'react'
-import { renderToStaticMarkup } from 'react-dom/server'
-import interWoff2 from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?inline'
+import { createElement, type ReactElement } from 'react'
+import { createRoot } from 'react-dom/client'
+import { flushSync } from 'react-dom'
+import interWoff2Url from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url'
 import { Scene } from './canvas/Scene'
 import { importDxf } from './importers/dxf'
 import { centroid, circumradius, perimeter, polygonArea, sampledPolygon } from './geometry'
@@ -10,6 +11,35 @@ import { downloadBlob } from './importers/project'
 import type { Pt } from './types'
 
 const FONT = "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+
+/** Serialise a React SVG tree with the client renderer the app already ships — react-dom/server
+ *  put ~58 KB (gz) on every start just for exports — and as XML, which an SVG image requires. */
+function svgMarkup(el: ReactElement): string {
+  const host = document.createElement('div')
+  const root = createRoot(host)
+  flushSync(() => root.render(el))
+  const svg = host.firstElementChild
+  const out = svg ? new XMLSerializer().serializeToString(svg) : ''
+  root.unmount()
+  return out
+}
+
+let fontDataUrl: Promise<string> | null = null
+/** Inter as a data URL for the rasterised SVG (an SVG image cannot fetch its own fonts). It was
+ *  inlined into the startup bundle (47 KB gz); now it is read once, at the first export, from
+ *  the same file the page's own CSS already loaded. */
+function interFontDataUrl(): Promise<string> {
+  fontDataUrl ??= fetch(interWoff2Url)
+    .then((r) => r.blob())
+    .then((b) => new Promise<string>((res, rej) => {
+      const fr = new FileReader()
+      fr.onload = () => res(String(fr.result))
+      fr.onerror = () => rej(fr.error)
+      fr.readAsDataURL(b)
+    }))
+    .catch(() => { fontDataUrl = null; return '' })
+  return fontDataUrl
+}
 
 /** A nice round scale-bar length for the current unit, targeting a fraction of the image width. */
 function pickScaleBar(mpp: number, unit: 'ft' | 'm', maxWorldPx: number): { worldPx: number; label: string } | null {
@@ -173,12 +203,13 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     ] : []),
   )
 
-  const svg = renderToStaticMarkup(
+  const font = await interFontDataUrl()
+  const svg = svgMarkup(
     createElement(
       'svg',
       { xmlns: 'http://www.w3.org/2000/svg', width: outW, height: outH, viewBox: `${minX} ${minY} ${w} ${h}` },
       createElement('style', null,
-        `@font-face{font-family:'Inter Variable';src:url(${interWoff2});font-weight:100 900;font-style:normal;}`),
+        font ? `@font-face{font-family:'Inter Variable';src:url(${font});font-weight:100 900;font-style:normal;}` : ''),
       createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#F3F1EA' }),
       scene,
       furniture,

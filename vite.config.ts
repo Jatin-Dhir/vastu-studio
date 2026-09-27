@@ -1,5 +1,5 @@
 import { basename, resolve } from 'node:path'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -28,18 +28,46 @@ function devSave(): Plugin {
   }
 }
 
+/** Build only: write the build's hashed JS/CSS and Latin font files into the service worker,
+ *  which precaches them at install (every surface that loads on first use must also open
+ *  offline) and prunes the files earlier builds left behind. Font subsets for scripts the app
+ *  never shows (Cyrillic, Greek, Vietnamese) and the legacy .woff copies are left out. */
+function swPrecache(): Plugin {
+  let outDir = 'dist'
+  let files: string[] = []
+  return {
+    name: 'vastu-sw-precache',
+    apply: 'build',
+    configResolved(c) { outDir = resolve(c.root, c.build.outDir) },
+    generateBundle(_, bundle) {
+      files = Object.keys(bundle).filter((f) =>
+        /^assets\/.+\.(m?js|css)$/.test(f) || (/^assets\/.+\.woff2$/.test(f) && /latin/.test(f)))
+    },
+    closeBundle() {
+      const p = resolve(outDir, 'sw.js')
+      const src = readFileSync(p, 'utf8')
+      if (!src.includes('/*__BUILD_ASSETS__*/[]')) throw new Error('sw.js lost its BUILD_ASSETS placeholder')
+      writeFileSync(p, src.replace('/*__BUILD_ASSETS__*/[]', JSON.stringify(files.sort())))
+    },
+  }
+}
+
 export default defineConfig({
   base: './',
-  plugins: [react(), devSave()],
+  plugins: [react(), devSave(), swPrecache()],
   server: { port: 5173 },
   build: {
+    // Safari 15 (iPhone 6s/7 on iOS 15), Chrome/Edge/WebView 99, Firefox 99: syntax newer than
+    // these (class static blocks, …) is lowered, so no engine meets a parse error at boot.
+    // Capacitor's minWebViewVersion matches the Chrome floor.
+    target: ['es2020', 'chrome99', 'edge99', 'firefox99', 'safari15'],
     chunkSizeWarningLimit: 1600,
     rollupOptions: {
       input: { main: resolve(__dirname, 'index.html') },
       output: {
         manualChunks: {
           react: ['react', 'react-dom'],
-          pdfjs: ['pdfjs-dist'],
+          pdfjs: ['pdfjs-dist/legacy/build/pdf.mjs'],
           leaflet: ['leaflet'],
         },
       },

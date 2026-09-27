@@ -17,7 +17,9 @@ export function downloadBlob(blob: Blob, filename: string) {
     document.body.appendChild(a)
     a.click()
     a.remove()
-    setTimeout(() => URL.revokeObjectURL(a.href), 4000)
+    // Safari asks "Download…?" first; revoking after 4 s failed the download for anyone who
+    // took longer to tap (WebKitBlobResource error 1)
+    setTimeout(() => URL.revokeObjectURL(a.href), 60_000)
   })
 }
 

@@ -47,7 +47,10 @@ async function fetchDeclination(lat: number, lon: number): Promise<Declination |
   const hit = cachedDeclination(lat, lon)
   if (hit) return hit
   try {
-    const res = await fetch(`${DECL_URL}?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`, { signal: AbortSignal.timeout(8000) })
+    // AbortSignal.timeout is missing before Safari 16 and Chrome 103 — a plain controller works everywhere
+    const ctl = new AbortController()
+    const timer = setTimeout(() => ctl.abort(), 8000)
+    const res = await fetch(`${DECL_URL}?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`, { signal: ctl.signal }).finally(() => clearTimeout(timer))
     if (!res.ok) return null
     const j = await res.json() as { declination_deg: number; model?: string; uncertainty_deg?: number }
     const d: Declination = { deg: j.declination_deg, model: j.model ?? 'WMM', uncertaintyDeg: j.uncertainty_deg ?? null, lat, lon, at: Date.now() }
