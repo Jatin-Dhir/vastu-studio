@@ -161,7 +161,17 @@ export function newProjectId(): string {
   return uid('pj')
 }
 
-/** Ask the browser not to evict our storage under pressure (best effort). */
+/** Ask the browser not to evict our storage under pressure (best effort). Chrome, Edge and
+ *  Safari decide silently; Firefox answers persist() with a permission prompt, which at boot
+ *  would greet a first visit with a question about storage. There, only a grant the person
+ *  already gave (from the site's permissions) is renewed. */
 export function requestPersistence() {
-  try { void navigator.storage?.persist?.() } catch { /* unsupported */ }
+  try {
+    const storage = navigator.storage
+    if (!storage?.persist) return
+    if (!/\bFirefox\//.test(navigator.userAgent)) { void storage.persist().catch(() => {}); return }
+    void navigator.permissions?.query({ name: 'persistent-storage' as PermissionName })
+      .then((st) => { if (st.state === 'granted') void storage.persist().catch(() => {}) })
+      .catch(() => {})
+  } catch { /* unsupported */ }
 }
