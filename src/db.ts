@@ -27,18 +27,28 @@ function openDb(): Promise<IDBDatabase> {
   })
 }
 
-function tx<T>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+/** Run one request in its own transaction and settle only when the TRANSACTION settles.
+ *  A write can succeed as a request and still be rolled back: a full disk or quota arrives
+ *  as a transaction abort after the request's success event. Resolving on the request made
+ *  autosave report success while nothing was stored (and the "autosave failed" warning
+ *  never fired); the connection is closed on every outcome. */
+function txStore<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
   return openDb().then(
     (db) =>
       new Promise<T>((resolve, reject) => {
-        const t = db.transaction(STORE, mode)
-        const req = run(t.objectStore(STORE))
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-        t.oncomplete = () => db.close()
+        let t: IDBTransaction
+        try { t = db.transaction(store, mode) } catch (e) { db.close(); reject(e); return }
+        let result: T
+        const req = run(t.objectStore(store))
+        req.onsuccess = () => { result = req.result }
+        t.oncomplete = () => { db.close(); resolve(result) }
+        t.onabort = () => { db.close(); reject(t.error ?? req.error ?? new Error('Storage refused the write')) }
+        t.onerror = () => { /* the abort that follows settles the promise */ }
       }),
   )
 }
+
+const tx = <T,>(mode: IDBTransactionMode, run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> => txStore(STORE, mode, run)
 
 export const putProject = (rec: ProjectRecord) => tx('readwrite', (s) => s.put(rec)).then(() => undefined)
 export const getProject = (id: string) => tx<ProjectRecord | undefined>('readonly', (s) => s.get(id))
@@ -60,19 +70,6 @@ export interface CompassPreset {
   dataUrl: string
   aspect: number
   createdAt: number
-}
-
-function txStore<T>(store: string, mode: IDBTransactionMode, run: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  return openDb().then(
-    (db) =>
-      new Promise<T>((resolve, reject) => {
-        const t = db.transaction(store, mode)
-        const req = run(t.objectStore(store))
-        req.onsuccess = () => resolve(req.result)
-        req.onerror = () => reject(req.error)
-        t.oncomplete = () => db.close()
-      }),
-  )
 }
 
 export const putPreset = (p: CompassPreset) => txStore(PRESETS, 'readwrite', (s) => s.put(p)).then(() => undefined)
