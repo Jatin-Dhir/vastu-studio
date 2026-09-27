@@ -37,13 +37,6 @@ const STAGE_RANGE: Record<string, [number, number]> = {
 const MIN_CONFIDENCE = 35
 const MIN_CHARS = 2
 
-/**
- * Recognizes text on a raster image and returns one sample per LINE (not per word — a
- * multi-word label like "Master Bedroom" must stay one sample) with its bbox centre as
- * position. imageDataUrl matches store.bg.dataUrl; imgW/imgH match store.bg.w/h and are the
- * frame Tesseract's own bboxes come back in — used here only to clamp against, since OCR
- * occasionally returns a box a hair outside the source bitmap at the edges.
- */
 /** The self-hosted Tesseract core is the WebAssembly-SIMD build. Engines without SIMD (Safari
  *  before 16.4, Android WebView before 91) fail to compile it and createWorker never settles —
  *  "Scanning the plan…" stayed up forever. Refuse up front, and give the start a ceiling. */
@@ -61,32 +54,79 @@ async function startWorker<C extends (...a: any[]) => Promise<any>>(createWorker
   ])
 }
 
+type TessWorker = Awaited<ReturnType<typeof import('tesseract.js')['createWorker']>>
+
+/** One worker for all three passes of a detection (and for a second run soon after), released
+ *  after it has idled. Each pass used to start its own, fetching and compiling the 2.8 MB core
+ *  again. The logger is created once, so progress goes to whichever pass is listening. */
+let shared: { worker: Promise<TessWorker>; idle: number } | null = null
+let progressSink: ((m: { status: string; progress: number }) => void) | null = null
+
+async function acquireWorker(): Promise<TessWorker> {
+  if (shared) { window.clearTimeout(shared.idle); return shared.worker }
+  const { createWorker } = await import('tesseract.js')
+  const worker = startWorker(createWorker, 'eng', 1 /* OEM.LSTM_ONLY — matches the simd-lstm core */, {
+    workerPath: `${TESSDATA_BASE}/worker.min.js`,
+    corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
+    langPath: TESSDATA_BASE,
+    workerBlobURL: false,
+    gzip: true,
+    logger: (m: { status: string; progress: number }) => progressSink?.(m),
+  })
+  const entry = { worker, idle: 0 }
+  shared = entry
+  worker.catch(() => { if (shared === entry) shared = null })
+  return worker
+}
+
+/** Done for now: terminate the worker if nothing picks it up within 15 s. */
+function releaseWorker() {
+  progressSink = null
+  const entry = shared
+  if (!entry) return
+  entry.idle = window.setTimeout(() => {
+    if (shared !== entry) return
+    shared = null
+    void entry.worker.then((w) => w.terminate()).catch(() => {})
+  }, 15_000)
+}
+
+/** A pass failed mid-recognition: the worker may still be busy, so never hand it on. */
+function discardWorker() {
+  progressSink = null
+  const entry = shared
+  shared = null
+  if (entry) { window.clearTimeout(entry.idle); void entry.worker.then((w) => w.terminate()).catch(() => {}) }
+}
+
+/**
+ * Recognizes text on a raster image and returns one sample per LINE (not per word — a
+ * multi-word label like "Master Bedroom" must stay one sample) with its bbox centre as
+ * position. imageDataUrl matches store.bg.dataUrl; imgW/imgH match store.bg.w/h and are the
+ * frame Tesseract's own bboxes come back in — used here only to clamp against, since OCR
+ * occasionally returns a box a hair outside the source bitmap at the edges.
+ */
 export async function ocrExtractText(
   imageDataUrl: string,
   imgW: number,
   imgH: number,
   onProgress?: (pct: number) => void,
 ): Promise<TextSample[]> {
-  const { createWorker, PSM } = await import('tesseract.js')
-  let worker: Awaited<ReturnType<typeof createWorker>> | null = null
+  const { PSM } = await import('tesseract.js')
+  progressSink = (m) => {
+    if (!onProgress || typeof m.progress !== 'number') return
+    const range = STAGE_RANGE[m.status]
+    if (!range) return
+    const [start, end] = range
+    onProgress(Math.round(start + (end - start) * m.progress))
+  }
+  let failed = false
   try {
-    worker = await startWorker(createWorker, 'eng', 1 /* OEM.LSTM_ONLY — matches the simd-lstm core */, {
-      workerPath: `${TESSDATA_BASE}/worker.min.js`,
-      corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
-      langPath: TESSDATA_BASE,
-      workerBlobURL: false,
-      gzip: true,
-      logger: (m) => {
-        if (!onProgress || typeof m.progress !== 'number') return
-        const range = STAGE_RANGE[m.status]
-        if (!range) return
-        const [start, end] = range
-        onProgress(Math.round(start + (end - start) * m.progress))
-      },
-    })
+    const worker = await acquireWorker()
     // architectural drawings are scattered labels on a mostly-blank sheet, not paragraphs —
-    // SPARSE_TEXT keeps same-row labels from being stitched into one long merged line
-    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT })
+    // SPARSE_TEXT keeps same-row labels from being stitched into one long merged line (and
+    // a shared worker may still carry an earlier pass's whitelist: clear it)
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SPARSE_TEXT, tessedit_char_whitelist: '' })
 
     // MEASURED (2026-09-04, synthetic hard plan: tints + vignette + dimension clutter):
     // tesseract's own binarization handles tinted/shadowed plans fine — raw recognition
@@ -116,8 +156,11 @@ export async function ocrExtractText(
       }
     }
     return samples
+  } catch (e) {
+    failed = true
+    throw e
   } finally {
-    if (worker) await worker.terminate().catch(() => {})
+    if (failed) discardWorker(); else releaseWorker()
   }
 }
 
@@ -138,19 +181,13 @@ export async function ocrRefineDimensions(
   const targets = rooms.filter((r) => !r.dimM)
   if (targets.length === 0) return
   const { parseDimensions } = await import('./roomDetect')
-  const { createWorker, PSM } = await import('tesseract.js')
+  const { PSM } = await import('tesseract.js')
   // onload, not decode() — decode() stalls indefinitely in hidden tabs
   const img = new Image()
   await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = imageDataUrl })
-  let worker: Awaited<ReturnType<typeof createWorker>> | null = null
+  let failed = false
   try {
-    worker = await startWorker(createWorker, 'eng', 1, {
-      workerPath: `${TESSDATA_BASE}/worker.min.js`,
-      corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
-      langPath: TESSDATA_BASE,
-      workerBlobURL: false,
-      gzip: true,
-    })
+    const worker = await acquireWorker()
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.SINGLE_BLOCK,
       // dimension strings are digits, feet/inch marks and an x — nothing else
@@ -191,8 +228,11 @@ export async function ocrRefineDimensions(
       } catch { /* one bad crop must not kill the rest */ }
       onProgress?.(++done, targets.length)
     }
+  } catch (e) {
+    failed = true
+    throw e
   } finally {
-    if (worker) await worker.terminate().catch(() => {})
+    if (failed) discardWorker(); else releaseWorker()
   }
 }
 
@@ -237,21 +277,16 @@ export async function ocrRecoverLabels(
   spots: { p: { x: number; y: number }; where: 'at' | 'above' }[],
 ): Promise<{ p: { x: number; y: number }; text: string }[]> {
   if (spots.length === 0) return []
-  const { createWorker, PSM } = await import('tesseract.js')
+  const { PSM } = await import('tesseract.js')
   // onload, not decode() — decode() stalls indefinitely in hidden tabs
   const img = new Image()
   await new Promise<void>((res, rej) => { img.onload = () => res(); img.onerror = () => rej(new Error('img')); img.src = imageDataUrl })
-  let worker: Awaited<ReturnType<typeof createWorker>> | null = null
   const out: { p: { x: number; y: number }; text: string }[] = []
+  let failed = false
   try {
-    worker = await startWorker(createWorker, 'eng', 1, {
-      workerPath: `${TESSDATA_BASE}/worker.min.js`,
-      corePath: `${TESSDATA_BASE}/tesseract-core-simd-lstm.js`,
-      langPath: TESSDATA_BASE,
-      workerBlobURL: false,
-      gzip: true,
-    })
-    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK })
+    const worker = await acquireWorker()
+    // labels, not dimensions: the previous pass's digits-only whitelist must not carry over
+    await worker.setParameters({ tessedit_pageseg_mode: PSM.SINGLE_BLOCK, tessedit_char_whitelist: '' })
     const lineH = Math.max(14, Math.round(imgW * 0.011))
     for (const spot of spots) {
       // 'at' crops stay NARROW — a wide crop swallows the neighbouring room's label
@@ -284,8 +319,11 @@ export async function ocrRecoverLabels(
         out.push({ p: spot.p, text: data.text ?? '' })
       } catch { /* skip a bad crop, keep the rest */ }
     }
+  } catch (e) {
+    failed = true
+    throw e
   } finally {
-    if (worker) await worker.terminate().catch(() => {})
+    if (failed) discardWorker(); else releaseWorker()
   }
   return out
 }
