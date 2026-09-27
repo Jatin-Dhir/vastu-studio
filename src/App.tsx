@@ -193,6 +193,8 @@ export default function App() {
         case 'd': case 'D': s.setTool('draw'); break
         case 'r': case 'R': s.setTool('room'); break
         case 'f': case 'F': requestFit(); break
+        case '+': case '=': window.dispatchEvent(new CustomEvent('vastu:zoom', { detail: { factor: 1.25 } })); break
+        case '-': case '_': window.dispatchEvent(new CustomEvent('vastu:zoom', { detail: { factor: 0.8 } })); break
         case '?': s.setShortcutsOpen(true); break
         case 'Enter': if (!s.closed && s.pts.length >= 3) s.closePolygon(); break
         case 'Backspace': case 'Delete':
@@ -207,7 +209,17 @@ export default function App() {
           break
         case 'ArrowLeft': case 'ArrowRight': case 'ArrowUp': case 'ArrowDown': {
           // nudge whatever is selected by one screen pixel (ten with Shift), in screen
-          // directions — the keyboard path for placement that would otherwise be pointer-only
+          // directions — the keyboard path for placement that would otherwise be pointer-only.
+          // With nothing selected the arrows pan the view instead (locked plans too)
+          if (!s.selectedRoomShape && !s.selectedStroke && !s.selectedMarker && !s.selectedText) {
+            e.preventDefault()
+            const px = e.shiftKey ? 240 : 60
+            window.dispatchEvent(new CustomEvent('vastu:pan', { detail: {
+              dx: e.key === 'ArrowLeft' ? px : e.key === 'ArrowRight' ? -px : 0,
+              dy: e.key === 'ArrowUp' ? px : e.key === 'ArrowDown' ? -px : 0,
+            } }))
+            break
+          }
           if (s.locked) break
           const step = (e.shiftKey ? 10 : 1) / s.view.k
           const sx = e.key === 'ArrowLeft' ? -step : e.key === 'ArrowRight' ? step : 0

@@ -1,5 +1,5 @@
 import { AlertTriangle, CheckCircle2, Info } from 'lucide-react'
-import { useStore } from '../store'
+import { holdToast, useStore } from '../store'
 
 export function Toasts() {
   const toasts = useStore((s) => s.toasts)
@@ -15,7 +15,9 @@ export function Toasts() {
         </div>
       )}
       {toasts.map((t) => (
-        <div key={t.id} className={`toast ${t.kind}`} onClick={() => dismiss(t.id)}>
+        <div key={t.id} className={`toast ${t.kind}`} onClick={() => dismiss(t.id)}
+          onMouseEnter={() => holdToast(t.id, true)} onMouseLeave={() => holdToast(t.id, false)}
+          onFocus={() => holdToast(t.id, true)} onBlur={() => holdToast(t.id, false)}>
           {t.kind === 'ok' ? <CheckCircle2 size={15} /> : t.kind === 'warn' ? <AlertTriangle size={15} /> : <Info size={15} />}
           <span>{t.msg}</span>
           {t.actionLabel && (

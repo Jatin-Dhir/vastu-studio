@@ -125,6 +125,15 @@ export function CanvasStage() {
   const strokes = useStore((s) => s.strokes)
   const selectedStroke = useStore((s) => s.selectedStroke)
   const roomShapes = useStore((s) => s.roomShapes)
+  const canvasSummary = (() => {
+    if (bg.kind === 'none' && pts.length === 0) return 'Plan canvas, empty — import a plan to begin'
+    const parts = [closed ? `closed outline of ${pts.length} corners` : pts.length ? `outline in progress, ${pts.length} corners` : 'no outline yet']
+    if (closed && compass.id !== 'none') parts.push(`${compass.id === 'zones16' ? '16-zone' : compass.id === 'gates32' ? '32-gate' : compass.id === 'grid9' ? 'pada grid' : 'custom'} compass`)
+    parts.push(`north ${Math.round(northDeg)}°`)
+    if (markers.length) parts.push(`${markers.length} marker${markers.length === 1 ? '' : 's'}`)
+    if (roomShapes.length) parts.push(`${roomShapes.length} room${roomShapes.length === 1 ? '' : 's'}`)
+    return `Plan canvas: ${parts.join(', ')}. The readings are in the side panel`
+  })()
   const selectedRoomShape = useStore((s) => s.selectedRoomShape)
   const roomDrawMode = useStore((s) => s.roomDrawMode)
   const texts = useStore((s) => s.texts)
@@ -324,11 +333,34 @@ export function CanvasStage() {
       else if (typeof detail.delta === 'number') rotateViewAbout(detail.delta)
       commitView()
     }
+    // keyboard zoom and pan ('+'/'−' and the arrows, dispatched by App's key handler): zoom
+    // about the middle of the stage, pan in screen pixels
+    const onZoom = (e: Event) => {
+      const f = Number((e as CustomEvent).detail?.factor)
+      const svg = svgRef.current
+      if (!svg || !(f > 0)) return
+      const r = svg.getBoundingClientRect()
+      const v = viewRef.current
+      const mx = r.width / 2, my = r.height / 2
+      const nk = Math.min(60, Math.max(0.02, v.k * f))
+      setViewLive({ tx: mx - ((mx - v.tx) * nk) / v.k, ty: my - ((my - v.ty) * nk) / v.k, k: nk, rot: v.rot })
+      commitView()
+    }
+    const onPan = (e: Event) => {
+      const d = (e as CustomEvent).detail ?? {}
+      const v = viewRef.current
+      setViewLive({ tx: v.tx + (Number(d.dx) || 0), ty: v.ty + (Number(d.dy) || 0), k: v.k, rot: v.rot })
+      commitView()
+    }
     window.addEventListener('vastu:fit', onFit)
     window.addEventListener('vastu:rotate', onRotate)
+    window.addEventListener('vastu:zoom', onZoom)
+    window.addEventListener('vastu:pan', onPan)
     return () => {
       window.removeEventListener('vastu:fit', onFit)
       window.removeEventListener('vastu:rotate', onRotate)
+      window.removeEventListener('vastu:zoom', onZoom)
+      window.removeEventListener('vastu:pan', onPan)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -1066,6 +1098,9 @@ export function CanvasStage() {
     <svg
       ref={svgRef}
       className={`stage tool-${tool}`} data-canvas
+      // one focusable surface that says what is on it — the drawing's seventy labels are
+      // hidden from assistive tech below; + and − zoom and the arrows pan from here
+      tabIndex={0} role="application" aria-roledescription="plan canvas" aria-label={canvasSummary}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
@@ -1073,7 +1108,7 @@ export function CanvasStage() {
       onDoubleClick={onDblClick}
       onContextMenu={onContextMenu}
     >
-      <g id="world" ref={worldRef}>
+      <g id="world" ref={worldRef} aria-hidden="true">
         <Scene
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={analysisOk ? center : null} R={R}
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}

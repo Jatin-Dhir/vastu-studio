@@ -279,6 +279,13 @@ export const DEFAULT_COMPASS: CompassState = {
 const DEFAULT_BG: BgState = { kind: 'none', w: 0, h: 0, opacity: 1, grayscale: false, invert: false }
 
 let toastSeq = 1
+/** Toasts the pointer or keyboard focus is resting on never expire under the reader — a
+ *  toast carrying an action vanished after 9 s even with focus on its button. */
+const heldToasts = new Set<number>()
+export function holdToast(id: number, held: boolean) {
+  if (held) heldToasts.add(id)
+  else heldToasts.delete(id)
+}
 
 export const useStore = create<VastuStore>()((set, get) => {
   // compass rides along only for the actions that mutate it (closePolygon) — a blanket capture
@@ -707,9 +714,13 @@ export const useStore = create<VastuStore>()((set, get) => {
       const id = toastSeq++
       // identical repeats replace instead of stacking
       set((s) => ({ toasts: [...s.toasts.filter((t) => t.msg !== msg).slice(-3), { id, msg, kind, actionLabel, onAction }] }))
-      window.setTimeout(() => get().dismissToast(id), actionLabel ? 9000 : 4200)
+      const expire = () => {
+        if (heldToasts.has(id)) window.setTimeout(expire, 1500)
+        else get().dismissToast(id)
+      }
+      window.setTimeout(expire, actionLabel ? 9000 : 4200)
     },
-    dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+    dismissToast: (id) => { heldToasts.delete(id); set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })) },
 
     undo: () => {
       const { undoStack, pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride } = get()
