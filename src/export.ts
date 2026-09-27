@@ -95,7 +95,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   })
 
   /* title + footer furniture, drawn in world coordinates */
-  const rawTitle = (s.bg.name?.replace(/\.[^.]+$/, '') || 'Vastu plan')
+  const rawTitle = (s.projectName && s.projectName !== 'Untitled plan' ? s.projectName : s.bg.name?.replace(/\.[^.]+$/, '')) || 'Vastu plan'
   // long filenames would run under the right-anchored date — trim before composing
   const title = rawTitle.length > 40 ? rawTitle.slice(0, 39).trimEnd() + '…' : rawTitle
   const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })

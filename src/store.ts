@@ -17,7 +17,7 @@ export interface Toast {
   onAction?: () => void
 }
 
-interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[]; roomShapes: RoomShape[]; texts?: TextNote[]; compass?: CompassState }
+interface Snapshot { pts: Pt[]; closed: boolean; bulges: number[]; markers: Marker[]; strokes: Stroke[]; roomShapes: RoomShape[]; texts?: TextNote[]; compass?: CompassState; centerOverride?: Pt | null }
 
 export type ThemeMode = 'ink' | 'paper'
 /** the phone app's sections */
@@ -284,10 +284,17 @@ export const useStore = create<VastuStore>()((set, get) => {
   // compass rides along only for the actions that mutate it (closePolygon) — a blanket capture
   // would make unrelated undos revert panel tweaks, since setCompass never pushes history
   const push = (extra?: { compass: CompassState }) => {
-    const { pts, closed, bulges, markers, strokes, roomShapes, texts, undoStack } = get()
-    const stack = [...undoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, ...extra }]
+    const { pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride, undoStack } = get()
+    const stack = [...undoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride, ...extra }]
     if (stack.length > 100) stack.shift()
     set({ undoStack: stack, redoStack: [] })
+  }
+
+  // a locked plan refuses every structural edit, whichever control asked for it
+  const lockedNow = () => {
+    if (!get().locked) return false
+    get().toast('Plan is locked — tap the padlock to edit', 'warn')
+    return true
   }
 
   const savePrefs = () => {
@@ -346,7 +353,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     },
     updateStroke: (id, patch) => { push(); set((s) => ({ strokes: s.strokes.map((x) => (x.id === id ? { ...x, ...patch } : x)) })) },
     moveStroke: (id, pts) => set((s) => ({ strokes: s.strokes.map((x) => (x.id === id ? { ...x, pts } : x)) })),
-    clearStrokes: () => { push(); set({ strokes: [], selectedStroke: null, texts: [], selectedText: null, textEditing: false }) },
+    clearStrokes: () => { if (lockedNow()) return; push(); set({ strokes: [], selectedStroke: null, texts: [], selectedText: null, textEditing: false }) },
     setSelectedStroke: (selectedStroke) =>
       set({ selectedStroke, ...(selectedStroke === null ? {} : { selectedMarker: null, markerEditing: false, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false }) }),
     setDrawMode: (drawMode) => set({ drawMode }),
@@ -448,10 +455,12 @@ export const useStore = create<VastuStore>()((set, get) => {
     setTheme: (theme) => { set({ theme }); savePrefs() },
     setAccent: (accent) => { set({ accent }); savePrefs() },
     clearBackground: () => {
-      push()
-      set((s) => ({ bg: { ...s.bg, kind: 'none' as const, dataUrl: undefined, dxfText: undefined } }))
+      if (lockedNow()) return
+      // the background is not in the undo snapshot, so no history entry — and its file name
+      // goes with it (exports titled the plan after an image that was no longer there)
+      set((s) => ({ bg: { ...s.bg, kind: 'none' as const, dataUrl: undefined, dxfText: undefined, name: undefined } }))
     },
-    clearMarkers: () => { push(); set({ markers: [], selectedMarker: null }) },
+    clearMarkers: () => { if (lockedNow()) return; push(); set({ markers: [], selectedMarker: null }) },
     toasts: [],
     undoStack: [],
     redoStack: [],
@@ -459,8 +468,16 @@ export const useStore = create<VastuStore>()((set, get) => {
     setBg: (bg) => set((s) => ({ bg: { ...s.bg, ...bg } })),
     // a new background defines a new pixel space — the old scale and outline never apply to it
     replaceBg: (bg, metersPerPx, source) => {
-      push()
+      // a new background is a new project: none of the previous plan's history, lock,
+      // selection or report may carry over (undo used to paste the old outline onto it)
       set(() => ({
+        undoStack: [],
+        redoStack: [],
+        locked: false,
+        selectedVertex: null,
+        selectedEdge: null,
+        highlightZone: null,
+        report: { client: '', address: '', practitioner: '', notes: '' },
         bg,
         metersPerPx,
         scaleSource: metersPerPx != null ? source : null,
@@ -532,6 +549,8 @@ export const useStore = create<VastuStore>()((set, get) => {
       })
     },
     deletePoint: (i) => {
+      if (lockedNow()) return
+      if (!Number.isInteger(i) || i < 0 || i >= get().pts.length) return
       push()
       set((s) => {
         const pts = s.pts.filter((_, j) => j !== i)
@@ -564,6 +583,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     closePolygon: () => {
       const s = get()
       if (s.pts.length < 3 || s.closed) return
+      if (lockedNow()) return
       push({ compass: s.compass })
       set({
         closed: true,
@@ -577,8 +597,8 @@ export const useStore = create<VastuStore>()((set, get) => {
       })
       get().toast('Outline closed — centre located', 'ok')
     },
-    reopenPolygon: () => { push(); set({ closed: false }) },
-    clearOutline: () => { push(); set({ pts: [], bulges: [], closed: false, centerOverride: null, highlightZone: null }) },
+    reopenPolygon: () => { if (lockedNow()) return; push(); set({ closed: false }) },
+    clearOutline: () => { if (lockedNow()) return; push(); set({ pts: [], bulges: [], closed: false, centerOverride: null, highlightZone: null, selectedVertex: null, selectedEdge: null }) },
     setCenterOverride: (centerOverride) => { if (centerOverride === null || finitePt(centerOverride)) set({ centerOverride }) },
     setNorth: (northDeg, source = 'manual') =>
       set({ northDeg: ((northDeg % 360) + 360) % 360, northSource: source }),
@@ -670,7 +690,7 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedRoomShape: s.selectedRoomShape === id ? null : s.selectedRoomShape,
       }))
     },
-    clearRoomShapes: () => { push(); set({ roomShapes: [], selectedRoomShape: null }) },
+    clearRoomShapes: () => { if (lockedNow()) return; push(); set({ roomShapes: [], selectedRoomShape: null }) },
     setSelectedRoomShape: (selectedRoomShape) =>
       set({ selectedRoomShape, ...(selectedRoomShape === null ? { roomShapeEditing: false } : { selectedMarker: null, markerEditing: false, selectedStroke: null, selectedText: null, textEditing: false }) }),
     setRoomShapeKind: (roomShapeKind) => { set({ roomShapeKind }); bumpRecentKind(roomShapeKind) },
@@ -692,7 +712,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     dismissToast: (id) => set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
 
     undo: () => {
-      const { undoStack, pts, closed, bulges, markers, strokes, roomShapes, texts } = get()
+      const { undoStack, pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride } = get()
       if (undoStack.length === 0) return
       if (get().locked) { get().toast('Plan is locked — tap the padlock to edit', 'warn'); return }
       const prev = undoStack[undoStack.length - 1]
@@ -705,16 +725,19 @@ export const useStore = create<VastuStore>()((set, get) => {
         roomShapes: prev.roomShapes ?? s.roomShapes,
         texts: prev.texts ?? s.texts,
         ...(prev.compass ? { compass: prev.compass } : {}),
+        ...(prev.centerOverride !== undefined ? { centerOverride: prev.centerOverride } : {}),
         selectedMarker: null,
         selectedStroke: null,
         selectedRoomShape: null,
         selectedText: null,
+        selectedVertex: null,
+        selectedEdge: null,
         undoStack: s.undoStack.slice(0, -1),
-        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, ...(prev.compass ? { compass: s.compass } : {}) }],
+        redoStack: [...s.redoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride, ...(prev.compass ? { compass: s.compass } : {}) }],
       }))
     },
     redo: () => {
-      const { redoStack, pts, closed, bulges, markers, strokes, roomShapes, texts } = get()
+      const { redoStack, pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride } = get()
       if (redoStack.length === 0) return
       if (get().locked) { get().toast('Plan is locked — tap the padlock to edit', 'warn'); return }
       const next = redoStack[redoStack.length - 1]
@@ -727,12 +750,15 @@ export const useStore = create<VastuStore>()((set, get) => {
         roomShapes: next.roomShapes ?? s.roomShapes,
         texts: next.texts ?? s.texts,
         ...(next.compass ? { compass: next.compass } : {}),
+        ...(next.centerOverride !== undefined ? { centerOverride: next.centerOverride } : {}),
         selectedMarker: null,
         selectedStroke: null,
         selectedRoomShape: null,
         selectedText: null,
+        selectedVertex: null,
+        selectedEdge: null,
         redoStack: s.redoStack.slice(0, -1),
-        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, ...(next.compass ? { compass: s.compass } : {}) }],
+        undoStack: [...s.undoStack, { pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride, ...(next.compass ? { compass: s.compass } : {}) }],
       }))
     },
 
