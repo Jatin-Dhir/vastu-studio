@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useStore } from '../store'
 import { Scene, FONT, GOLD, strokePathD } from './Scene'
-import { importDxf, type DxfImport } from '../importers/dxf'
+import type { DxfImport } from '../importers/dxf'
 import { angleOf, boundsOf, bulgeFromMid, centroid, circumradius, dist, distToSegment, edgeLength, edgePoint, nearestOnEdge, polar, polygonArea, sampledPolygon, simplifyPath } from '../geometry'
 import { formatLen } from '../format'
 import { haptic } from '../native'
@@ -199,9 +199,18 @@ export function CanvasStage() {
   useEffect(() => { viewRef.current = view }, [view])
   useLayoutEffect(() => { applyDom() })
 
-  const dxf = useMemo<DxfImport | null>(() => {
-    if (bg.kind !== 'dxf' || !bg.dxfText) return null
-    try { return importDxf(bg.dxfText) } catch { return null }
+  // the DXF parser loads with the first DXF, not with every start; a stale parse (the plan
+  // changed while the chunk loaded) is dropped
+  const [dxf, setDxf] = useState<DxfImport | null>(null)
+  useEffect(() => {
+    if (bg.kind !== 'dxf' || !bg.dxfText) { setDxf(null); return }
+    let live = true
+    const text = bg.dxfText
+    void import('../importers/dxf').then(({ importDxf }) => {
+      if (!live) return
+      try { setDxf(importDxf(text)) } catch { setDxf(null) }
+    })
+    return () => { live = false }
   }, [bg.kind, bg.dxfText])
 
   const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
@@ -1134,11 +1143,9 @@ export function CanvasStage() {
   // the Brahmasthan ring renders independently of the compass id, so silence it too)
   const editingOutline = tool === 'trace' || editDragging
   const analysisOk = analysisAllowed(auth, chartsReady)
-  const sceneCompass = !analysisOk
+  const sceneCompass = useMemo(() => (!analysisOk
     ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
-    : editingOutline && compass.id !== 'none'
-      ? { ...compass, id: 'none' as const }
-      : compass
+    : compass), [analysisOk, compass])
   const tracing = tool === 'trace' && !closed
   const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < closePx() / k
   const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
@@ -1164,7 +1171,7 @@ export function CanvasStage() {
         <Scene
           bg={bg} dxf={dxf} pts={pts} bulges={bulges} closed={closed} center={analysisOk ? center : null} R={R}
           centerOverridden={!!centerOverride} highlightZone={editingOutline ? null : highlightZone}
-          northDeg={northDeg} compass={sceneCompass} metersPerPx={metersPerPx} unit={unit}
+          northDeg={northDeg} compass={sceneCompass} compassHidden={editingOutline} metersPerPx={metersPerPx} unit={unit}
           k={k} viewRotDeg={rot} showEdgeLabels={showEdgeLabels} markers={markers} strokes={strokes}
           roomShapes={roomShapes} selectedRoomShape={selectedRoomShape}
           texts={texts} selectedText={selectedText}
@@ -1217,7 +1224,7 @@ export function CanvasStage() {
 
         {/* zone hit wedges — tap a region of the wheel for its detail card. Rendered FIRST
             so every other hit surface (markers, rooms, strokes, notes) wins over them */}
-        {tool === 'select' && closed && center && sceneCompass.id !== 'none' && R > 0 && (() => {
+        {tool === 'select' && !editingOutline && closed && center && sceneCompass.id !== 'none' && R > 0 && (() => {
           const RS = R * ((sceneCompass.scalePct ?? 100) / 100)
           return ZONES16.map((_, i) => {
             const a0 = northDeg - 11.25 + i * 22.5

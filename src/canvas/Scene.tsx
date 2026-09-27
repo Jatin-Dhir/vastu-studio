@@ -1,4 +1,4 @@
-import { cloneElement, Fragment, useMemo } from 'react'
+import { cloneElement, Fragment, memo, useMemo, useRef } from 'react'
 import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, TextNote, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
@@ -67,6 +67,10 @@ export interface SceneProps {
   /** light paper ground (PNG export) — swaps the few inks that assume the dark canvas */
   paper?: boolean
   idPrefix: string
+  /** the wheel steps aside while the outline itself is traced or reshaped — kept mounted and
+   *  frozen at its last drawing rather than unmounted, so a corner press no longer tears down
+   *  ~120 nodes and a release no longer replays the 0.45 s entrance animation */
+  compassHidden?: boolean
 }
 
 export function strokePathD(pts: Pt[], kind: 'pen' | 'line' | 'arrow' | 'rect' | 'ellipse' = 'line'): string {
@@ -849,6 +853,11 @@ function CenterMarker(props: {
 /* Scene root                                                          */
 /* ------------------------------------------------------------------ */
 
+const Zones16Layer = memo(Zones16)
+const Gates32Layer = memo(Gates32)
+const Grid9Layer = memo(Grid9)
+const CustomLayer = memo(CustomOverlay)
+
 export function Scene(props: SceneProps) {
   const { bg, dxf, pts, bulges, closed, center, R, northDeg, compass, metersPerPx, unit, k, showEdgeLabels, idPrefix } = props
   const vr = props.viewRotDeg ?? 0
@@ -866,6 +875,11 @@ export function Scene(props: SceneProps) {
   const chakraProps: ChakraProps | null = showCompass && center
     ? { c: center, R: RS, north: northDeg, compass, k, vr, pts: sampled, closed, idPrefix, baseR: R, paper: props.paper ?? false }
     : null
+  // while hidden, draw (invisibly) the wheel as it last was — same object, so the memoised
+  // layers skip their work on every frame of a drag
+  const lastChakra = useRef<ChakraProps | null>(null)
+  if (chakraProps && !props.compassHidden) lastChakra.current = chakraProps
+  const drawn = props.compassHidden ? lastChakra.current : chakraProps
 
   // entrance ties reach whichever ring is actually on screen (the scaled wheel radius when a
   // compass is showing), falling back to the plot's own circumradius when no wheel is selected
@@ -881,11 +895,12 @@ export function Scene(props: SceneProps) {
         )}
       </defs>
       <Background bg={bg} dxf={dxf} k={k} paper={props.paper} />
-      <g key={compass.id} className="compass-enter" opacity={compass.opacity}>
-        {chakraProps && compass.id === 'custom' && <CustomOverlay {...chakraProps} />}
-        {chakraProps && compass.id === 'zones16' && <Zones16 {...chakraProps} />}
-        {chakraProps && compass.id === 'gates32' && <Gates32 {...chakraProps} />}
-        {chakraProps && compass.id === 'grid9' && <Grid9 {...chakraProps} />}
+      <g key={drawn?.compass.id ?? compass.id} className="compass-enter" opacity={(drawn?.compass ?? compass).opacity}
+        display={props.compassHidden ? 'none' : undefined}>
+        {drawn && drawn.compass.id === 'custom' && <CustomLayer {...drawn} />}
+        {drawn && drawn.compass.id === 'zones16' && <Zones16Layer {...drawn} />}
+        {drawn && drawn.compass.id === 'gates32' && <Gates32Layer {...drawn} />}
+        {drawn && drawn.compass.id === 'grid9' && <Grid9Layer {...drawn} />}
       </g>
       {/* tapped zone from the analysis panel, lit on the plan itself */}
       {typeof props.highlightZone === 'number' && closed && center && R > 0 && (() => {
