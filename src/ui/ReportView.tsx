@@ -3,7 +3,7 @@ import type { CSSProperties, ReactNode } from 'react'
 import { FileDown, Printer, Share2, X } from 'lucide-react'
 import { useStore } from '../store'
 import { requireLicense } from '../auth/gate'
-import { makePlanPng } from '../export'
+import { isNative, shareBlobNative } from '../native'
 import { buildAssessment } from '../reportText'
 import type { ReportPdfData } from '../reportPdf'
 import { brahmasthanRadius, placementOf, zoneRows } from '../analysis'
@@ -162,7 +162,8 @@ export function ReportView() {
   useEffect(() => {
     let cancelled = false
     let url: string | null = null
-    void makePlanPng().then((out) => {
+    // the exporter (and its SVG serialiser) loads with the first report, not with the app
+    void import('../export').then((m) => m.makePlanPng()).then((out) => {
       if (!out || cancelled) return
       url = URL.createObjectURL(out.blob)
       setImgBlob(out.blob)
@@ -386,6 +387,8 @@ export function ReportView() {
     if (!requireLicense()) return
     if (!imgBlob) return
     const file = new File([imgBlob], `${projectName}-vastu.png`, { type: 'image/png' })
+    // Android's system WebView has no Web Share API — the app's own share sheet does it there
+    if (isNative()) { await shareBlobNative(imgBlob, file.name); return }
     try {
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: `${projectName} — Vastu analysis` })
@@ -403,11 +406,12 @@ export function ReportView() {
           <span className="btn-label-lg">{pdfBusy ? 'Preparing…' : 'Save as PDF'}</span>
           <span className="btn-label-sm">{pdfBusy ? '…' : 'PDF'}</span>
         </button>
-        <button className="btn-ghost" onClick={doPrint}>
+        {/* window.print does nothing inside the phone apps' web views — Save as PDF and Share cover it */}
+        {!isNative() && <button className="btn-ghost" onClick={doPrint}>
           <Printer size={15} />
           <span className="btn-label-lg">Print</span>
           <span className="btn-label-sm">Print</span>
-        </button>
+        </button>}
         <button className="btn-ghost" disabled={!imgBlob} onClick={() => void share()}><Share2 size={15} /> Share</button>
         <button className="btn-ghost" onClick={() => setReportOpen(false)}><X size={15} /> Close</button>
       </div>

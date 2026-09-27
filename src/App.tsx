@@ -139,8 +139,10 @@ export default function App() {
     const open = () => fileRef.current?.click()
     const camera = () => cameraRef.current?.click()
     window.addEventListener('vastu:open-camera', camera)
-    const reset = () => {
-      autosave() // the debounce may still hold the last edit — keep it in the library first
+    const reset = (e: Event) => {
+      // the debounce may still hold the last edit — keep it in the library first. Not when the
+      // plan on screen was just deleted: saving it would bring it straight back under its id
+      if (!(e as CustomEvent<{ discard?: boolean }>).detail?.discard) autosave()
       clearAutosave()
       const st = useStore.getState()
       st.loadProject({ ...EMPTY_PROJECT, unit: st.unit })

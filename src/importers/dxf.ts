@@ -10,7 +10,7 @@ export interface DxfImport {
   /** Largest extent of the drawing in its own (possibly unitless) drawing units. */
   unitsMaxDim: number
   /** the drawing was larger than the importer draws — some of it was left out */
-  truncated: boolean
+  truncated?: boolean
 }
 
 interface XY { x: number; y: number }

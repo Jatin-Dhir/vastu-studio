@@ -64,7 +64,11 @@ export function useModalFocus(
       inerted.forEach((el) => { el.inert = false })
       // back to the opener — unless focus has already moved on to something else
       const now = document.activeElement
-      if (prev && prev !== document.body && prev.isConnected && (!now || now === document.body || root.contains(now))) prev.focus()
+      const lost = !now || now === document.body || root.contains(now)
+      if (prev && prev !== document.body && prev.isConnected && lost) prev.focus()
+      // the chip that opened an edit dialog unmounts while it is open — the plan itself is
+      // the next best place, never <body>
+      else if (lost && prev && !prev.isConnected) document.querySelector<HTMLElement>('svg.stage')?.focus()
     }
   }, [active, ref, initial, inertSiblings])
 }

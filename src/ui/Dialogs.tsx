@@ -6,6 +6,7 @@ import { dist } from '../geometry'
 import { M_PER_FT, formatScale } from '../format'
 import { haptic } from '../native'
 import { radioGroupKeys, useModalFocus } from './useModalFocus'
+import { IS_MAC, mod } from '../platform'
 
 export function Dialog(props: {
   title: string; onClose: () => void; children: React.ReactNode; width?: number; className?: string
@@ -326,7 +327,7 @@ const SHORTCUTS: [string, string][] = [
   ['C', 'Set scale'], ['N', 'Align north'], ['M', 'Pin centre'],
   ['F', 'Fit view'], ['Enter', 'Close an open outline'], ['Esc / Backspace', 'Undo last point · dismiss'],
   ['Delete', 'Delete the selection'], ['Arrows / Shift+Arrows', 'Nudge the selection 1 px · 10 px'],
-  ['Ctrl+Z', 'Undo'], ['Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
+  [mod('Z'), 'Undo'], [IS_MAC ? '⌘⇧Z' : 'Ctrl+Y / Ctrl+Shift+Z', 'Redo'],
   ['Double-click edge', 'Insert point'], ['Right-click point', 'Delete point'],
   ['?', 'This help'],
 ]

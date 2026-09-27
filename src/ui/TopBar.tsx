@@ -4,7 +4,7 @@ import {
 } from 'lucide-react'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
-import { exportPng } from '../export'
+import { mod } from '../platform'
 import { requireAnalysis, requireLicense } from '../auth/gate'
 import { signOut } from '../auth/session'
 import { saveProjectFile } from '../importers/project'
@@ -75,7 +75,10 @@ export async function runDetect() {
     }
   } catch (e) {
     console.error(e)
-    useStore.getState().toast('Room detection failed — mark rooms manually instead', 'warn')
+    // the reader's own messages already say what to do (update the browser, reload, a smaller image)
+    const msg = e instanceof Error ? e.message : ''
+    const known = /newer browser|did not start|timed out/i.test(msg)
+    useStore.getState().toast(known ? msg : 'Room detection failed — mark rooms manually instead', 'warn')
   } finally {
     useStore.getState().setBusy(null)
   }
@@ -236,11 +239,11 @@ export function TopBar() {
         </button>
         <UnitSeg className="seg hide-mobile" unit={unit} setUnit={setUnit} />
         <button className="icon-btn" disabled={undoLen === 0 || locked} onClick={undo}
-          aria-label="Undo" data-tip="Undo (Ctrl+Z)">
+          aria-label="Undo" data-tip={`Undo (${mod('Z')})`}>
           <Undo2 size={16} />
         </button>
         <button className="icon-btn" disabled={redoLen === 0 || locked} onClick={redo}
-          aria-label="Redo" data-tip="Redo (Ctrl+Y)">
+          aria-label="Redo" data-tip={`Redo (${mod('Y')})`}>
           <Redo2 size={16} />
         </button>
         <button className="icon-btn hide-mobile" onClick={requestFit} aria-label="Fit view" data-tip="Fit view (F)">
@@ -264,7 +267,7 @@ export function TopBar() {
           data-tip={closed ? 'Client report — print / share' : 'Close the outline to build a report'}>
           <FileText size={16} />
         </button>
-        <button className="btn-primary" aria-label="Export PNG" onClick={() => { if (requireLicense()) void exportPng() }}>
+        <button className="btn-primary" aria-label="Export PNG" onClick={() => { if (requireLicense()) void import('../export').then((m) => m.exportPng()) }}>
           <Download size={15} /> <span className="hide-mobile">Export PNG</span>
         </button>
         <button className="icon-btn" aria-label="More" onClick={() => setMoreOpen(true)}>

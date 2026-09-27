@@ -73,7 +73,8 @@ export function PlansScreen() {
     if (wasCurrent) {
       const remaining = useStore.getState().openTabs
       if (remaining.length > 0) await activateProject(remaining[0].id)
-      else window.dispatchEvent(new CustomEvent('vastu:reset'))
+      // the deleted plan is still on screen — discard it, never save it back
+      else window.dispatchEvent(new CustomEvent('vastu:reset', { detail: { discard: true } }))
     }
     refresh()
   }
