@@ -154,11 +154,20 @@ export default function App() {
   /* keyboard */
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      // a control that handled the key itself (a slider's arrows, a list's Enter) wins
+      if (e.defaultPrevented) return
       const t = e.target as HTMLElement | null
       if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable)) return
+      // keys pressed inside a dialog, sheet, menu or slider belong to it, never to the plan behind
+      if (t?.closest?.('[role="dialog"], [role="alertdialog"], [role="menu"], [role="listbox"], [role="slider"]')) return
       const s = useStore.getState()
       // modal surfaces own the keyboard while open — each closes itself on Escape
-      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen) return
+      if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen ||
+        s.moreOpen || s.clearOpen || s.appearanceOpen || s.detectedRooms || s.mobileSheet) return
+      // Enter, Space and the arrows on a focused button or link are that control's own keys
+      // (Enter on "Help" must not also close the outline)
+      const onControl = !!t && t !== document.body && !!t.closest?.('button, a, [role="button"], [role="tab"], [tabindex]:not(svg)')
+      if (onControl && (e.key === 'Enter' || e.key === ' ' || e.key.startsWith('Arrow'))) return
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') {
         e.preventDefault()
         // a mid-drag undo would pop the entry the drag itself just pushed — wait for the release
