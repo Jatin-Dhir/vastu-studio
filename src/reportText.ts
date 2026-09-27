@@ -61,7 +61,7 @@ export function buildAssessment(args: {
     offSeat += 1
     const kindName = markerKindMeta(a.kind).name.toLowerCase()
     const where = a.isArea && a.shares.length > 1
-      ? `spread ${sharesLine(a)}`
+      ? `spread across ${sharesLine(a)}`
       : `in ${a.shares[0].key} (${a.shares[0].name})`
     const why = a.why ?? 'not a classical seat for it'
     const move = moveSentence(a, fmtDistance) ?? (seatList(a.kind) ? `The classical seats are ${seatList(a.kind)}.` : '')

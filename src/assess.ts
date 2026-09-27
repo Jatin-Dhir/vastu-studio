@@ -271,8 +271,16 @@ export function assessAll(args: {
 }
 
 /** Shares as a compact string: "62% NE · 38% ENE". */
+/** The zones that hold an item, largest first: every share of 10% or more (at most four),
+ *  then a count of the slivers. A room near the centre can touch twelve zones, and a line
+ *  that lists its 2% slivers buries the two that decide the verdict. Report tables still
+ *  show every share as chips. */
 export function sharesLine(a: Assessment): string {
-  return a.shares.map((s) => `${fmtPct(s.pct)} ${s.key}`).join(' · ')
+  const major = a.shares.filter((s) => s.pct >= 10).slice(0, 4)
+  const shown = major.length ? major : a.shares.slice(0, 1)
+  const rest = a.shares.length - shown.length
+  const line = shown.map((s) => `${fmtPct(s.pct)} ${s.key}`).join(' · ')
+  return rest > 0 ? `${line} + ${rest} smaller` : line
 }
 
 export const kindName = (kind: MarkerKind) => markerKindMeta(kind).name
