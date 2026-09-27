@@ -57,7 +57,9 @@ export function parseDimensions(raw: string): { w: number; h: number } | null {
  * Keyword → kind. Ordered so more-specific phrases are matched before generic ones
  * (e.g. "store room" before a bare "room" would ever be added — it isn't, on purpose:
  * a lone "room"/"hall" is too generic to guess a kind from and would just be noise).
- * Matching is substring-on-lowercased-text, so short codes ("wc", "mbr") still hit.
+ * Matching is whole-word on letters only (both the text and the keywords are reduced to
+ * lowercase letter runs), so "W.C." and "WC-1" hit 'wc' while "BARSATI" is not a bar and
+ * "SENTRY POST" is not an entry; the first kind in this order that matches wins.
  */
 const KEYWORDS: [MarkerKind, string[]][] = [
   // 'porch' deliberately NOT here: a front porch is open space, not the main door —
@@ -81,7 +83,8 @@ const KEYWORDS: [MarkerKind, string[]][] = [
   ['kitchen', ['kitchen', 'kitchenette']],
   ['water', ['water tank', 'bore well', 'borewell', 'sump', 'overhead tank', 'water body', 'swimming pool']],
   ['bar', ['bar counter', 'mini bar', 'bar']],
-  ['tv', ['television', 'tv unit', 'tv lounge', 't.v.']],
+  // a "TV lounge" is a lounge (matched above), not the television itself
+  ['tv', ['television', 'tv unit', 't.v.']],
   ['computer', ['computer', 'workstation', 'desktop']],
   ['dustbin', ['dustbin', 'dust bin', 'garbage', 'trash']],
   ['safe', ['locker', 'safe room', 'tijori']],
@@ -98,12 +101,18 @@ const KEYWORDS: [MarkerKind, string[]][] = [
 
 /** Try to classify one piece of scanned/DXF text. Null if nothing matched (most text
  *  on a real drawing — dimensions, titles, notes — isn't a room label at all). */
+const words = (s: string) => ` ${s.toLowerCase().replace(/[^a-z]+/g, ' ').trim()} `
+const KEYWORDS_NORM: [MarkerKind, [string, string][]][] = KEYWORDS.map(([kind, ws]) => [kind, ws.map((w) => [w, words(w)])])
+/** a sheet's own furniture that happens to contain a room word ("DRAWING NO. A-101") */
+const NOT_A_ROOM = /\b(drawing|drg|dwg)\s*(no|number|title|name)\b|\bdrawn by\b/i
+
 export function matchKeyword(raw: string): { kind: MarkerKind; label: string; keyword: string } | null {
-  const text = raw.trim().toLowerCase().replace(/[_\-.]+/g, ' ').replace(/\s+/g, ' ')
-  if (text.length < 2) return null
-  for (const [kind, words] of KEYWORDS) {
-    for (const w of words) {
-      if (text.includes(w)) {
+  if (raw.trim().length < 2 || NOT_A_ROOM.test(raw)) return null
+  const text = words(raw)
+  if (text.trim().length < 2) return null
+  for (const [kind, ws] of KEYWORDS_NORM) {
+    for (const [w, norm] of ws) {
+      if (text.includes(norm)) {
         const label = raw.trim().replace(/\s+/g, ' ')
         return { kind, label: label.length <= 24 ? label : label.slice(0, 23) + '…', keyword: w }
       }
