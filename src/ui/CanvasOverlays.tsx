@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ArrowRight, Check, ChevronDown, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
@@ -182,10 +182,29 @@ function ToolHint() {
         : 'Drag out a room — then drag it to move, or pull its corners to resize'
   }
   if (!text) return null
-  return <div className="tool-hint">{text}</div>
+  return <div className="tool-hint" role="status">{text}</div>
 }
 
 const DRAW_COLORS = ['#F26B57', '#D9B45B', '#5B8DEF', '#63B56F', '#F2F2F2']
+const DRAW_COLOR_NAMES: Record<string, string> = { '#F26B57': 'red', '#D9B45B': 'gold', '#5B8DEF': 'blue', '#63B56F': 'green', '#F2F2F2': 'white' }
+
+/** A small anchored popover: focus moves into it as it opens, and Escape closes it and
+ *  hands focus back to the pill that opened it. */
+function usePopoverFocus(open: boolean, close: () => void, popRef: React.RefObject<HTMLElement | null>, triggerRef: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    if (!open) return
+    const pop = popRef.current
+    ;(pop?.querySelector<HTMLElement>('[aria-pressed="true"]') ?? pop?.querySelector<HTMLElement>('button, [tabindex="0"]'))?.focus()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open])
+  const onKeyDown = (e: React.KeyboardEvent) => {
+    if (!open || e.key !== 'Escape') return
+    e.preventDefault(); e.stopPropagation()
+    close()
+    triggerRef.current?.focus()
+  }
+  return onKeyDown
+}
 
 /** Colour + line width behind one swatch pill — the current choice is visible on the
  *  pill itself, so the eight individual buttons no longer crowd the toolbar. */
@@ -196,6 +215,8 @@ function StylePicker({ color, width, widths, onColor, onWidth }: {
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const popId = useId()
   useEffect(() => {
     if (!open) return
     const onDown = (e: PointerEvent) => {
@@ -206,22 +227,24 @@ function StylePicker({ color, width, widths, onColor, onWidth }: {
     window.addEventListener('pointerdown', onDown, true)
     return () => window.removeEventListener('pointerdown', onDown, true)
   }, [open])
+  const onKeyDown = usePopoverFocus(open, () => setOpen(false), popRef, triggerRef)
   const px = (w: number) => (w === 1 ? 2 : w === 2 ? 3.5 : 6)
   return (
-    <div className="style-picker" ref={ref}
-      onKeyDown={(e) => { if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); setOpen(false); triggerRef.current?.focus() } }}>
+    <div className="style-picker" ref={ref} onKeyDown={onKeyDown}>
       <button ref={triggerRef} type="button" className={`qpill ${open ? 'on' : ''}`} aria-expanded={open} aria-haspopup="dialog"
+        aria-controls={open ? popId : undefined}
         title="Colour and line width" aria-label="Colour and line width" onClick={() => setOpen(!open)}>
         <span className="style-swatch" style={{ background: color }} />
         {widths && <span className="style-width" style={{ height: px(width), background: color }} />}
         <ChevronDown size={12} />
       </button>
       {open && (
-        <div className="style-pop">
+        <div className="style-pop" ref={popRef} id={popId} role="dialog" aria-label="Colour and line width">
           <div className="style-row">
             <span className="lbl">Colour</span>
             {DRAW_COLORS.map((c) => (
-              <button key={c} type="button" className={`draw-swatch ${color === c ? 'on' : ''}`} aria-label={`Draw colour ${c}`}
+              <button key={c} type="button" className={`draw-swatch ${color === c ? 'on' : ''}`}
+                aria-label={`Draw colour ${DRAW_COLOR_NAMES[c] ?? c}`} aria-pressed={color === c}
                 style={{ background: c }} onClick={() => onColor(c)} />
             ))}
           </div>
@@ -229,7 +252,8 @@ function StylePicker({ color, width, widths, onColor, onWidth }: {
             <div className="style-row">
               <span className="lbl">Width</span>
               {[1, 2, 3].map((w) => (
-                <button key={w} type="button" className={`draw-width ${width === w ? 'on' : ''}`} aria-label={`Line width ${w}`}
+                <button key={w} type="button" className={`draw-width ${width === w ? 'on' : ''}`}
+                  aria-label={`Line width ${w === 1 ? 'thin' : w === 2 ? 'medium' : 'thick'}`} aria-pressed={width === w}
                   onClick={() => onWidth(w)}>
                   <span style={{ height: px(w) }} />
                 </button>
@@ -252,25 +276,25 @@ function DrawOptionsRow() {
   const strokey = drawMode !== 'text' && drawMode !== 'erase'
   return (
     <div className="quickbar-row kinds">
-      <button className={`qpill ${drawMode === 'pen' ? 'on' : ''}`} onClick={() => st.setDrawMode('pen')}>
+      <button className={`qpill ${drawMode === 'pen' ? 'on' : ''}`} aria-pressed={drawMode === 'pen'} onClick={() => st.setDrawMode('pen')}>
         <Pencil size={12} /> Pen
       </button>
-      <button className={`qpill ${drawMode === 'line' ? 'on' : ''}`} onClick={() => st.setDrawMode('line')}>
+      <button className={`qpill ${drawMode === 'line' ? 'on' : ''}`} aria-pressed={drawMode === 'line'} onClick={() => st.setDrawMode('line')}>
         <Slash size={12} /> Line
       </button>
-      <button className={`qpill ${drawMode === 'arrow' ? 'on' : ''}`} onClick={() => st.setDrawMode('arrow')}>
+      <button className={`qpill ${drawMode === 'arrow' ? 'on' : ''}`} aria-pressed={drawMode === 'arrow'} onClick={() => st.setDrawMode('arrow')}>
         <MoveUpRight size={12} /> Arrow
       </button>
-      <button className={`qpill ${drawMode === 'rect' ? 'on' : ''}`} onClick={() => st.setDrawMode('rect')}>
+      <button className={`qpill ${drawMode === 'rect' ? 'on' : ''}`} aria-pressed={drawMode === 'rect'} onClick={() => st.setDrawMode('rect')}>
         <SquareIcon size={12} /> Rect
       </button>
-      <button className={`qpill ${drawMode === 'ellipse' ? 'on' : ''}`} onClick={() => st.setDrawMode('ellipse')}>
+      <button className={`qpill ${drawMode === 'ellipse' ? 'on' : ''}`} aria-pressed={drawMode === 'ellipse'} onClick={() => st.setDrawMode('ellipse')}>
         <CircleIcon size={12} /> Circle
       </button>
-      <button className={`qpill ${drawMode === 'text' ? 'on' : ''}`} onClick={() => st.setDrawMode('text')}>
+      <button className={`qpill ${drawMode === 'text' ? 'on' : ''}`} aria-pressed={drawMode === 'text'} onClick={() => st.setDrawMode('text')}>
         <TypeIcon size={12} /> Text
       </button>
-      <button className={`qpill ${drawMode === 'erase' ? 'on' : ''}`} onClick={() => st.setDrawMode('erase')}>
+      <button className={`qpill ${drawMode === 'erase' ? 'on' : ''}`} aria-pressed={drawMode === 'erase'} onClick={() => st.setDrawMode('erase')}>
         <Eraser size={12} /> Erase
       </button>
       {drawMode !== 'erase' && (
@@ -301,13 +325,13 @@ function RoomOptionsRow() {
   const st = useStore.getState()
   return (
     <div className="quickbar-row kinds">
-      <button className={`qpill ${roomDrawMode === 'rect' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('rect')}>
+      <button className={`qpill ${roomDrawMode === 'rect' ? 'on' : ''}`} aria-pressed={roomDrawMode === 'rect'} onClick={() => st.setRoomDrawMode('rect')}>
         <SquareIcon size={12} /> Rectangle
       </button>
-      <button className={`qpill ${roomDrawMode === 'ellipse' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('ellipse')}>
+      <button className={`qpill ${roomDrawMode === 'ellipse' ? 'on' : ''}`} aria-pressed={roomDrawMode === 'ellipse'} onClick={() => st.setRoomDrawMode('ellipse')}>
         <CircleIcon size={12} /> Circle
       </button>
-      <button className={`qpill ${roomDrawMode === 'polygon' ? 'on' : ''}`} onClick={() => st.setRoomDrawMode('polygon')}>
+      <button className={`qpill ${roomDrawMode === 'polygon' ? 'on' : ''}`} aria-pressed={roomDrawMode === 'polygon'} onClick={() => st.setRoomDrawMode('polygon')}>
         <Spline size={12} /> Trace
       </button>
       <span className="qsep" />
@@ -579,6 +603,9 @@ export function QuickBar() {
   const setTool = useStore((s) => s.setTool)
   const [degOpen, setDegOpen] = useState(false)
   const popRef = useRef<HTMLDivElement>(null)
+  const degBtnRef = useRef<HTMLButtonElement>(null)
+  const degPopRef = useRef<HTMLDivElement>(null)
+  const degPopId = useId()
 
   useEffect(() => {
     if (!degOpen) return
@@ -591,19 +618,22 @@ export function QuickBar() {
     window.addEventListener('pointerdown', onDown, true)
     return () => window.removeEventListener('pointerdown', onDown, true)
   }, [degOpen])
+  const onKeyDown = usePopoverFocus(degOpen && closed, () => setDegOpen(false), degPopRef, degBtnRef)
 
   const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw' || tool === 'room'
   if (!hasBg || (!closed && !armed)) return null
 
   return (
-    <div className="quickbar" ref={popRef}>
+    <div className="quickbar" ref={popRef} onKeyDown={onKeyDown}>
       {closed && (
       <div className="quickbar-row compact">
-        <button className={`qpill deg ${degOpen ? 'on' : ''}`} onClick={() => setDegOpen(!degOpen)}>
+        <button ref={degBtnRef} className={`qpill deg ${degOpen ? 'on' : ''}`} onClick={() => setDegOpen(!degOpen)}
+          aria-expanded={degOpen} aria-haspopup="dialog" aria-controls={degOpen ? degPopId : undefined}>
           N{northDeg}°
         </button>
         <button className={`qpill lockpill ${locked ? 'on' : ''}`}
           title={locked ? 'Unlock editing' : 'Lock outline, scale & centre'}
+          aria-label="Lock outline, scale & centre" aria-pressed={locked}
           onClick={() => setLocked(!locked)}>
           {locked ? <Lock size={13} /> : <LockOpen size={13} />}
         </button>
@@ -616,7 +646,7 @@ export function QuickBar() {
       <ToolHint />
 
       {degOpen && closed && (
-        <div className="deg-pop">
+        <div className="deg-pop" ref={degPopRef} id={degPopId} role="dialog" aria-label="Plan north">
           <NorthDial size={96} />
           <div className="deg-steppers">
             {[-5, -0.5, 0.5, 5].map((d) => (
@@ -627,11 +657,11 @@ export function QuickBar() {
             ))}
           </div>
           <div className="deg-steppers">
-            <button className="chip" onClick={() => { setDegOpen(false); setTool('north') }}>
+            <button className="chip" onClick={() => { setDegOpen(false); setTool('north'); degBtnRef.current?.focus() }}>
               <Navigation size={11} /> From plan arrow
             </button>
             <button className="chip" onClick={() => setNorth(0)}>0°</button>
-            <button className="chip" onClick={() => setDegOpen(false)}><X size={11} /> Done</button>
+            <button className="chip" onClick={() => { setDegOpen(false); degBtnRef.current?.focus() }}><X size={11} /> Done</button>
           </div>
         </div>
       )}
@@ -648,6 +678,9 @@ export function RotateChip() {
   const calB = useStore((s) => s.calB)
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+  const btnRef = useRef<HTMLButtonElement>(null)
+  const popRef = useRef<HTMLDivElement>(null)
+  const popId = useId()
 
   useEffect(() => {
     if (!open) return
@@ -660,6 +693,7 @@ export function RotateChip() {
     window.addEventListener('pointerdown', onDown, true)
     return () => window.removeEventListener('pointerdown', onDown, true)
   }, [open])
+  const onKeyDown = usePopoverFocus(open, () => setOpen(false), popRef, btnRef)
 
   // the cal-bar takes this exact spot on mobile once both pins are down
   if (!hasBg || (tool === 'calibrate' && calA && calB)) return null
@@ -668,19 +702,20 @@ export function RotateChip() {
   const shown = Math.round((((rot % 360) + 540) % 360 - 180) * 10) / 10
 
   return (
-    <div className="rotate-chip" ref={ref}>
-      <button className={`qpill ${shown !== 0 ? 'on' : ''}`} onClick={() => setOpen(!open)}
-        title="Rotate the view (or twist with two fingers)">
+    <div className="rotate-chip" ref={ref} onKeyDown={onKeyDown}>
+      <button ref={btnRef} className={`qpill ${shown !== 0 ? 'on' : ''}`} onClick={() => setOpen(!open)}
+        title="Rotate the view (or twist with two fingers)" aria-label={`Rotate view, currently ${shown}°`}
+        aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? popId : undefined}>
         <RotateCcw size={12} /> {shown}°
       </button>
       {open && (
-        <div className="rotate-pop">
+        <div className="rotate-pop" ref={popRef} id={popId} role="dialog" aria-label="Rotate view">
           {[-90, -15, 15, 90].map((d) => (
             <button key={d} className="chip" onClick={() => send({ delta: d })}>
               {d > 0 ? `+${d}` : d}°
             </button>
           ))}
-          <button className="chip" onClick={() => { send({ set: 0 }); setOpen(false) }}>Straighten</button>
+          <button className="chip" onClick={() => { send({ set: 0 }); setOpen(false); btnRef.current?.focus() }}>Straighten</button>
         </div>
       )}
     </div>

@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, MoveRight, Navigation, RotateCcw, XCircle } from 'lucide-react'
+import { useEffect, useId, useMemo, useRef, useState } from 'react'
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, ImagePlus, Info, LocateFixed, MoveRight, Navigation, XCircle } from 'lucide-react'
 import { useStore } from '../store'
 import { analysisAllowed, requireAnalysis } from '../auth/gate'
 import { centroid, perimeter, polygonArea, sampledPolygon } from '../geometry'
@@ -18,6 +18,9 @@ import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
 
 const WALL_COLORS = ['#C9C6BC', '#FFFFFF', '#4A4A4A', '#8FA3B3', '#C98B6B', '#B7C9A8']
+const WALL_COLOR_NAMES: Record<string, string> = {
+  '#C9C6BC': 'stone grey', '#FFFFFF': 'white', '#4A4A4A': 'charcoal', '#8FA3B3': 'slate blue', '#C98B6B': 'terracotta', '#B7C9A8': 'sage green',
+}
 
 /* ---------- small controls ---------- */
 
@@ -133,8 +136,10 @@ function NorthRow() {
               // tap → the whole value is selected, so typing REPLACES the 0 instead of
               // appending to it. type=text, not number: Chromium quietly ignores
               // select() on number inputs. Immediate call + rAF retry: iOS drops the
-              // select() issued during the focus event itself, Android honours it
-              onFocus={(e) => { const t = e.currentTarget; t.select(); requestAnimationFrame(() => t.select()) }}
+              // select() issued during the focus event itself, Android honours it. The retry
+              // checks focus first: select() on a field that has lost it pulls focus back,
+              // which bounced a quick Tab straight back into this field
+              onFocus={(e) => { const t = e.currentTarget; t.select(); requestAnimationFrame(() => { if (document.activeElement === t) t.select() }) }}
               onChange={(e) => {
                 const v = e.target.value
                 setDraft(v)
@@ -268,7 +273,7 @@ function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg:
         const delta = r.pct - 6.25
         return (
           <div key={r.key} className={`zone-row-wrap ${isOpen ? 'open' : ''}`}>
-            <button className="zone-row" onClick={() => {
+            <button className="zone-row" aria-expanded={isOpen} onClick={() => {
               setOpen(isOpen ? null : i)
               // on phones, drop the sheet to half so the highlighted wedge is actually visible
               if (!isOpen && window.innerWidth <= 760 && useStore.getState().sheetPos === 'full') {
@@ -452,7 +457,19 @@ export function RightPanel() {
   const sheetPos = useStore((s) => s.sheetPos)
   const setSheetPos = useStore((s) => s.setSheetPos)
   const asideRef = useRef<HTMLElement>(null)
+  const handleRef = useRef<HTMLButtonElement>(null)
+  const bodyId = useId()
   const swipe = useRef<{ startY: number; startOff: number; moved: boolean; lastY: number; lastT: number; vel: number } | null>(null)
+  // a drag or flick settles the sheet on release; the click that can follow it must not toggle it again
+  const dragged = useRef(false)
+  // the sheet grammar only exists while its handle is showing (narrow windows) — elsewhere the panel is always open
+  const [sheetMode, setSheetMode] = useState(false)
+  useEffect(() => {
+    const sync = () => setSheetMode(!!handleRef.current && handleRef.current.getClientRects().length > 0)
+    sync()
+    window.addEventListener('resize', sync)
+    return () => window.removeEventListener('resize', sync)
+  }, [])
 
   /* three-detent bottom sheet: peek (54px) · half (~42vh) · full — mobile only */
   const sheetH = () => asideRef.current?.getBoundingClientRect().height ?? 0
@@ -466,6 +483,7 @@ export function RightPanel() {
     return Math.max(0, h - 54 - safe)
   }
   const onHandleDown = (e: React.PointerEvent) => {
+    dragged.current = false
     if (window.innerWidth > 760) return
     try { (e.target as Element).setPointerCapture?.(e.pointerId) } catch { /* synthetic */ }
     swipe.current = { startY: e.clientY, startOff: offsetFor(sheetPos), moved: false, lastY: e.clientY, lastT: performance.now(), vel: 0 }
@@ -492,11 +510,9 @@ export function RightPanel() {
     const dy = e.clientY - sw.startY
     el.style.transition = ''
     el.style.transform = ''
-    if (!sw.moved) {
-      // tap cycles: peek → full → peek (half is reached by swiping or zone taps)
-      setSheetPos(sheetPos === 'peek' ? 'full' : 'peek')
-      return
-    }
+    // a tap is left to the click that follows it (toggleSheet) — the one path taps, Enter and Space share
+    if (!sw.moved) return
+    dragged.current = true
     const off = Math.min(offsetFor('peek'), Math.max(0, sw.startOff + dy))
     // a decisive flick jumps a detent in its direction
     if (Math.abs(sw.vel) > 0.45) {
@@ -514,11 +530,21 @@ export function RightPanel() {
     }
     setSheetPos(best)
   }
+  const toggleSheet = (e: React.MouseEvent) => {
+    // detail 0 = Enter / Space / assistive tech, never preceded by a drag
+    if (e.detail > 0 && dragged.current) return
+    // tap cycles: peek → full → peek (half is reached by swiping or zone taps)
+    setSheetPos(sheetPos === 'peek' ? 'full' : 'peek')
+  }
 
   return (
-    <aside ref={asideRef} className={`panel pos-${sheetPos}`}>
+    <aside ref={asideRef} className={`panel pos-${sheetPos}`} aria-label="Plan panel">
       <button
+        ref={handleRef}
         className="sheet-handle"
+        aria-expanded={sheetPos !== 'peek'}
+        aria-controls={bodyId}
+        onClick={toggleSheet}
         onPointerDown={onHandleDown}
         onPointerMove={onHandleMove}
         onPointerUp={onHandleUp}
@@ -528,6 +554,9 @@ export function RightPanel() {
         <span>{sheetPos === 'peek' ? 'Controls & analysis' : 'Hide controls'}</span>
         {sheetPos === 'peek' ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
       </button>
+      {/* contents: no box of its own, so the cards still sit in the panel's column; inert while
+          the sheet only peeks, so Tab can't reach controls hidden below the fold */}
+      <div id={bodyId} style={{ display: 'contents' }} inert={sheetMode && sheetPos === 'peek'}>
       {/* -------- Plan -------- */}
       <section className="card">
         <header className="card-head">
@@ -600,13 +629,14 @@ export function RightPanel() {
           <div className="row-between">
             <span className="lbl">Wall colour</span>
             <label className="wall-swatch" style={{ background: wallColor }} title="Custom colour">
-              <input type="color" value={wallColor} onChange={(e) => setWallColor(e.target.value)} />
+              <input type="color" value={wallColor} aria-label="Custom wall colour" onChange={(e) => setWallColor(e.target.value)} />
             </label>
           </div>
           <div className="wall-presets">
             {WALL_COLORS.map((c) => (
               <button key={c} className={`wall-preset ${wallColor.toLowerCase() === c.toLowerCase() ? 'on' : ''}`}
-                style={{ background: c }} aria-label={`Wall colour ${c}`} onClick={() => setWallColor(c)} />
+                style={{ background: c }} aria-label={`Wall colour ${WALL_COLOR_NAMES[c] ?? c}`}
+                aria-pressed={wallColor.toLowerCase() === c.toLowerCase()} onClick={() => setWallColor(c)} />
             ))}
           </div>
           <Slider label="Wall thickness" value={wallWidthM * 100} min={5} max={60} step={1}
@@ -798,13 +828,11 @@ export function RightPanel() {
         <section className="card">
           <header className="card-head">
             <h2>Zone balance</h2>
-            <button className="icon-btn" data-tip="Recompute follows outline & north automatically">
-              <RotateCcw size={13} />
-            </button>
           </header>
           <ZoneChart pts={sampled} center={center} northDeg={northDeg} />
         </section>
       )}
+      </div>
     </aside>
   )
 }

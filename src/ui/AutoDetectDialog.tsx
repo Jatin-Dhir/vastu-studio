@@ -165,7 +165,7 @@ export function AutoDetectDialog() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <button type="button" className={`toggle ${row.included ? 'on' : ''}`}
                   aria-pressed={row.included}
-                  aria-label={row.included ? 'Included — tap to exclude' : 'Excluded — tap to include'}
+                  aria-label={`Include ${row.label.trim() || meta.name}`}
                   onClick={() => patchRow(row.id, { included: !row.included })}
                   style={{ padding: 3, flex: '0 0 auto' }}>
                   <span className="knob" />

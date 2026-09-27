@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
 import './map.css'
@@ -165,6 +165,7 @@ export function MapModal() {
   const footprintRef = useRef<HTMLDivElement>(null)
   const footprintLabelRef = useRef<HTMLSpanElement>(null)
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const resultsId = useId()
   const [style, setStyle] = useState<'sat' | 'osm'>(() => loadMem()?.style ?? 'sat')
   const [zoomNow, setZoomNow] = useState<number>(() => loadMem()?.z ?? 5)
   const [recents, setRecents] = useState<Hit[]>(loadRecents)
@@ -551,6 +552,14 @@ export function MapModal() {
     )
   }
 
+  // the results read as a listbox the field drives by active descendant (the KindPicker pattern)
+  const listShown = !linkHint && !searchFailed && hits.length > 0
+  // options are no longer Tab stops, so the arrow-key highlight keeps itself in view
+  const highlight = (i: number) => {
+    setActiveIndex(i)
+    document.getElementById(`${resultsId}-${i}`)?.scrollIntoView({ block: 'nearest' })
+  }
+
   return (
     <Dialog title={preview ? 'Review capture' : 'Import from Maps'} onClose={() => setMapOpen(false)} width={1080} className="map-dialog">
       {!preview && (
@@ -559,6 +568,10 @@ export function MapModal() {
           <input
             ref={searchInputRef}
             placeholder="Search, or paste a Google Maps link / lat, long…"
+            aria-label="Search places"
+            role="combobox" aria-autocomplete="list" aria-expanded={listShown}
+            aria-controls={listShown ? resultsId : undefined}
+            aria-activedescendant={listShown && activeIndex >= 0 && activeIndex < hits.length ? `${resultsId}-${activeIndex}` : undefined}
             value={q}
             autoComplete="off"
             spellCheck={false}
@@ -567,10 +580,10 @@ export function MapModal() {
             onKeyDown={(e) => {
               if (e.key === 'ArrowDown' && hits.length > 0) {
                 e.preventDefault()
-                setActiveIndex((i) => (i + 1) % hits.length)
+                highlight((activeIndex + 1) % hits.length)
               } else if (e.key === 'ArrowUp' && hits.length > 0) {
                 e.preventDefault()
-                setActiveIndex((i) => (i <= 0 ? hits.length - 1 : i - 1))
+                highlight(activeIndex <= 0 ? hits.length - 1 : activeIndex - 1)
               } else if (e.key === 'Enter') {
                 if (hits.length > 0) { goto(hits[activeIndex >= 0 ? activeIndex : 0]) }
                 else if (q.trim().length >= 3) { window.clearTimeout(debounceRef.current); void runSearch(q) }
@@ -582,7 +595,7 @@ export function MapModal() {
             <button className="map-search-clear" onClick={clearSearch} aria-label="Clear search"><X size={13} /></button>
           )}
           {(hits.length > 0 || linkHint || searchFailed || (noResults && q.trim().length >= 3 && !searching)) && (
-            <div className="map-results">
+            <div className="map-results" {...(listShown ? { role: 'listbox', id: resultsId, 'aria-label': 'Places', tabIndex: -1 } : {})}>
               {linkHint && (
                 <div className="map-linkhint">
                   <Link2 size={13} />
@@ -603,6 +616,7 @@ export function MapModal() {
                 const [primary, ...rest] = h.name.split(',')
                 return (
                   <button key={i} className={i === activeIndex ? 'active' : ''}
+                    id={`${resultsId}-${i}`} role="option" aria-selected={i === activeIndex} tabIndex={-1}
                     onMouseEnter={() => setActiveIndex(i)} onClick={() => goto(h)}>
                     <b>{primary.trim()}</b>
                     {rest.length > 0 && <span>{rest.join(',').trim()}</span>}

@@ -14,7 +14,8 @@ export function EmptyState() {
   return (
     <div className="empty-wrap">
       <div className="empty-card">
-        <svg className="empty-mark" width="64" height="64" viewBox="0 0 64 64" aria-hidden>
+        {/* one slow turn, then still — an endless spin is motion beside the text that nothing can stop */}
+        <svg className="empty-mark" width="64" height="64" viewBox="0 0 64 64" aria-hidden style={{ animationIterationCount: 1 }}>
           <circle cx="32" cy="32" r="29" fill="none" stroke="#D9B45B" strokeWidth="1" opacity="0.35" />
           <rect x="15.5" y="15.5" width="33" height="33" rx="2" transform="rotate(45 32 32)"
             fill="none" stroke="#D9B45B" strokeWidth="1.8" />

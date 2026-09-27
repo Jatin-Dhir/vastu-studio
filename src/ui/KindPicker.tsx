@@ -102,17 +102,21 @@ export function KindPicker({ value, onChange, exclude = [], recents = 4, inline 
           onKeyDown={(e) => {
             if (e.key === 'ArrowDown') { e.preventDefault(); setHl((h) => Math.min(items.length - 1, h + 1)) }
             else if (e.key === 'ArrowUp') { e.preventDefault(); setHl((h) => Math.max(0, h - 1)) }
+            else if (e.key === 'Home') { e.preventDefault(); setHl(0) }
+            else if (e.key === 'End') { e.preventDefault(); setHl(Math.max(0, items.length - 1)) }
             else if (e.key === 'Enter') { e.preventDefault(); if (items[hl]) pick(items[hl], true) }
           }} />
       </label>
-      <div className="kind-list" ref={listRef} role="listbox" id={listId}>
+      {/* tabIndex -1: with no tabbable options Chrome would make the scroller itself a Tab stop */}
+      <div className="kind-list" ref={listRef} role="listbox" id={listId} tabIndex={-1}>
         {rows.length === 0 && <div className="kind-empty">Nothing matches “{q}”</div>}
         {rows.map((r) => r.type === 'head'
           ? <div key={`h-${r.title}`} className="kind-head">{r.title}</div>
           : (() => {
             const m = markerKindMeta(r.kind)
+            // the search field is the one Tab stop — options are reached with the arrows (active descendant)
             return (
-              <button key={`${r.kind}-${r.idx}`} id={`${listId}-${r.kind}-${r.idx}`} type="button" role="option"
+              <button key={`${r.kind}-${r.idx}`} id={`${listId}-${r.kind}-${r.idx}`} type="button" role="option" tabIndex={-1}
                 aria-selected={r.kind === value}
                 className={`kind-item ${r.kind === value ? 'on' : ''} ${r.idx === hl ? 'hl' : ''}`}
                 onMouseEnter={() => setHl(r.idx)}
@@ -132,7 +136,10 @@ export function KindPicker({ value, onChange, exclude = [], recents = 4, inline 
   return (
     <>
       <div className="kind-picker" ref={rootRef}
-        onKeyDown={(e) => { if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true) } }}>
+        onKeyDown={(e) => { if (open && e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(true) } }}
+        // Tab (or anything else) taking focus out of the picker closes the list; a null target
+        // (a click on bare panel, the window losing focus) is left to the pointerdown dismissal
+        onBlur={(e) => { if (open && e.relatedTarget && !rootRef.current?.contains(e.relatedTarget as Node)) setOpen(false) }}>
         <button ref={triggerRef} type="button" className={`qpill kind picker ${open ? 'on' : ''}`}
           aria-haspopup="listbox" aria-expanded={open} title="Change type (type to search)"
           onClick={() => setOpen(!open)}>
