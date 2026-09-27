@@ -3,6 +3,7 @@ import { serializeProject, useStore } from '../store'
 import { newProjectId, putProject, getProject, type ProjectRecord } from '../db'
 import { shareBlobNative } from '../native'
 import { markerKindMeta } from '../vastu'
+import { closeOpenPdf, hasPdfOpen } from './pdfState'
 
 export function downloadBlob(blob: Blob, filename: string) {
   // dev-only: scripted checks read the generated file back instead of chasing the download
@@ -128,6 +129,8 @@ export async function activateProject(id: string): Promise<ProjectRecord | null>
   if (!rec) return null
   let data: ProjectFile
   try { data = sanitizeProject(rec.data) } catch { return null }
+  // another project's document has no business staying loaded (pdf.js holds the whole file)
+  if (!hasPdfOpen(data.bg.pdfKey)) closeOpenPdf()
   useStore.getState().loadProject(data)
   useStore.getState().setProjectMeta({ id: rec.id, name: rec.name })
   return rec

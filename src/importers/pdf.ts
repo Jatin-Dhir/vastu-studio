@@ -9,6 +9,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs'
 // static blocks and private methods would not parse on Safari 15 or older WebViews. It runs as
 // a classic worker handed to pdf.js as a port: module workers are missing from older Firefox.
 import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url'
+import { setOpenPdf } from './pdfState'
 
 let port: Worker | null = null
 function ensureWorker() {
@@ -41,21 +42,22 @@ if (typeof ReadableStream !== 'undefined' && !(Symbol.asyncIterator in ReadableS
 }
 
 let currentDoc: PDFDocumentProxy | null = null
-let currentKey: string | null = null
+
+function closeDoc() {
+  if (currentDoc) void currentDoc.destroy().catch(() => {})
+  currentDoc = null
+}
 
 export async function openPdf(data: ArrayBuffer, key: string): Promise<number> {
-  if (currentDoc) { void currentDoc.destroy().catch(() => {}); currentDoc = null; currentKey = null }
+  closeDoc()
+  setOpenPdf(null, null)
   ensureWorker()
   currentDoc = await pdfjs.getDocument({ data }).promise
-  currentKey = key
+  setOpenPdf(key, closeDoc)
   return currentDoc.numPages
 }
 
-/** True only when the PDF identified by `key` is the one loaded — a plan opened from another
- *  tab or the library must never have its page swapped for another document's page. */
-export function hasPdfOpen(key: string | undefined): boolean {
-  return currentDoc !== null && !!key && key === currentKey
-}
+export { hasPdfOpen } from './pdfState'
 
 export async function renderPdfPage(pageNum: number): Promise<{ dataUrl: string; w: number; h: number; pxPerPt: number }> {
   if (!currentDoc) throw new Error('No PDF open')
