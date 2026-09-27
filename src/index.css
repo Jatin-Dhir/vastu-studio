@@ -2091,7 +2091,9 @@ kbd {
      (iOS doesn't shrink the layout viewport when the keyboard opens) */
   .dialog-backdrop:not(:has(.map-dialog)) { place-items: start center; }
   .dialog:not(.map-dialog) {
+    margin-top: max(8vh, calc(env(safe-area-inset-top) + 8px));
     margin-top: max(8dvh, calc(env(safe-area-inset-top) + 8px));
+    max-height: calc(100vh - 24px);
     max-height: calc(100dvh - 24px);
   }
 
@@ -2099,7 +2101,9 @@ kbd {
   .map-dialog {
     width: 100vw !important;
     max-width: 100vw !important;
+    height: 100vh;
     height: 100dvh;
+    max-height: 100vh !important;
     max-height: 100dvh !important;
     border-radius: 0;
     display: flex;

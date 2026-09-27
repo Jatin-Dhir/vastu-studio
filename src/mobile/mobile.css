@@ -255,7 +255,7 @@
 .m-app .finding-row span { font-size: 13px; line-height: 1.45; }
 
 /* long action sheets scroll within the screen instead of running under the tab bar */
-.m-app .asheet { max-height: 84dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(12px + var(--m-safe-b)); }
+.m-app .asheet { max-height: 84vh; max-height: 84dvh; overflow-y: auto; -webkit-overflow-scrolling: touch; padding-bottom: calc(12px + var(--m-safe-b)); }
 
 @media (prefers-reduced-motion: reduce) {
   .m-sheet-scrim, .m-sheet, .m-tab, .m-step, .m-seg button, .m-tilt { animation: none; transition: none; }

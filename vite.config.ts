@@ -1,6 +1,7 @@
 import { basename, resolve } from 'node:path'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { defineConfig, type Plugin } from 'vite'
+import type { Declaration, Plugin as PostcssPlugin } from 'postcss'
 import react from '@vitejs/plugin-react'
 
 /** Dev server only: lets a scripted browser check hand a generated file (a PDF, a PNG)
@@ -70,9 +71,70 @@ function swPrecache(): Plugin {
   }
 }
 
+/** color-mix() arrived in Chrome 111, Safari 16.2 and Firefox 113, after this build's floor
+ *  (Chrome/WebView 99, Safari 15). With a var() inside, an engine that lacks it does not fall
+ *  back to an earlier declaration: the property resets, so badges lose their tint and some
+ *  borders turn the text colour. Every colour token gets a channel twin (--gold: #D9B45B adds
+ *  --gold-rgb: 217 180 91), and every rule that mixes gets a twin rule inside
+ *  @supports not (color: color-mix(...)) saying the same with rgb(var(--gold-rgb) / 35%).
+ *  Engines that have color-mix never apply it. */
+function colorMixFallback(): PostcssPlugin {
+  const MIX = /color-mix\(\s*in\s+srgb\s*,\s*var\(\s*(--[\w-]+)\s*\)\s+([\d.]+)%\s*,\s*(?:transparent|var\(\s*(--[\w-]+)\s*\))\s*\)/g
+  const channels = (value: string): string | null => {
+    const v = value.trim()
+    let m = /^#([0-9a-f]{3,4}|[0-9a-f]{6}|[0-9a-f]{8})$/i.exec(v)
+    if (m) {
+      const h = m[1].length <= 4 ? [...m[1]].map((c) => c + c).join('') : m[1]
+      return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)).join(' ')
+    }
+    m = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(v)
+    if (m) return `${m[1]} ${m[2]} ${m[3]}`
+    m = /^var\(\s*(--[\w-]+)\s*\)$/.exec(v)
+    return m ? `var(${m[1]}-rgb)` : null
+  }
+  return {
+    postcssPlugin: 'color-mix-fallback',
+    Once(root, { AtRule, result }) {
+      root.walkDecls(/^--/, (d) => {
+        if (d.prop.endsWith('-rgb')) return
+        const c = channels(d.value)
+        if (c) d.cloneAfter({ prop: `${d.prop}-rgb`, value: c })
+      })
+      root.walkRules((rule) => {
+        const parent = rule.parent as { type?: string; name?: string } | undefined
+        if (parent?.type === 'atrule' && /keyframes$/i.test(parent.name ?? '')) return
+        const twins: Declaration[] = []
+        rule.each((n) => {
+          if (n.type !== 'decl' || !n.value.includes('color-mix(')) return
+          if (n.prop.startsWith('--')) { n.warn(result, 'color-mix() in a custom property has no fallback'); return }
+          const whole = n.value.trim()
+          const value = n.value.replace(MIX, (all: string, a: string, pct: string, b?: string) => {
+            const tint = `rgb(var(${a}-rgb) / ${pct}%)`
+            if (!b) return tint
+            // an opaque mix is the tint laid over its base colour — exact when it is the whole
+            // background; anywhere else the base alone is the nearest honest stand-in
+            if (n.prop === 'background' && all.trim() === whole) return `linear-gradient(${tint}, ${tint}), var(${b})`
+            return `var(${b})`
+          })
+          if (value.includes('color-mix(')) { n.warn(result, `no color-mix fallback for: ${n.value}`); return }
+          twins.push(n.clone({ value }))
+        })
+        if (!twins.length) return
+        const twin = rule.clone()
+        twin.removeAll()
+        twin.append(...twins)
+        const at = new AtRule({ name: 'supports', params: 'not (color: color-mix(in srgb, red 50%, blue))' })
+        at.append(twin)
+        rule.after(at)
+      })
+    },
+  }
+}
+
 export default defineConfig({
   base: './',
   plugins: [react(), devSave(), preloadInter(), swPrecache()],
+  css: { postcss: { plugins: [colorMixFallback()] } },
   server: { port: 5173 },
   build: {
     // Safari 15 (iPhone 6s/7 on iOS 15), Chrome/Edge/WebView 99, Firefox 99: syntax newer than
