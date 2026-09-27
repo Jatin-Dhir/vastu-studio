@@ -26,6 +26,14 @@ function Pill({ sev, children }: { sev: Severity; children: ReactNode }) {
   return <span className={`report-pill report-pill-${sev}`}>{children}</span>
 }
 
+/** A gate's chart class as the report words it — one mapping for the page and the PDF. */
+function gateBadge(v: string | undefined): { badge: string; sev: Severity } {
+  if (v === 'good') return { badge: 'Auspicious', sev: 'good' }
+  if (v === 'caution') return { badge: 'Challenging', sev: 'warn' }
+  if (v === 'avoid') return { badge: 'Inauspicious', sev: 'bad' }
+  return { badge: 'Neutral', sev: 'info' }
+}
+
 function VerdictPill({ verdict }: { verdict: ItemAssessment['verdict'] }) {
   return <Pill sev={SEV_OF[verdict]}>{verdictWord(verdict)}</Pill>
 }
@@ -297,8 +305,8 @@ export function ReportView() {
         ].filter((x): x is string => !!x)
         return {
           title: m.label,
-          badge: q?.v === 'good' ? 'Auspicious' : q?.v === 'caution' ? 'Challenging' : 'Neutral',
-          badgeSev: q?.v === 'good' ? 'good' as const : q?.v === 'caution' ? 'warn' as const : 'info' as const,
+          badge: gateBadge(q?.v).badge,
+          badgeSev: gateBadge(q?.v).sev,
           lines,
         }
       }) : []
@@ -545,9 +553,7 @@ export function ReportView() {
                 <div key={m.id} className="report-entrance">
                   <div className="report-entrance-head">
                     <b>{m.label}</b>
-                    {q?.v === 'good' && <Pill sev="good">Auspicious</Pill>}
-                    {q?.v === 'caution' && <Pill sev="warn">Challenging</Pill>}
-                    {!q && <Pill sev="info">Neutral</Pill>}
+                    <Pill sev={gateBadge(q?.v).sev}>{gateBadge(q?.v).badge}</Pill>
                   </div>
                   pada <b>{pl.pada.code} · {pl.pada.devta}</b> in the {pl.zone.key} zone
                   ({pl.zone.name} — {pl.zone.theme}), {pl.bearing.toFixed(1)}° from the centre.

@@ -12,9 +12,14 @@ export const GOLD = '#D9B45B'
 const INKHALO = 'rgba(9,10,14,0.78)'
 /** Muted gold-brown — the design system's secondary-line ink (design language spec). */
 const MUTED = '#8C7642'
-/** Classical gate-quality verdict colours, reused from the app's own palette (ZONES16 E / SE). */
+/** Gate verdict colours, the same ladder as every other verdict in the app: auspicious green
+ *  (ZONES16 E), challenging amber, inauspicious red (ZONES16 SE). The charts' 'avoid' class
+ *  is most of the negative gates, so it takes the strongest colour. */
 const GATE_GOOD = '#63B56F'
-const GATE_CAUTION = '#E0684F'
+const GATE_CAUTION = '#D9A13B'
+const GATE_AVOID = '#E0684F'
+const gateColor = (v: string | undefined): string | null =>
+  v === 'good' ? GATE_GOOD : v === 'caution' ? GATE_CAUTION : v === 'avoid' ? GATE_AVOID : null
 
 /** Perceived luminance of a hex color (0 = black, 1 = white) — used to balance fill alpha
  *  across hues so light colours don't glow and dark ones don't sink at one flat opacity. */
@@ -467,7 +472,7 @@ function Gates32({ c, R, north, compass, k, vr, paper }: ChakraProps) {
         const a0 = north + GATE_START_DEG + i * 11.25
         // the app's best domain data, one lookup away — auspicious/challenging gates now visible
         const q = GATE_QUALITY[g.code]
-        const qColor = q?.v === 'good' ? GATE_GOOD : q?.v === 'caution' ? GATE_CAUTION : null
+        const qColor = gateColor(q?.v)
         return (
           <Fragment key={g.code}>
             {i % 2 === 0 && (
@@ -735,7 +740,7 @@ function MarkersLayer(props: {
               const rim = polar(center, north + pl.bearing, R)
               const padaA0 = north + GATE_START_DEG + pl.padaIdx * 11.25
               const q = GATE_QUALITY[pl.pada.code]
-              const qColor = q?.v === 'good' ? GATE_GOOD : q?.v === 'caution' ? GATE_CAUTION : '#F26B57'
+              const qColor = gateColor(q?.v) ?? '#F26B57'
               return (
                 <Fragment>
                   {/* the pada this entrance actually crosses, lit up — readable even with no wheel showing */}
