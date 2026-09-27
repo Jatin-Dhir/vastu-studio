@@ -177,7 +177,10 @@ export function assessItem(args: {
     }
   }
 
-  const cover = isArea ? zoneCoverage(poly!, center, northDeg) : [{ zoneIdx: placementOf(anchor, center, northDeg).zoneIdx, pct: 100 }]
+  // a degenerate area (zero width, all corners in a line) has no coverage to split — read it
+  // where it sits, like a pin, instead of calling it "outside the plot"
+  const areaCover = isArea ? zoneCoverage(poly!, center, northDeg) : []
+  const cover = areaCover.length ? areaCover : [{ zoneIdx: placementOf(anchor, center, northDeg).zoneIdx, pct: 100 }]
   const shares: ZoneShare[] = cover.map(({ zoneIdx, pct }) => {
     const z = ZONES16[zoneIdx]
     const v = kindVerdict(kind, z.key)

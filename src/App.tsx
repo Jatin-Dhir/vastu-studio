@@ -28,6 +28,7 @@ import { BroadcastBar } from './auth/BroadcastBar'
 import { initAuth, logEvent } from './auth/session'
 import { AUTH_ENABLED } from './auth/supabase'
 import { formatLen, formatScale } from './format'
+import { sampledPolygon, selfIntersects } from './geometry'
 import { syncNativeChrome } from './native'
 import type { ProjectFile } from './types'
 
@@ -343,6 +344,25 @@ export default function App() {
         window.clearTimeout(timer)
         timer = window.setTimeout(autosave, 900)
       }
+    })
+    return () => { unsub(); window.clearTimeout(timer) }
+  }, [])
+
+  /* an outline that crosses itself reads a wrong area, centre and zone chart — say so once,
+     after an edit settles (a vertex drag moves points every frame), and again only after
+     it has been untangled and crossed anew */
+  useEffect(() => {
+    let timer = 0
+    let wasCrossed = false
+    const unsub = useStore.subscribe((s, prev) => {
+      if (s.pts === prev.pts && s.bulges === prev.bulges && s.closed === prev.closed) return
+      window.clearTimeout(timer)
+      timer = window.setTimeout(() => {
+        const st = useStore.getState()
+        const crossed = st.closed && st.pts.length >= 4 && selfIntersects(sampledPolygon(st.pts, st.bulges, true))
+        if (crossed && !wasCrossed) st.toast('The outline crosses itself — its area, centre and zones will be wrong. Drag the corners so no two edges cross', 'warn')
+        wasCrossed = crossed
+      }, 700)
     })
     return () => { unsub(); window.clearTimeout(timer) }
   }, [])

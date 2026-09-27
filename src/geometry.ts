@@ -13,6 +13,25 @@ export function signedArea(pts: Pt[]): number {
 
 export const polygonArea = (pts: Pt[]) => Math.abs(signedArea(pts))
 
+/** True when a closed outline crosses itself (two non-adjacent edges properly intersect).
+ *  A bow-tie's signed areas cancel, so its area, centre and zone chart are all wrong —
+ *  the user needs telling rather than a silent "0 sq ft". Touching edges do not count. */
+export function selfIntersects(poly: Pt[]): boolean {
+  const n = poly.length
+  if (n < 4) return false
+  const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x)
+  const opposite = (u: number, v: number) => (u > 0 && v < 0) || (u < 0 && v > 0)
+  for (let i = 0; i < n; i++) {
+    const a = poly[i], b = poly[(i + 1) % n]
+    for (let j = i + 2; j < n; j++) {
+      if (i === 0 && j === n - 1) continue // the closing edge is adjacent to the first
+      const c = poly[j], d = poly[(j + 1) % n]
+      if (opposite(cross(c, d, a), cross(c, d, b)) && opposite(cross(a, b, c), cross(a, b, d))) return true
+    }
+  }
+  return false
+}
+
 export function perimeter(pts: Pt[], closed: boolean): number {
   let s = 0
   for (let i = 0; i < pts.length - 1; i++) s += dist(pts[i], pts[i + 1])
