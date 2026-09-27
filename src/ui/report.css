@@ -83,11 +83,11 @@
   border: 1px solid #E8E4D8;
 }
 .report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1E2430; }
-.report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #667080; }
-.report-stat-good .report-stat-num { color: #3E8E52; }
-.report-stat-warn .report-stat-num { color: #B07A1E; }
+.report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #5E6777; }
+.report-stat-good .report-stat-num { color: #2E7040; }
+.report-stat-warn .report-stat-num { color: #8A5A0E; }
 .report-stat-bad .report-stat-num { color: #B23A2E; }
-.report-stat-info .report-stat-num { color: #4A7C94; }
+.report-stat-info .report-stat-num { color: #3D6A80; }
 .report-verdict { margin: 6px 0 0; color: #444C5C; }
 
 /* small colour-coded verdict badges — reused for markers, gates and zone status */
@@ -105,10 +105,10 @@
 }
 /* good/warn text darkened from the tint hues so pills hold ~4.5:1 on the paper page
    (same contrast pass as index.css's #8A6E24 headings / #667080 labels) */
-.report-pill-good { background: rgba(62,142,82,0.14); color: #35794A; }
+.report-pill-good { background: rgba(62,142,82,0.14); color: #2E7040; }
 .report-pill-warn { background: rgba(176,122,30,0.14); color: #8F6318; }
 .report-pill-bad  { background: rgba(178,58,46,0.14); color: #B23A2E; }
-.report-pill-info { background: rgba(74,124,148,0.14); color: #4A7C94; }
+.report-pill-info { background: rgba(74,124,148,0.14); color: #3D6A80; }
 
 /* muted zone/pada context appended after a finding's own title+detail */
 .report-finding-ctx { color: #6A7280; }
@@ -241,7 +241,7 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
-.report-assess-h.good { color: #3E8E52; }
+.report-assess-h.good { color: #2E7040; }
 .report-assess-h.info { color: #5A6478; }
 .report-assess-list { display: flex; flex-direction: column; gap: 8px; }
 .report-assess-item {

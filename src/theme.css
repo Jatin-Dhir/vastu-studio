@@ -24,12 +24,15 @@
   --knob: #6E6C5D;
   --text: #26251E;
   --muted: #6E6C5D;
-  --dim: #75735F;
+  /* text roles measured on the paper panel (#FDFBF6) and page (#F3F1EA): every one holds
+     4.5:1 — dim 5.4, ok 5.8, warn 5.7, danger text 6.5. Same hues, lower lightness; the
+     old values read 3.3–4.6 (ok and warn badges near 3.2) */
+  --dim: #6A6856;
   --teal: #2E7E84;
   --danger: #C23B2E;
-  --danger-fg: #C23B2E;
-  --warn: #B07A1E;
-  --ok: #3E8E52;
+  --danger-fg: #A8301F;
+  --warn: #8A5A0E;
+  --ok: #2E7040;
   /* light ground needs whisper-weight elevation — heavy dark blur reads as grime on paper */
   --shadow: 0 2px 6px rgba(24, 22, 14, 0.08), 0 12px 30px rgba(24, 22, 14, 0.1);
   --shadow-up: 0 -6px 22px rgba(24, 22, 14, 0.12);
@@ -68,13 +71,13 @@
 
 /* accents — every mode gets its own gold-role triad, tuned for contrast on both grounds */
 :root[data-accent='gold'] { --gold: #D9B45B; --gold-2: #E8C56B; --gold-soft: rgba(217,180,91,0.14); }
-:root[data-theme='paper'][data-accent='gold'] { --gold: #A9782E; --gold-2: #8F631F; --gold-soft: rgba(169,120,46,0.14); --gold-ink: #FFFDF8; }
+:root[data-theme='paper'][data-accent='gold'] { --gold: #A9782E; --gold-2: #8F631F; --gold-soft: rgba(169,120,46,0.14); --gold-ink: #FFFDF8; --gold-text: #8F631F; --gold-solid: #9A6B25; }
 
 :root[data-accent='teal'] { --gold: #5FB8C9; --gold-2: #7ECBDA; --gold-soft: rgba(95,184,201,0.14); }
-:root[data-theme='paper'][data-accent='teal'] { --gold: #1F7A8C; --gold-2: #166370; --gold-soft: rgba(31,122,140,0.14); --gold-ink: #FFFDF8; }
+:root[data-theme='paper'][data-accent='teal'] { --gold: #1F7A8C; --gold-2: #166370; --gold-soft: rgba(31,122,140,0.14); --gold-ink: #FFFDF8; --gold-text: #166370; }
 
 :root[data-accent='rose'] { --gold: #D98BA0; --gold-2: #E8A3B5; --gold-soft: rgba(217,139,160,0.14); }
-:root[data-theme='paper'][data-accent='rose'] { --gold: #B0506B; --gold-2: #954059; --gold-soft: rgba(176,80,107,0.14); --gold-ink: #FFFDF8; }
+:root[data-theme='paper'][data-accent='rose'] { --gold: #B0506B; --gold-2: #954059; --gold-soft: rgba(176,80,107,0.14); --gold-ink: #FFFDF8; --gold-text: #954059; }
 
 :root[data-accent='sage'] { --gold: #93B587; --gold-2: #A9C89E; --gold-soft: rgba(147,181,135,0.14); }
-:root[data-theme='paper'][data-accent='sage'] { --gold: #5C7D50; --gold-2: #4C6942; --gold-soft: rgba(92,125,80,0.14); --gold-ink: #FFFDF8; }
+:root[data-theme='paper'][data-accent='sage'] { --gold: #5C7D50; --gold-2: #4C6942; --gold-soft: rgba(92,125,80,0.14); --gold-ink: #FFFDF8; --gold-text: #4C6942; }

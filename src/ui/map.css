@@ -102,7 +102,7 @@
   position: absolute; right: 8px; bottom: 6px;
   z-index: 400;
   background: rgba(11,12,16,0.6);
-  color: var(--dim);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 9.5px;
   padding: 2px 7px;
   border-radius: 6px;

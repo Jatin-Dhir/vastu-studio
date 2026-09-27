@@ -40,7 +40,8 @@
   transition: color 0.15s ease;
 }
 .m-tab.on { color: var(--gold-2); }
-.m-tab.dim:not(.on) { opacity: 0.55; }
+/* not available until a plan is open — quieter, but still readable (it was 2:1 at 55% opacity) */
+.m-tab.dim:not(.on) { color: var(--dim); }
 .m-tab:active { transform: translateY(1px); }
 
 /* headers */
@@ -258,4 +259,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .m-sheet-scrim, .m-sheet, .m-tab, .m-step, .m-seg button, .m-tilt { animation: none; transition: none; }
+}
+
+@media (forced-colors: active) {
+  .m-choice.on, .m-seg .on, .m-tab.on { outline: 2px solid Highlight; outline-offset: -2px; }
 }
