@@ -53,17 +53,17 @@ export async function planTexture(sheet: Sheet, px = 2048): Promise<HTMLCanvasEl
   const north = createElement('g', { transform: `translate(${ax} ${ay}) rotate(${NORTH_DEG})` },
     createElement('circle', { r: ar, fill: 'none', stroke: INK, strokeWidth: PAPER_W * 0.0016 }),
     createElement('path', { d: `M0 ${-ar * 1.35} L${ar * 0.42} ${ar * 0.55} L0 ${ar * 0.2} L${-ar * 0.42} ${ar * 0.55} Z`, fill: INK }),
-    createElement('text', { x: 0, y: -ar * 1.55, textAnchor: 'middle', fontFamily: 'Inter Variable, Inter, sans-serif', fontSize: ar * 0.62, fontWeight: 700, fill: INK }, 'N'),
+    createElement('text', { x: 0, y: -ar * 1.55, textAnchor: 'middle', fontFamily: "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fontSize: ar * 0.62, fontWeight: 700, fill: INK }, 'N'),
   )
   const tb = PAPER_W * 0.0125
   const tx = SHEET.x0 + PAPER_W * 0.045, ty = SHEET.y1 - PAPER_H * 0.062
-  const title = createElement('g', { fontFamily: 'Inter Variable, Inter, sans-serif', fill: INK },
+  const title = createElement('g', { fontFamily: "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif", fill: INK },
     createElement('text', { x: tx, y: ty, fontSize: tb * 1.15, fontWeight: 700, letterSpacing: tb * 0.06 }, 'SAMPLE RESIDENCE · GROUND FLOOR'),
     createElement('text', { x: tx, y: ty + tb * 1.55, fontSize: tb * 0.95, fontWeight: 500, opacity: 0.72 }, `Scale 1 : 100 · north ${NORTH_DEG}° from the sheet · 945 sq ft · drawn in Vastu Studio`),
   )
   const svg = renderToStaticMarkup(
     createElement('svg', { xmlns: 'http://www.w3.org/2000/svg', width: W, height: H, viewBox: `${SHEET.x0} ${SHEET.y0} ${PAPER_W} ${PAPER_H}` },
-      createElement('style', null, `@font-face{font-family:'Inter Variable';src:url(${interWoff2}) format('woff2-variations');font-weight:100 900;font-style:normal;}`),
+      createElement('style', null, `@font-face{font-family:'Inter Variable';src:url(${interWoff2});font-weight:100 900;font-style:normal;}`),
       createElement('rect', { x: SHEET.x0, y: SHEET.y0, width: PAPER_W, height: PAPER_H, fill: PAPER }),
       border, scene, north, title,
     ),
@@ -132,13 +132,13 @@ export async function zonesTexture(px = 2048): Promise<HTMLCanvasElement> {
     const a = polar(cx, cy, rOut, d), b = polar(cx, cy, rOut - len, d)
     ctx.strokeStyle = major ? inkA(0.9) : inkA(0.55); ctx.lineWidth = major ? px * 0.0018 : px * 0.001
     ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.stroke()
-    if (major && d !== 0) ringText(ctx, cx, cy, rOut - R * 0.075, d, String(d), `500 ${px * 0.019}px "Inter Variable", Inter, sans-serif`, inkA(0.9), false)
+    if (major && d !== 0) ringText(ctx, cx, cy, rOut - R * 0.075, d, String(d), `500 ${px * 0.019}px "Inter Variable", Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`, inkA(0.9), false)
   }
   for (let i = 0; i < 16; i++) {
     const z = ZONES16[i]
     const cardinal = i % 4 === 0
     ringText(ctx, cx, cy, rZone, i * 22.5, z.key, `${cardinal ? 700 : 600} ${px * (cardinal ? 0.044 : 0.029)}px "Cormorant Garamond", Georgia, serif`, cardinal ? BRASS : inkA(0.92))
-    ringText(ctx, cx, cy, rZone - R * 0.07, i * 22.5, z.theme.split(' · ')[0], `500 ${px * 0.0135}px "Inter Variable", Inter, sans-serif`, inkA(0.7))
+    ringText(ctx, cx, cy, rZone - R * 0.07, i * 22.5, z.theme.split(' · ')[0], `500 ${px * 0.0135}px "Inter Variable", Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`, inkA(0.7))
   }
   // the Brahmasthan
   ctx.setLineDash([px * 0.006, px * 0.005]); ctx.strokeStyle = inkA(0.7); ctx.lineWidth = px * 0.0014
@@ -167,7 +167,7 @@ export async function gatesTexture(px = 2048): Promise<HTMLCanvasElement> {
     ctx.fillStyle = fill; ctx.fill()
     ctx.strokeStyle = inkA(0.5); ctx.lineWidth = px * 0.0011; ctx.stroke()
     const mid = a0 + 5.625
-    ringText(ctx, cx, cy, rOut - R * 0.06, mid, g.code, `700 ${px * 0.017}px "Inter Variable", Inter, sans-serif`, inkA(0.92))
+    ringText(ctx, cx, cy, rOut - R * 0.06, mid, g.code, `700 ${px * 0.017}px "Inter Variable", Inter, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif`, inkA(0.92))
     ringText(ctx, cx, cy, rOut - R * 0.16, mid, g.devta, `600 ${px * 0.021}px "Cormorant Garamond", Georgia, serif`, inkA(0.9))
   }
   ctx.strokeStyle = inkA(0.72); ctx.lineWidth = px * 0.0018

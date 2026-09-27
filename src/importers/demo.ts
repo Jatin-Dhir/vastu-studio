@@ -70,16 +70,16 @@ export function generateDemoPlan(): { dataUrl: string; w: number; h: number; met
 
   // labels
   g.fillStyle = '#5C6A80'
-  g.font = '600 26px system-ui, sans-serif'
+  g.font = '600 26px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
   g.textAlign = 'center'
   g.fillText('DRAWING ROOM', 430, 450)
   g.fillText('KITCHEN', 835, 440)
   g.fillText('BED ROOM', 605, 880)
   g.fillText('BED ROOM', 1180, 560)
-  g.font = '600 22px system-ui, sans-serif'
+  g.font = '600 22px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
   g.fillText('BATH', 1095, 880)
   g.fillText('VERANDAH', 1268, 900)
-  g.font = '500 18px system-ui, sans-serif'
+  g.font = '500 18px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
   g.fillStyle = '#8A94A6'
   g.fillText('UP', 300, 970)
 
@@ -95,17 +95,17 @@ export function generateDemoPlan(): { dataUrl: string; w: number; h: number; met
   g.beginPath(); g.moveTo(0, -30); g.lineTo(11, 8); g.lineTo(0, 1); g.closePath(); g.fill()
   g.fillStyle = '#233247'
   g.beginPath(); g.moveTo(0, 30); g.lineTo(-11, -8); g.lineTo(0, -1); g.closePath(); g.fill()
-  g.font = '700 20px system-ui, sans-serif'
+  g.font = '700 20px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
   g.textAlign = 'center'
   g.fillText('N', 0, -46)
   g.restore()
 
   // title block
   g.fillStyle = '#233247'
-  g.font = '700 24px system-ui, sans-serif'
+  g.font = '700 24px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
   g.textAlign = 'left'
   g.fillText('RESIDENCE — GROUND FLOOR PLAN', 60, H - 66)
-  g.font = '500 17px system-ui, sans-serif'
+  g.font = '500 17px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
   g.fillStyle = '#7C8698'
   g.fillText('Plot 11.6 m × 8.6 m  ·  Scale 1 : 100  ·  Sample drawing', 60, H - 40)
 

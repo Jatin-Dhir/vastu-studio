@@ -9,7 +9,7 @@ import { useStore } from './store'
 import { downloadBlob } from './importers/project'
 import type { Pt } from './types'
 
-const FONT = "'Inter Variable', Inter, system-ui, sans-serif"
+const FONT = "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
 
 /** A nice round scale-bar length for the current unit, targeting a fraction of the image width. */
 function pickScaleBar(mpp: number, unit: 'ft' | 'm', maxWorldPx: number): { worldPx: number; label: string } | null {
@@ -157,7 +157,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
       'svg',
       { xmlns: 'http://www.w3.org/2000/svg', width: outW, height: outH, viewBox: `${minX} ${minY} ${w} ${h}` },
       createElement('style', null,
-        `@font-face{font-family:'Inter Variable';src:url(${interWoff2}) format('woff2-variations');font-weight:100 900;font-style:normal;}`),
+        `@font-face{font-family:'Inter Variable';src:url(${interWoff2});font-weight:100 900;font-style:normal;}`),
       createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#F3F1EA' }),
       scene,
       furniture,

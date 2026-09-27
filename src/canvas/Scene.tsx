@@ -5,8 +5,9 @@ import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon
 import { brahmasthanRadius, placementOf } from '../analysis'
 import { formatArea, formatLen } from '../format'
 import { GATES32, GATE_QUALITY, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
+import { at } from './svgText'
 
-export const FONT = "'Inter Variable', Inter, system-ui, sans-serif"
+export const FONT = "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
 export const GOLD = '#D9B45B'
 const INKHALO = 'rgba(9,10,14,0.78)'
 /** Muted gold-brown — the design system's secondary-line ink (design language spec). */
@@ -126,16 +127,17 @@ function TextsLayer({ texts, selected, k, vr }: { texts: TextNote[]; selected?: 
         const longest = Math.max(...lines.map((l) => l.length), 1)
         const boxW = longest * t.size * 0.6
         const boxH = lines.length * t.size * 1.25
+        const place = at(t.p.x, t.p.y, 0, t.size)
         return (
           <g key={t.id} transform={`rotate(${-vr} ${t.p.x} ${t.p.y})`}>
             {on && (
               <rect x={t.p.x - t.size * 0.3} y={t.p.y - t.size * 0.95} width={boxW + t.size * 0.6} height={boxH + t.size * 0.55}
                 fill="none" stroke={GOLD} strokeWidth={1.4 / k} strokeDasharray={`${6 / k} ${4 / k}`} rx={3 / k} opacity={0.95} />
             )}
-            <text x={t.p.x} y={t.p.y} fontSize={t.size} fontFamily={FONT} fontWeight={650}
+            <text {...place} fontSize={t.size} fontFamily={FONT} fontWeight={650}
               fill={t.color} {...haloProps(t.size * 0.22)}>
               {lines.map((l, i) => (
-                <tspan key={i} x={t.p.x} dy={i === 0 ? 0 : t.size * 1.25}>{l}</tspan>
+                <tspan key={i} x={place.x} dy={i === 0 ? 0 : t.size * 1.25}>{l}</tspan>
               ))}
             </text>
           </g>
@@ -166,12 +168,11 @@ export function RingLabel(props: {
   const rot = upright ? -vr : (flip ? deg + 180 : deg)
   return (
     <text
-      x={p.x} y={p.y}
+      {...at(p.x, p.y, rot, size)}
       textAnchor="middle" dominantBaseline="central"
       fontSize={size} fontWeight={weight} fontFamily={FONT}
       fill={fill} opacity={opacity}
       letterSpacing={spacing}
-      transform={`rotate(${rot} ${p.x} ${p.y})`}
       {...(halo > 0 ? haloProps(halo) : {})}
     >
       {text}
@@ -332,9 +333,9 @@ function Outline(props: {
         const off = wallW / 2 + 9 / k
         const p = { x: mid.x + nx * off, y: mid.y + ny * off }
         return (
-          <text key={i} x={p.x} y={p.y} fontSize={11.5 / k} fontWeight={600} fontFamily={FONT}
+          <text key={i} {...at(p.x, p.y, rot, 11.5 / k)} fontSize={11.5 / k} fontWeight={600} fontFamily={FONT}
             fill="#F3E9CF" textAnchor="middle" dominantBaseline="central"
-            transform={`rotate(${rot} ${p.x} ${p.y})`} {...haloProps(3 / k)}>
+            {...haloProps(3 / k)}>
             {formatLen(L * metersPerPx, unit)}
           </text>
         )
@@ -573,10 +574,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
         if (size * k < 5.5) continue
         const tx = x + cw / 2, ty = y + ch / 2
         cells.push(
-          <text key={`n${row}-${col}`} x={tx} y={ty}
+          <text key={`n${row}-${col}`} {...at(tx, ty, upr, size)}
             fontSize={size} fontFamily={FONT} fontWeight={600} fill="#EDE4CC"
             textAnchor="middle" dominantBaseline="central" opacity={0.92}
-            transform={`rotate(${upr} ${tx} ${ty})`}
             {...haloProps(size * 0.22)}>
             {name}
           </text>,
@@ -591,10 +591,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
       : Math.min(Math.min(cw, ch) * 0.26, (cw * 1.9) / (text.length * 0.56))
     const tx = minX + colC * cw, ty = minY + rowC * ch
     return (
-      <text x={tx} y={ty} fontSize={size} fontFamily={FONT}
+      <text {...at(tx, ty, upr, size)} fontSize={size} fontFamily={FONT}
         fontWeight={big ? 700 : 600} fill={big ? GOLD : '#C9BE9D'}
         textAnchor="middle" dominantBaseline="central" opacity={big ? 0.95 : 0.8}
-        transform={`rotate(${upr} ${tx} ${ty})`}
         {...haloProps(size * 0.2)}>
         {text}
       </text>
@@ -639,9 +638,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
       <path d={needleD} fill="#F26B57" stroke={INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
       <path d={needleD} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
       {compass.labels && (
-        <text x={nx} y={minY - ch * 0.35} fontSize={Math.min(cw, ch) * 0.42}
+        <text {...at(nx, minY - ch * 0.35, upr, Math.min(cw, ch) * 0.42)} fontSize={Math.min(cw, ch) * 0.42}
           fontFamily={FONT} fontWeight={800} fill="#F26B57" textAnchor="middle"
-          dominantBaseline="central" transform={`rotate(${upr} ${nx} ${minY - ch * 0.35})`}
+          dominantBaseline="central"
           {...haloProps(Math.min(cw, ch) * 0.09)}>
           N
         </text>
@@ -706,9 +705,9 @@ function RoomShapesLayer({ shapes, selected, k, vr }: {
               fill: 'none', stroke: meta.color, strokeWidth: (on ? 2.6 : 1.8) / k,
               strokeDasharray: on ? undefined : `${9 / k} ${5 / k}`, opacity: 0.95,
             })}
-            <text x={cx} y={cy} fontSize={10.5 / k} fontFamily={FONT} fontWeight={700}
+            <text {...at(cx, cy, -vr, 10.5 / k)} fontSize={10.5 / k} fontFamily={FONT} fontWeight={700}
               fill="#F5EFDD" textAnchor="middle" dominantBaseline="central"
-              transform={`rotate(${-vr} ${cx} ${cy})`} {...haloProps(3 / k)}>
+              {...haloProps(3 / k)}>
               {r.label}
             </text>
           </g>
@@ -761,14 +760,12 @@ function MarkersLayer(props: {
             )}
             <circle cx={m.p.x} cy={m.p.y} r={10 / k} fill={INKHALO} opacity={0.75} />
             <circle cx={m.p.x} cy={m.p.y} r={8 / k} fill={meta.color} stroke="#FFFDF4" strokeWidth={1.4 / k} />
-            <text x={m.p.x} y={m.p.y + 0.5 / k} fontSize={9 / k} fontFamily={FONT} fontWeight={800}
-              fill="#14151A" textAnchor="middle" dominantBaseline="central"
-              transform={`rotate(${-vr} ${m.p.x} ${m.p.y})`}>
+            <text {...at(m.p.x, m.p.y + 0.5 / k, -vr, 9 / k, m.p.x, m.p.y)} fontSize={9 / k} fontFamily={FONT} fontWeight={800}
+              fill="#14151A" textAnchor="middle" dominantBaseline="central">
               {meta.glyph}
             </text>
-            <text x={m.p.x} y={m.p.y + 20 / k} fontSize={9.5 / k} fontFamily={FONT} fontWeight={650}
+            <text {...at(m.p.x, m.p.y + 20 / k, -vr, 9.5 / k)} fontSize={9.5 / k} fontFamily={FONT} fontWeight={650}
               fill="#F0EBDD" textAnchor="middle"
-              transform={`rotate(${-vr} ${m.p.x} ${m.p.y + 20 / k})`}
               {...haloProps(2.8 / k)}>
               {m.label}
             </text>
@@ -800,9 +797,8 @@ function CenterMarker(props: {
             fill="none" stroke={INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
           <circle cx={c.x} cy={c.y} r={brahmaR}
             fill="none" stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
-          <text x={c.x} y={c.y - brahmaR - 9 / k} fontSize={10.5 / k} fontFamily={FONT}
+          <text {...at(c.x, c.y - brahmaR - 9 / k, -vr, 10.5 / k)} fontSize={10.5 / k} fontFamily={FONT}
             fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
-            transform={`rotate(${-vr} ${c.x} ${c.y - brahmaR - 9 / k})`}
             {...haloProps(2.8 / k)}>
             Brahmasthan
           </text>
@@ -819,15 +815,15 @@ function CenterMarker(props: {
       <circle cx={c.x} cy={c.y} r={4.2 / k} fill={overridden ? '#F2A65A' : GOLD}
         stroke="#FFFDF4" strokeWidth={1.4 / k} />
       {overridden && (
-        <text x={c.x} y={c.y + 16 / k} fontSize={9.5 / k} fontFamily={FONT} fontWeight={700}
-          fill="#F2A65A" textAnchor="middle" transform={`rotate(${-vr} ${c.x} ${c.y + 16 / k})`}
+        <text {...at(c.x, c.y + 16 / k, -vr, 9.5 / k)} fontSize={9.5 / k} fontFamily={FONT} fontWeight={700}
+          fill="#F2A65A" textAnchor="middle"
           {...haloProps(2.6 / k)}>
           centre pinned
         </text>
       )}
       {areaText && (
-        <text x={c.x} y={c.y + 30 / k} fontSize={12.5 / k} fontFamily={FONT} fontWeight={700}
-          fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-vr} ${c.x} ${c.y + 30 / k})`}
+        <text {...at(c.x, c.y + 30 / k, -vr, 12.5 / k)} fontSize={12.5 / k} fontFamily={FONT} fontWeight={700}
+          fill="#F3E9CF" textAnchor="middle"
           {...haloProps(3.4 / k)}>
           {areaText}
         </text>

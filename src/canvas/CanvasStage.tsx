@@ -7,6 +7,7 @@ import { formatLen } from '../format'
 import { haptic } from '../native'
 import { analysisAllowed } from '../auth/gate'
 import { setGestureBusy } from './gesture'
+import { at } from './svgText'
 import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
 
@@ -695,11 +696,12 @@ export function CanvasStage() {
           const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2 - 12 / k2
           const px = dist(a, b)
           lbl.textContent = s.metersPerPx ? formatLen(px * s.metersPerPx, s.unit) : `${Math.round(px)} u`
-          lbl.setAttribute('x', String(mx))
-          lbl.setAttribute('y', String(my))
+          const place = at(mx, my, -viewRef.current.rot, 11.5 / k2)
+          lbl.setAttribute('x', String(place.x))
+          lbl.setAttribute('y', String(place.y))
           lbl.setAttribute('font-size', String(11.5 / k2))
           lbl.setAttribute('stroke-width', String(3 / k2))
-          lbl.setAttribute('transform', `rotate(${-viewRef.current.rot} ${mx} ${my})`)
+          lbl.setAttribute('transform', place.transform)
         } else lbl.textContent = ''
       }
       return
@@ -1109,8 +1111,8 @@ export function CanvasStage() {
                 <rect x={x} y={y} width={w2} height={h2}
                   fill="none" stroke={s0.lineColor} strokeWidth={wpx} opacity={0.9} />
               )}
-              <text x={mid.x} y={y - 10 / k} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
-                fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${mid.x} ${y - 10 / k})`}
+              <text {...at(mid.x, y - 10 / k, -rot, 11.5 / k)} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                fill="#F3E9CF" textAnchor="middle"
                 stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                 {metersPerPx
                   ? `${formatLen(w2 * metersPerPx, unit)} × ${formatLen(h2 * metersPerPx, unit)}`
@@ -1210,8 +1212,8 @@ export function CanvasStage() {
                   fill={color} fillOpacity={0.16} stroke={color} strokeWidth={2 / k} strokeDasharray={`${7 / k} ${5 / k}`} />
               )}
               {metersPerPx && (
-                <text x={mid.x} y={y - 10 / k} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
-                  fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${mid.x} ${y - 10 / k})`}
+                <text {...at(mid.x, y - 10 / k, -rot, 11.5 / k)} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                  fill="#F3E9CF" textAnchor="middle"
                   stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                   {formatLen(w * metersPerPx, unit)} × {formatLen(h * metersPerPx, unit)}
                 </text>
@@ -1226,9 +1228,8 @@ export function CanvasStage() {
             <line x1={pts[pts.length - 1].x} y1={pts[pts.length - 1].y} x2={liveTo.x} y2={liveTo.y}
               stroke={GOLD} strokeWidth={1.8 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
             {metersPerPx && (
-              <text x={liveTo.x + 14 / k} y={liveTo.y - 12 / k} fontSize={11.5 / k}
+              <text {...at(liveTo.x + 14 / k, liveTo.y - 12 / k, -rot, 11.5 / k, liveTo.x, liveTo.y)} fontSize={11.5 / k}
                 fontFamily={FONT} fontWeight={600} fill="#F3E9CF"
-                transform={`rotate(${-rot} ${liveTo.x} ${liveTo.y})`}
                 stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                 {formatLen(dist(pts[pts.length - 1], liveTo) * metersPerPx, unit)}
               </text>
@@ -1240,10 +1241,9 @@ export function CanvasStage() {
         {dragIdx && metersPerPx && (() => {
           const n = pts.length
           if (n < 2) return null
-          const DragLabel = ({ at, text }: { at: Pt; text: string }) => (
-            <text x={at.x} y={at.y} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
+          const DragLabel = ({ at: pos, text }: { at: Pt; text: string }) => (
+            <text {...at(pos.x, pos.y, -rot, 12 / k)} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
               textAnchor="middle" fill="#F3E9CF"
-              transform={`rotate(${-rot} ${at.x} ${at.y})`}
               stroke="rgba(9,10,14,0.78)" strokeWidth={3.2 / k} paintOrder="stroke">
               {text}
             </text>
@@ -1309,9 +1309,8 @@ export function CanvasStage() {
                   {!calB && cursor && (
                     <circle cx={b.x} cy={b.y} r={4 / k} fill="none" stroke="#6FC7CE" strokeWidth={1.2 / k} opacity={0.7} />
                   )}
-                  <text x={mid.x} y={mid.y - 14 / k} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
+                  <text {...at(mid.x, mid.y - 14 / k, -rot, 12 / k, mid.x, mid.y)} fontSize={12 / k} fontFamily={FONT} fontWeight={700}
                     fill="#BFEDF2" textAnchor="middle"
-                    transform={`rotate(${-rot} ${mid.x} ${mid.y})`}
                     stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                     {metersPerPx ? formatLen(L * metersPerPx, unit) : `${L.toFixed(0)} px`}
                   </text>
@@ -1335,8 +1334,8 @@ export function CanvasStage() {
                 <path d={`M${tip.x} ${tip.y} L${lWing.x} ${lWing.y} M${tip.x} ${tip.y} L${rWing.x} ${rWing.y}`}
                   stroke="#F26B57" strokeWidth={2.4 / k} fill="none" strokeLinecap="round" />
                 <circle cx={northA.x} cy={northA.y} r={4 / k} fill="#F26B57" stroke="#FFF" strokeWidth={1.2 / k} />
-                <text x={tip.x + 16 / k} y={tip.y - 10 / k} fontSize={12 / k} fontWeight={700}
-                  fill="#FFD9D2" transform={`rotate(${-rot} ${tip.x} ${tip.y})`}
+                <text {...at(tip.x + 16 / k, tip.y - 10 / k, -rot, 12 / k, tip.x, tip.y)} fontSize={12 / k} fontWeight={700}
+                  fill="#FFD9D2"
                   stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke">
                   {deg.toFixed(1)}°
                 </text>
@@ -1446,8 +1445,8 @@ export function CanvasStage() {
                 </g>
               ))}
               {shapeDrag && r.shape !== 'polygon' && (
-                <text x={lx} y={ly} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
-                  fill="#F3E9CF" textAnchor="middle" transform={`rotate(${-rot} ${lx} ${ly})`}
+                <text {...at(lx, ly, -rot, 11.5 / k)} fontSize={11.5 / k} fontFamily={FONT} fontWeight={700}
+                  fill="#F3E9CF" textAnchor="middle"
                   stroke="rgba(9,10,14,0.78)" strokeWidth={3 / k} paintOrder="stroke" pointerEvents="none">
                   {metersPerPx
                     ? `${formatLen(w * metersPerPx, unit)} × ${formatLen(h * metersPerPx, unit)}`

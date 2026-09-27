@@ -439,7 +439,7 @@ export function MapModal() {
       if (okCount === 0) throw new Error('Tiles could not be fetched — check the connection, or screenshot the map and paste it instead')
 
       // attribution baked into the capture
-      ctx.font = '600 13px system-ui, sans-serif'
+      ctx.font = '600 13px "Inter Variable", "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
       const credit = cfg.credit
       const tw = ctx.measureText(credit).width
       ctx.fillStyle = 'rgba(0,0,0,0.55)'
