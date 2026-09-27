@@ -37,15 +37,19 @@ if (import.meta.env.PROD && typeof navigator !== 'undefined' && 'serviceWorker' 
 }
 
 let currentDoc: PDFDocumentProxy | null = null
+let currentKey: string | null = null
 
-export async function openPdf(data: ArrayBuffer): Promise<number> {
-  if (currentDoc) { void currentDoc.destroy().catch(() => {}); currentDoc = null }
+export async function openPdf(data: ArrayBuffer, key: string): Promise<number> {
+  if (currentDoc) { void currentDoc.destroy().catch(() => {}); currentDoc = null; currentKey = null }
   currentDoc = await pdfjs.getDocument({ data }).promise
+  currentKey = key
   return currentDoc.numPages
 }
 
-export function hasPdfOpen(): boolean {
-  return currentDoc !== null
+/** True only when the PDF identified by `key` is the one loaded — a plan opened from another
+ *  tab or the library must never have its page swapped for another document's page. */
+export function hasPdfOpen(key: string | undefined): boolean {
+  return currentDoc !== null && !!key && key === currentKey
 }
 
 export async function renderPdfPage(pageNum: number): Promise<{ dataUrl: string; w: number; h: number; pxPerPt: number }> {

@@ -44,11 +44,12 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
     if (ext === 'pdf' || file.type === 'application/pdf') {
       s.setBusy('Rendering PDF…')
       const data = await file.arrayBuffer()
-      const pages = await openPdf(data)
+      const pdfKey = `${name}|${file.size}|${(file as File).lastModified ?? 0}`
+      const pages = await openPdf(data, pdfKey)
       const { dataUrl, w, h, pxPerPt } = await renderPdfPage(1) // decoded successfully — safe to replace now
       prepareForNewContent()
       s.replaceBg(
-        { kind: 'raster', name, dataUrl, w, h, ...freshBgDefaults(), pdfPages: pages, pdfPage: 1 },
+        { kind: 'raster', name, dataUrl, w, h, ...freshBgDefaults(), pdfPages: pages, pdfPage: 1, pdfKey },
         null, null,
       )
       requestFit()
@@ -137,12 +138,32 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
     if (['heic', 'heif'].includes(ext) || /hei[cf]/.test(file.type)) {
       s.toast('This looks like an iPhone HEIC photo, which this device cannot decode — share or export it as JPEG and import that', 'warn')
     } else {
-      s.toast(err instanceof Error ? err.message : 'Import failed', 'warn')
+      s.toast(friendlyImportError(err, ext), 'warn')
     }
     return false
   } finally {
     useStore.getState().setBusy(null)
   }
+}
+
+/** Library errors in the user's words — "No password given" or "EOF group not read" tells a
+ *  practitioner nothing about what to do next. Our own messages pass through unchanged. */
+function friendlyImportError(err: unknown, ext: string): string {
+  const name = err instanceof Error ? err.name : ''
+  const msg = err instanceof Error ? err.message : String(err ?? '')
+  if (name === 'PasswordException' || /password/i.test(msg)) {
+    return 'This PDF is password-protected — open it, print it to a new PDF without a password, and import that'
+  }
+  if (name === 'InvalidPDFException' || /invalid pdf|pdf structure/i.test(msg)) {
+    return 'This PDF looks damaged or incomplete — re-export it from the original drawing and try again'
+  }
+  if (ext === 'dxf' && /EOF|unexpected end|verticies|vertices|group|parse|undefined|null/i.test(msg)) {
+    return 'This DXF looks incomplete or uses a format we cannot read — re-save it from your CAD program (DXF 2013 or older reads best) and try again'
+  }
+  if (/decode image|could not read file/i.test(msg)) {
+    return 'This image could not be read — try saving it as PNG or JPG'
+  }
+  return msg || 'Import failed — try the file again, or export it as PDF, PNG or DXF'
 }
 
 /** After a plan lands: guide the user to the right next step. */

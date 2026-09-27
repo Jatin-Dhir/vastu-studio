@@ -77,6 +77,9 @@ export interface BgState {
   invert: boolean
   pdfPages?: number
   pdfPage?: number
+  /** which PDF the pages came from (name, size, date) — the page switcher only works while
+   *  that same document is the one open in pdf.js, never another tab's */
+  pdfKey?: string
 }
 
 export interface CompassState {

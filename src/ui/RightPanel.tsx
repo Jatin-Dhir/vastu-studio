@@ -374,7 +374,7 @@ export function RightPanel() {
   }, [sampled, pts.length, closed, metersPerPx])
 
   const setPdfPage = async (delta: number) => {
-    if (!bg.pdfPages || !hasPdfOpen() || pageBusy) return
+    if (!bg.pdfPages || !hasPdfOpen(bg.pdfKey) || pageBusy) return
     const next = Math.min(bg.pdfPages, Math.max(1, (bg.pdfPage ?? 1) + delta))
     if (next === bg.pdfPage) return
     setPageBusy(true)
@@ -546,12 +546,12 @@ export function RightPanel() {
             {bg.pdfPages && bg.pdfPages > 1 && (
               <div className="row-between pdf-pager">
                 <span className="lbl">PDF page</span>
-                {hasPdfOpen() ? (
+                {hasPdfOpen(bg.pdfKey) ? (
                   <span className="pager">
-                    <button className="icon-btn" disabled={pageBusy || (bg.pdfPage ?? 1) <= 1}
+                    <button className="icon-btn" disabled={pageBusy || (bg.pdfPage ?? 1) <= 1} aria-label="Previous page"
                       onClick={() => void setPdfPage(-1)}><ChevronLeft size={14} /></button>
                     <b>{bg.pdfPage} / {bg.pdfPages}</b>
-                    <button className="icon-btn" disabled={pageBusy || (bg.pdfPage ?? 1) >= bg.pdfPages}
+                    <button className="icon-btn" disabled={pageBusy || (bg.pdfPage ?? 1) >= bg.pdfPages} aria-label="Next page"
                       onClick={() => void setPdfPage(1)}><ChevronRight size={14} /></button>
                   </span>
                 ) : (
