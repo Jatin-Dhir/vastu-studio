@@ -220,13 +220,26 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
 .btn-ghost.danger:hover:not(:disabled) { background: rgba(226,87,76,0.12); }
 .btn-ghost.wide { width: 100%; }
 
-/* mid-width desktop: the full bar needs ~1115px — shed step labels first, then
-   swap the utility cluster for the More sheet the phone layout already uses */
-@media (min-width: 761px) and (max-width: 1150px) {
+/* mid-width desktop: the full bar needs ~1200px with a mouse and ~1340px with
+   touch-sized controls — shed step labels first, then swap the utility cluster for
+   the More sheet the phone layout already uses. Nothing in the bar may wrap: a
+   two-line wordmark or button reads as broken, so squeezing is never the fallback. */
+.brand { flex-shrink: 0; }
+.brand-name, .topbar button { white-space: nowrap; }
+@media (min-width: 761px) and (max-width: 1220px) {
+  .step-label { display: none; }
+  .topbar { gap: 10px; }
+}
+@media (pointer: coarse) and (min-width: 761px) and (max-width: 1340px) {
   .step-label { display: none; }
   .topbar { gap: 10px; }
 }
 @media (min-width: 761px) and (max-width: 1010px) {
+  .btn-primary .hide-mobile { display: none; }
+  .topbar .icon-btn.hide-mobile, .topbar .seg.hide-mobile, .topbar .vsep.hide-mobile { display: none; }
+  .topbar .show-mobile { display: grid !important; }
+}
+@media (pointer: coarse) and (min-width: 761px) and (max-width: 1100px) {
   .btn-primary .hide-mobile { display: none; }
   .topbar .icon-btn.hide-mobile, .topbar .seg.hide-mobile, .topbar .vsep.hide-mobile { display: none; }
   .topbar .show-mobile { display: grid !important; }
@@ -2157,9 +2170,23 @@ kbd {
   }
 }
 
-/* short viewports (landscape phones, half-height desktop windows): the vertical
-   rail is ~529px tall and .stage-wrap clips with no scroll fallback */
-@media (max-height: 640px) {
+/* the rail keeps clear of the rotate chip above it and the status chip below it
+   (both at left 14px); when the stage is shorter than the rail it scrolls instead of
+   sliding under them — tablets' labelled 48px buttons made it ~635px tall */
+@media (min-width: 761px) {
+  .tool-rail { max-height: calc(100% - 108px); overflow-y: auto; scrollbar-width: none; }
+  .tool-rail::-webkit-scrollbar { display: none; }
+}
+@media (pointer: coarse) and (min-width: 761px) and (max-height: 820px) {
+  .rail-btn { height: 44px; }
+}
+/* short desktop windows: tighten the rail before it has to scroll */
+@media (pointer: fine) and (min-width: 761px) and (max-height: 700px) {
+  .tool-rail { gap: 2px; }
+  .rail-btn { width: 34px; height: 34px; }
+}
+/* short viewports (landscape phones): the dock rules above take over below 761px */
+@media (max-width: 760px) and (max-height: 640px) {
   .tool-rail { max-height: calc(100% - 16px); overflow-y: auto; scrollbar-width: none; }
   .tool-rail::-webkit-scrollbar { display: none; }
 }
