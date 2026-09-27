@@ -67,6 +67,27 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     maxX = Math.max(maxX, center.x + R * 1.08)
     maxY = Math.max(maxY, center.y + R * 1.08)
   }
+  // the pada grid is the plot's north-aligned bounding square turned by north, with its needle
+  // and N above the top edge — its corners reach past the plot whenever north is not 0/90°
+  if (center && s.closed && s.compass.id === 'grid9' && sampled.length >= 3) {
+    const rad = (-s.northDeg * Math.PI) / 180
+    const cos = Math.cos(rad), sin = Math.sin(rad)
+    let gx0 = Infinity, gy0 = Infinity, gx1 = -Infinity, gy1 = -Infinity
+    for (const p of sampled) {
+      const x = center.x + (p.x - center.x) * cos - (p.y - center.y) * sin
+      const y = center.y + (p.x - center.x) * sin + (p.y - center.y) * cos
+      gx0 = Math.min(gx0, x); gx1 = Math.max(gx1, x); gy0 = Math.min(gy0, y); gy1 = Math.max(gy1, y)
+    }
+    const ch = (gy1 - gy0) / 9
+    const back = (x: number, y: number) => ({
+      x: center.x + (x - center.x) * cos + (y - center.y) * sin,
+      y: center.y - (x - center.x) * sin + (y - center.y) * cos,
+    })
+    for (const q of [back(gx0, gy0 - ch * 0.9), back(gx1, gy0 - ch * 0.9), back(gx0, gy1), back(gx1, gy1)]) {
+      minX = Math.min(minX, q.x); minY = Math.min(minY, q.y)
+      maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y)
+    }
+  }
   const pad = (maxX - minX) * 0.02 + 24
   minX -= pad; minY -= pad; maxX += pad; maxY += pad
 

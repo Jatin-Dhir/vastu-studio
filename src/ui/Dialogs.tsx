@@ -80,6 +80,8 @@ export function CalibrateDialog() {
     const v = parseFloat(value.replace(',', '.'))
     const s = useStore.getState()
     if (!isFinite(v) || v <= 0) { s.toast('Enter the real length of the drawn line', 'warn'); return }
+    // two pins dragged onto each other measure nothing — a scale from them would be infinite
+    if (px < 4) { s.toast('The two pins are on top of each other — redraw the line along something you can measure', 'warn'); return }
     const toM = CAL_UNITS.find((u) => u.id === calUnit)?.toM ?? 1
     const metersPerPx = (v * toM) / px
     haptic('success')

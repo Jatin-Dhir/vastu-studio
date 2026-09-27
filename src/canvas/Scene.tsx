@@ -21,6 +21,13 @@ const GATE_AVOID = '#E0684F'
 const gateColor = (v: string | undefined): string | null =>
   v === 'good' ? GATE_GOOD : v === 'caution' ? GATE_CAUTION : v === 'avoid' ? GATE_AVOID : null
 
+/** Distance from c to the outline point farthest from it. */
+function farthestFrom(c: Pt, pts: Pt[]): number {
+  let m = 0
+  for (const p of pts) m = Math.max(m, Math.hypot(p.x - c.x, p.y - c.y))
+  return m
+}
+
 /** Perceived luminance of a hex color (0 = black, 1 = white) — used to balance fill alpha
  *  across hues so light colours don't glow and dark ones don't sink at one flat opacity. */
 function relLuminance(hex: string): number {
@@ -401,9 +408,10 @@ function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; no
 function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: ChakraProps) {
   const clip = compass.clip && closed && pts.length >= 3
   const clipId = `${idPrefix}-plotclip`
-  // clipped fills must reach the plot regardless of the Size slider — use the unscaled
-  // radius, not the scaled ring radius, or shrinking the wheel leaves plot corners un-tinted
-  const fillR = clip ? baseR * 1.7 : R
+  // clipped fills must reach every corner of the plot regardless of the Size slider — the
+  // farthest outline point, not a multiple of the wheel radius (a 1:5 plot's ends sit ~2.4R
+  // out and stayed un-tinted at 1.7R)
+  const fillR = clip ? Math.max(baseR * 1.7, farthestFrom(c, pts) * 1.02) : R
   const fills = compass.fillPct > 0 && (
     <g clipPath={clip ? `url(#${clipId})` : undefined}>
       {ZONES16.map((z, i) => {
@@ -884,7 +892,7 @@ export function Scene(props: SceneProps) {
         const z = ZONES16[props.highlightZone]
         if (!z) return null
         const a0 = northDeg - 11.25 + props.highlightZone * 22.5
-        const d = wedgePath(center, R * 1.6, a0, a0 + 22.5)
+        const d = wedgePath(center, Math.max(R * 1.6, farthestFrom(center, sampled) * 1.02), a0, a0 + 22.5)
         return (
           <g clipPath={`url(#${idPrefix}-plotclip)`}>
             <path d={d} fill={z.color} fillOpacity={0.42} />
