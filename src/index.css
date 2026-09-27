@@ -1711,6 +1711,9 @@ kbd {
 /* projects modal */
 .proj-toolbar { display: flex; gap: 7px; margin-bottom: 12px; flex-wrap: wrap; }
 .proj-list { display: flex; flex-direction: column; gap: 4px; max-height: 46vh; overflow-y: auto; }
+.proj-foot { display: flex; align-items: center; gap: 14px; margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--stroke); }
+.proj-foot .zone-note { margin: 0; flex: 1; text-wrap: pretty; }
+.proj-foot .btn-ghost { flex: none; }
 .proj-empty { padding: 14px 4px; }
 .proj-row {
   display: flex; align-items: center; gap: 4px;

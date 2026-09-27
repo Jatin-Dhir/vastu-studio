@@ -39,10 +39,13 @@ const ptList = (v: unknown) => (Array.isArray(v) ? v.filter(isPt) : [])
  *  renderer would fetch (tracking) or that would taint the export canvas. */
 const isDataImage = (v: unknown) => typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v)
 
+/** JSON.parse, with the message a damaged .vastu file deserves. */
+export function readVastuJson(text: string): unknown {
+  try { return JSON.parse(text) } catch { throw new Error('This .vastu file is damaged or incomplete — re-export it and try again') }
+}
+
 export function parseProject(text: string): ProjectFile {
-  let p: any
-  try { p = JSON.parse(text) } catch { throw new Error('This .vastu file is damaged or incomplete — re-export it and try again') }
-  return sanitizeProject(p)
+  return sanitizeProject(readVastuJson(text))
 }
 
 const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Camera, Copy, FileUp, Map as MapIcon, MoreHorizontal, Pencil, PenLine, Plus, Sparkles, Trash2 } from 'lucide-react'
+import { Archive, Camera, Copy, FileUp, Map as MapIcon, MoreHorizontal, Pencil, PenLine, Plus, Sparkles, Trash2 } from 'lucide-react'
 import { useStore } from '../store'
 import { deleteProjectRecord, getProject, listProjects, newProjectId, putProject } from '../db'
 import { activateProject, switchToProject } from '../importers/project'
@@ -8,6 +8,7 @@ import { ActionSheet } from '../ui/ActionSheet'
 import { Dialog } from '../ui/Dialogs'
 import { requestFit } from '../canvas/fit'
 import { haptic } from '../native'
+import { backupLibrary, LIBRARY_CHANGED } from '../library'
 
 interface Row { id: string; name: string; updatedAt: number }
 
@@ -36,6 +37,21 @@ export function PlansScreen() {
 
   const refresh = () => { void listProjects().then(setRows).catch(() => setRows([])) }
   useEffect(refresh, [currentId])
+  useEffect(() => {
+    window.addEventListener(LIBRARY_CHANGED, refresh)
+    return () => window.removeEventListener(LIBRARY_CHANGED, refresh)
+  }, [])
+  const [backingUp, setBackingUp] = useState(false)
+  const backup = async () => {
+    haptic('light')
+    setBackingUp(true)
+    try {
+      const n = await backupLibrary()
+      if (!n) useStore.getState().toast('Nothing to back up yet', 'info')
+    } catch {
+      useStore.getState().toast('The plans could not be read for a backup', 'warn')
+    } finally { setBackingUp(false) }
+  }
 
   const open = async (id: string) => {
     haptic('light')
@@ -106,6 +122,15 @@ export function PlansScreen() {
             </li>
           ))}
         </ul>
+      )}
+
+      {rows.length > 0 && (
+        <section className="m-backup">
+          <button className="btn-ghost m-btn" disabled={backingUp} onClick={() => void backup()}>
+            <Archive size={16} /> {backingUp ? 'Preparing the backup…' : 'Back up all plans'}
+          </button>
+          <p>One file with every plan. Open it in the laptop app or on another phone to bring them all back.</p>
+        </section>
       )}
 
       <ActionSheet open={newOpen} title="New plan" onClose={() => setNewOpen(false)} rows={[

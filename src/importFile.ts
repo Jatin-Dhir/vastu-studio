@@ -3,7 +3,9 @@ import { newProjectId } from './db'
 import { importRaster } from './importers/raster'
 import { isNative } from './native'
 import { generateDemoPlan } from './importers/demo'
-import { parseProject, prepareForNewContent } from './importers/project'
+import { prepareForNewContent, readVastuJson, sanitizeProject } from './importers/project'
+import { isLibraryFile, restoreLibrary, restoreSummary } from './library'
+import { isPhone } from './mobile/phone'
 import { requestFit } from './canvas/fit'
 import { formatLen, formatScale } from './format'
 
@@ -40,7 +42,17 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
     }
     if (isProject) {
       const text = await (file as File).text()
-      const p = parseProject(text) // throws on a damaged/foreign file — nothing on screen touched yet
+      const raw = readVastuJson(text) // throws on a damaged file — nothing on screen touched yet
+      if (isLibraryFile(raw)) {
+        if (!raw.projects.length) { s.toast('This backup has no projects in it', 'warn'); return false }
+        s.setBusy(`Restoring ${raw.projects.length} ${raw.projects.length === 1 ? 'project' : 'projects'}…`)
+        const r = await restoreLibrary(raw)
+        s.toast(restoreSummary(r), r.added ? 'ok' : r.failed ? 'warn' : 'info')
+        // a backup fills the library, not the canvas: show where the projects went
+        if (r.added) { if (isPhone()) s.setMobileTab('plans'); else s.setProjectsOpen(true) }
+        return false
+      }
+      const p = sanitizeProject(raw) // throws on a foreign file
       prepareForNewContent()
       s.loadProject(p)
       // a file open becomes its own library entry — never autosave over the previously open project's record

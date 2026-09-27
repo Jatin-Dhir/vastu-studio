@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
-import { Copy, Download, FilePlus2, FolderOpen, Pencil, Trash2, X } from 'lucide-react'
+import { Archive, Copy, Download, FilePlus2, FolderOpen, Pencil, Trash2, X } from 'lucide-react'
 import { Dialog } from './Dialogs'
 import { useStore } from '../store'
 import { deleteProjectRecord, getProject, listProjects, newProjectId, putProject } from '../db'
 import { activateProject, closeTab, prepareForNewContent, saveProjectFile, switchToProject } from '../importers/project'
 import { requestFit } from '../canvas/fit'
+import { backupLibrary, LIBRARY_CHANGED } from '../library'
 
 interface Row { id: string; name: string; updatedAt: number }
 
@@ -40,8 +41,22 @@ export function ProjectsModal() {
 
   const refresh = () => { void listProjects().then(setRows).catch(() => setRows([])) }
   useEffect(refresh, [])
+  // a restored backup lands while this list may be showing
+  useEffect(() => {
+    window.addEventListener(LIBRARY_CHANGED, refresh)
+    return () => window.removeEventListener(LIBRARY_CHANGED, refresh)
+  }, [])
+  const [backingUp, setBackingUp] = useState(false)
 
   const failed = () => useStore.getState().toast('The project library could not be read — browser storage refused. Save projects as .vastu files to keep them safe', 'warn')
+
+  const backup = async () => {
+    setBackingUp(true)
+    try {
+      const n = await backupLibrary()
+      useStore.getState().toast(n ? `Backed up ${n} ${n === 1 ? 'project' : 'projects'} in one .vastu file` : 'Nothing to back up yet', n ? 'ok' : 'info')
+    } catch { failed() } finally { setBackingUp(false) }
+  }
 
   const open = async (id: string) => {
     let rec
@@ -173,7 +188,12 @@ export function ProjectsModal() {
           )
         })}
       </div>
-      <div className="zone-note">Projects live in this browser. For backups or moving devices, use Save .vastu file.</div>
+      <div className="proj-foot">
+        <p className="zone-note">Projects are kept on this device. Back up all puts every one in a single .vastu file; open it on any device to bring them back.</p>
+        <button className="btn-ghost" disabled={!rows.length || backingUp} onClick={() => void backup()}>
+          <Archive size={14} /> {backingUp ? 'Backing up…' : `Back up all${rows.length ? ` (${rows.length})` : ''}`}
+        </button>
+      </div>
     </Dialog>
   )
 }
