@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { Check, ChevronDown, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
+import { ArrowRight, Check, ChevronDown, Circle as CircleIcon, Eraser, Lock, LockOpen, MoveUpRight, Navigation, Pencil, Plus, RotateCcw, Ruler, Slash, Spline, Square as SquareIcon, Trash2, Type as TypeIcon, X } from 'lucide-react'
 import { useStore } from '../store'
 import { centroid, dist, edgePoint, sampledPolygon } from '../geometry'
 import { M_PER_FT, formatArea, formatLen } from '../format'
@@ -445,6 +445,71 @@ function parseLenToPx(raw: string, appUnit: LenUnit, mpp: number | null): number
   return toPx(num * toMOf(appUnit))
 }
 
+/** The chip shows a length; tapping turns the chip itself into the field — measurement
+ *  editing lives at the geometry, never in a dialog. Enter applies, Escape or leaving
+ *  cancels, the unit label cycles ft → m → in → cm with the number converted in place.
+ *  `children` render inside the open field (a wall's which-end-moves arrow). Remount it
+ *  (key) when the selection changes so a half-typed value never carries over. */
+function LengthChip({ px, what, onApply, children }: {
+  px: number; what: string; onApply: (px: number) => void; children?: ReactNode
+}) {
+  const metersPerPx = useStore((s) => s.metersPerPx)
+  const unit = useStore((s) => s.unit)
+  const [editing, setEditing] = useState(false)
+  const [val, setVal] = useState('')
+  const [lenUnit, setLenUnit] = useState<LenUnit>('ft')
+  const fmt = (v: number) => (metersPerPx ? formatLen(v * metersPerPx, unit) : `${Math.round(v)} u`)
+  const begin = () => {
+    setLenUnit(unit)
+    setVal(metersPerPx ? ((px * metersPerPx) / toMOf(unit)).toFixed(2) : String(Math.round(px)))
+    setEditing(true)
+  }
+  const cycleUnit = () => {
+    const idx = LEN_UNITS.findIndex((u) => u.id === lenUnit)
+    const next = LEN_UNITS[(idx + 1) % LEN_UNITS.length]
+    const v = parseFloat(val.replace(',', '.'))
+    if (isFinite(v) && v > 0) setVal(((v * toMOf(lenUnit)) / next.toM).toFixed(2))
+    setLenUnit(next.id)
+  }
+  const apply = () => {
+    const next = parseLenToPx(val, lenUnit, metersPerPx)
+    if (next == null || next <= 0) { useStore.getState().toast('Enter a length — e.g. 12, 3.5m, 12\'6"', 'warn'); return }
+    onApply(next)
+    setEditing(false)
+  }
+  if (!editing) {
+    return (
+      <button className="chip" title={`Set the exact ${what}`} onClick={begin}>
+        <Ruler size={12} /> {fmt(px)}
+      </button>
+    )
+  }
+  return (
+    <span className="chip len-edit"
+      onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setEditing(false) }}>
+      <Ruler size={12} />
+      <input
+        autoFocus value={val} inputMode="decimal" aria-label={what[0].toUpperCase() + what.slice(1)}
+        onFocus={(e) => e.target.select()}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') apply()
+          else if (e.key === 'Escape') setEditing(false)
+        }}
+      />
+      {metersPerPx ? (
+        <button className="len-unit" aria-label="Change unit"
+          onPointerDown={(e) => e.preventDefault()} onClick={cycleUnit}>
+          {lenUnit}
+        </button>
+      ) : (
+        <em>u</em>
+      )}
+      {children}
+    </span>
+  )
+}
+
 export function StrokeChips() {
   const selectedStroke = useStore((s) => s.selectedStroke)
   const strokes = useStore((s) => s.strokes)
@@ -452,10 +517,6 @@ export function StrokeChips() {
   const locked = useStore((s) => s.locked)
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
-  const [lenEditing, setLenEditing] = useState(false)
-  const [lenVal, setLenVal] = useState('')
-  const [lenUnit, setLenUnit] = useState<LenUnit>('ft')
-  useEffect(() => { setLenEditing(false) }, [selectedStroke])
   const s2 = strokes.find((x) => x.id === selectedStroke)
   if (!s2 || locked) return null
   const { midX: sx, top } = screenBounds(view, s2.pts, s2.kind === 'rect' || s2.kind === 'ellipse')
@@ -464,62 +525,18 @@ export function StrokeChips() {
   const measurable = (s2.kind === 'line' || s2.kind === 'arrow') && s2.pts.length >= 2
   const boxy = (s2.kind === 'rect' || s2.kind === 'ellipse') && s2.pts.length >= 2
   const fmt = (px: number) => (metersPerPx ? formatLen(px * metersPerPx, unit) : `${Math.round(px)} u`)
-  const beginEdit = () => {
-    const px = dist(s2.pts[0], s2.pts[1])
-    setLenUnit(unit)
-    setLenVal(metersPerPx
-      ? ((px * metersPerPx) / toMOf(unit)).toFixed(2)
-      : String(Math.round(px)))
-    setLenEditing(true)
-  }
-  // tap the unit to cycle ft → m → in → cm; the shown number converts so the length stays put
-  const cycleUnit = () => {
-    const idx = LEN_UNITS.findIndex((u) => u.id === lenUnit)
-    const next = LEN_UNITS[(idx + 1) % LEN_UNITS.length]
-    const v = parseFloat(lenVal.replace(',', '.'))
-    if (isFinite(v) && v > 0) setLenVal(((v * toMOf(lenUnit)) / next.toM).toFixed(2))
-    setLenUnit(next.id)
-  }
-  const applyLen = () => {
-    const px = parseLenToPx(lenVal, lenUnit, metersPerPx)
-    if (px == null || px <= 0) { st.toast('Enter a length — e.g. 12, 3.5m, 12\'6"', 'warn'); return }
+  const applyLen = (px: number) => {
     const [a, b] = s2.pts
     const cur = dist(a, b)
     if (cur > 1e-6) {
       const f = px / cur
       st.updateStroke(s2.id, { pts: [a, { x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f }] })
     }
-    setLenEditing(false)
   }
   return (
     <Chips left={sx - 40} top={Math.max(60, sy - 48)}>
-      {measurable && !lenEditing && (
-        <button className="chip" title="Set the exact length" onClick={beginEdit}>
-          <Ruler size={12} /> {fmt(dist(s2.pts[0], s2.pts[1]))}
-        </button>
-      )}
-      {measurable && lenEditing && (
-        <span className="chip len-edit"
-          onBlur={(e) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setLenEditing(false) }}>
-          <Ruler size={12} />
-          <input
-            autoFocus value={lenVal} inputMode="decimal" aria-label="Line length"
-            onFocus={(e) => e.target.select()}
-            onChange={(e) => setLenVal(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') applyLen()
-              else if (e.key === 'Escape') setLenEditing(false)
-            }}
-          />
-          {metersPerPx ? (
-            <button className="len-unit" aria-label="Change unit"
-              onPointerDown={(e) => e.preventDefault()} onClick={cycleUnit}>
-              {lenUnit}
-            </button>
-          ) : (
-            <em>u</em>
-          )}
-        </span>
+      {measurable && (
+        <LengthChip key={s2.id} px={dist(s2.pts[0], s2.pts[1])} what="line length" onApply={applyLen} />
       )}
       {boxy && (
         <span className="chip place">
@@ -749,6 +766,9 @@ export function SelectionChips() {
   const bulges = useStore((s) => s.bulges)
   const view = useStore((s) => s.view)
   const locked = useStore((s) => s.locked)
+  // which end of a wall moves when its length is typed: the far corner (i+1) unless flipped
+  const [moveFar, setMoveFar] = useState(true)
+  useEffect(() => { setMoveFar(true) }, [selectedEdge])
 
   if (locked) return null
   const st = useStore.getState()
@@ -767,8 +787,43 @@ export function SelectionChips() {
   const sy = view.ty + view.k * (world.x * sin + world.y * cos)
   const clear = () => st.setSelection({ vertex: null, edge: null })
 
+  // a straight wall takes an exact length: the anchored corner stays, the other slides
+  // along the wall's own line — the arrow points at the corner that will move
+  const edgeA = selectedEdge != null ? pts[selectedEdge] : null
+  const edgeB = selectedEdge != null ? pts[(selectedEdge + 1) % pts.length] : null
+  const straight = selectedEdge != null && Math.abs(bulges[selectedEdge] ?? 0) <= 1e-4
+  const wallLen = edgeA && edgeB ? dist(edgeA, edgeB) : 0
+  let arrowDeg = 0
+  if (edgeA && edgeB) {
+    const [from, to] = moveFar ? [edgeA, edgeB] : [edgeB, edgeA]
+    const dx = to.x - from.x, dy = to.y - from.y
+    arrowDeg = (Math.atan2(dx * sin + dy * cos, dx * cos - dy * sin) * 180) / Math.PI
+  }
+  const applyWall = (L: number) => {
+    if (selectedEdge == null) return
+    const n = st.pts.length
+    const ia = selectedEdge, ib = (selectedEdge + 1) % n
+    const a = st.pts[ia], b = st.pts[ib]
+    if (!a || !b) return
+    const [fixed, moving, idx] = moveFar ? [a, b, ib] : [b, a, ia]
+    const d = dist(fixed, moving)
+    if (d < 1e-6) return
+    st.pushHistory()
+    st.movePoint(idx, { x: fixed.x + ((moving.x - fixed.x) * L) / d, y: fixed.y + ((moving.y - fixed.y) * L) / d })
+  }
+
   return (
     <Chips left={sx} top={Math.max(60, sy - 54)}>
+      {straight && wallLen > 0 && (
+        <LengthChip key={`w${selectedEdge}`} px={wallLen} what="wall length" onApply={applyWall}>
+          <button className="len-unit len-dir" onPointerDown={(e) => e.preventDefault()}
+            onClick={() => setMoveFar(!moveFar)}
+            aria-label={moveFar ? 'The far corner moves. Switch to the near corner' : 'The near corner moves. Switch to the far corner'}
+            title="The arrow points at the corner that moves — tap to flip">
+            <ArrowRight size={12} style={{ transform: `rotate(${arrowDeg}deg)` }} />
+          </button>
+        </LengthChip>
+      )}
       {selectedVertex != null && (
         <button className="chip danger" onClick={() => {
           st.deletePoint(selectedVertex)

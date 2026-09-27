@@ -1557,6 +1557,10 @@ kbd {
   transition: filter 0.12s ease;
 }
 .sel-chips .chip.len-edit .len-unit:hover { filter: brightness(1.12); }
+/* the wall's which-corner-moves arrow: same token as the unit, square so the rotated
+   glyph never clips */
+.sel-chips .chip.len-edit .len-dir { display: grid; place-items: center; width: 22px; height: 20px; padding: 0; }
+.sel-chips .chip.len-edit .len-dir svg { transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.25, 1); }
 .chip.on-gold { background: var(--gold-soft); color: var(--gold-2); border-color: rgba(217,180,91,0.5); }
 .marker-note {
   width: 100%;
