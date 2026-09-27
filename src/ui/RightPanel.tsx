@@ -13,7 +13,8 @@ import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
 import type { CompassId, Marker, Pt, RoomShape, Tool } from '../types'
-import { detectPdfScaleRatio, hasPdfOpen, renderPdfPage } from '../importers/pdf'
+import { hasPdfOpen } from '../importers/pdfState'
+import { useSettled } from '../canvas/gesture'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
 
@@ -324,11 +325,12 @@ export function RightPanel() {
   const metersPerPx = useStore((s) => s.metersPerPx)
   const scaleSource = useStore((s) => s.scaleSource)
   const unit = useStore((s) => s.unit)
-  const pts = useStore((s) => s.pts)
-  const bulges = useStore((s) => s.bulges)
-  const closed = useStore((s) => s.closed)
-  const centerOverride = useStore((s) => s.centerOverride)
-  const northDeg = useStore((s) => s.northDeg)
+  // the plan as it stands between gestures: a drag frame no longer re-renders the analysis
+  const pts = useSettled((s) => s.pts)
+  const bulges = useSettled((s) => s.bulges)
+  const closed = useSettled((s) => s.closed)
+  const centerOverride = useSettled((s) => s.centerOverride)
+  const northDeg = useSettled((s) => s.northDeg)
   const compass = useStore((s) => s.compass)
   const analysisOk = analysisAllowed(useStore((s) => s.auth), useStore((s) => s.chartsReady))
   const setCompass = useStore((s) => s.setCompass)
@@ -344,8 +346,8 @@ export function RightPanel() {
   }
   const angleSnap = useStore((s) => s.angleSnap)
   const setAngleSnap = useStore((s) => s.setAngleSnap)
-  const markers = useStore((s) => s.markers)
-  const roomShapes = useStore((s) => s.roomShapes)
+  const markers = useSettled((s) => s.markers)
+  const roomShapes = useSettled((s) => s.roomShapes)
   const showEdgeLabels = useStore((s) => s.showEdgeLabels)
   const setShowEdgeLabels = useStore((s) => s.setShowEdgeLabels)
   const wallColor = useStore((s) => s.wallColor)
@@ -369,6 +371,15 @@ export function RightPanel() {
     () => centerOverride ?? (pts.length >= 3 ? centroid(sampled) : null),
     [pts.length, sampled, centerOverride],
   )
+  const chartsVersion = useChartsVersion()
+  // once per settled change of the plan, not on every render of the panel
+  const ev = useMemo(
+    () => (analysisOk && closed && center && pts.length >= 3
+      ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct })
+      : null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [analysisOk, closed, center, pts.length, sampled, northDeg, markers, roomShapes, metersPerPx, unit, compass.brahmaPct, chartsVersion],
+  )
   const areaM2 = useMemo(() => {
     if (!closed || pts.length < 3 || !metersPerPx) return null
     return polygonArea(sampled) * metersPerPx * metersPerPx
@@ -384,6 +395,7 @@ export function RightPanel() {
     if (next === bg.pdfPage) return
     setPageBusy(true)
     try {
+      const { renderPdfPage, detectPdfScaleRatio } = await import('../importers/pdf')
       const { dataUrl, w, h, pxPerPt } = await renderPdfPage(next)
       setBg({ dataUrl, w, h, pdfPage: next })
       const st = useStore.getState()
@@ -786,8 +798,7 @@ export function RightPanel() {
       )}
 
       {/* -------- Vastu analysis -------- */}
-      {analysisOk && closed && center && pts.length >= 3 && (() => {
-        const ev = evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct })
+      {ev && center && (() => {
         return (
           <section className="card">
             <header className="card-head">
