@@ -2,6 +2,7 @@ import type { ProjectFile } from '../types'
 import { serializeProject, useStore } from '../store'
 import { newProjectId, putProject, getProject, type ProjectRecord } from '../db'
 import { shareBlobNative } from '../native'
+import { markerKindMeta } from '../vastu'
 
 export function downloadBlob(blob: Blob, filename: string) {
   // dev-only: scripted checks read the generated file back instead of chasing the download
@@ -38,6 +39,15 @@ const isDataImage = (v: unknown) => typeof v === 'string' && /^data:image\/[a-z0
 export function parseProject(text: string): ProjectFile {
   let p: any
   try { p = JSON.parse(text) } catch { throw new Error('This .vastu file is damaged or incomplete — re-export it and try again') }
+  return sanitizeProject(p)
+}
+
+const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
+
+/** The same checks for a project from any source — a .vastu file, the library, the legacy
+ *  autosave. A library record is trusted no more than a file: one written while a bug let a
+ *  NaN point in would otherwise reload the crash on every boot. */
+export function sanitizeProject(p: any): ProjectFile {
   if (p?.app !== 'vastu-studio' || !Array.isArray(p.pts) || typeof p.bg?.kind !== 'string') throw new Error('Not a Vastu Studio project file')
   // > 1 rather than !== 1 so legacy files without a numeric version keep loading
   if (typeof p.version === 'number' && p.version > 1) throw new Error('Saved by a newer Vastu Studio — update the app to open it')
@@ -58,10 +68,20 @@ export function parseProject(text: string): ProjectFile {
   }
   if (p.bg.dataUrl != null && !isDataImage(p.bg.dataUrl)) { p.bg = { ...p.bg, kind: 'none', dataUrl: undefined } }
   if (!finite(p.bg.w) || !finite(p.bg.h)) { p.bg.w = 0; p.bg.h = 0 }
-  p.markers = Array.isArray(p.markers) ? p.markers.filter((m: any) => m && typeof m.kind === 'string' && isPt(m.p)) : []
-  p.roomShapes = Array.isArray(p.roomShapes)
-    ? p.roomShapes.map((r: any) => (r && typeof r.kind === 'string' ? { ...r, pts: ptList(r.pts) } : null)).filter((r: any) => r && r.pts.length >= 2)
+  // every text the report prints is a string: a missing label read "undefined in ENE" and a
+  // null note made the PDF builder throw
+  p.markers = Array.isArray(p.markers)
+    ? p.markers.filter((m: any) => m && typeof m.kind === 'string' && isPt(m.p))
+      .map((m: any) => ({ ...m, id: str(m.id) || newProjectId(), label: str(m.label) || markerKindMeta(m.kind).name, note: m.note == null ? undefined : str(m.note) }))
     : []
+  p.roomShapes = Array.isArray(p.roomShapes)
+    ? p.roomShapes.map((r: any) => (r && typeof r.kind === 'string'
+      ? { ...r, id: str(r.id) || newProjectId(), label: str(r.label) || markerKindMeta(r.kind).name, note: r.note == null ? undefined : str(r.note), pts: ptList(r.pts) }
+      : null)).filter((r: any) => r && r.pts.length >= 2)
+    : []
+  p.report = p.report && typeof p.report === 'object'
+    ? { client: str(p.report.client), address: str(p.report.address), practitioner: str(p.report.practitioner), notes: str(p.report.notes) }
+    : undefined
   p.strokes = Array.isArray(p.strokes) ? p.strokes.map((st: any) => (st ? { ...st, pts: ptList(st.pts) } : null)).filter((st: any) => st && st.pts.length >= 1) : []
   p.texts = Array.isArray(p.texts) ? p.texts.filter((t: any) => t && isPt(t.p) && typeof t.text === 'string').map((t: any) => ({ ...t, size: finite(t.size) && t.size > 0 ? t.size : 16 })) : []
   return p as ProjectFile
@@ -104,7 +124,9 @@ export function autosave() {
 export async function activateProject(id: string): Promise<ProjectRecord | null> {
   const rec = await getProject(id)
   if (!rec) return null
-  useStore.getState().loadProject(rec.data)
+  let data: ProjectFile
+  try { data = sanitizeProject(rec.data) } catch { return null }
+  useStore.getState().loadProject(data)
   useStore.getState().setProjectMeta({ id: rec.id, name: rec.name })
   return rec
 }

@@ -38,7 +38,10 @@ export interface Placement {
 
 /** Which zone and entrance pada a point occupies, seen from the centre with the given north. */
 export function placementOf(p: Pt, center: Pt, northDeg: number): Placement {
-  const bearing = (((angleOf(center, p) - northDeg) % 360) + 360) % 360
+  const raw = (((angleOf(center, p) - northDeg) % 360) + 360) % 360
+  // a degenerate point (at the centre, or corrupt) has no bearing; read it as north rather
+  // than index the zone tables with NaN and hand every caller an undefined zone
+  const bearing = Number.isFinite(raw) ? raw : 0
   const zoneIdx = zoneIndexOf(bearing)
   const padaIdx = padaIndexOf(bearing)
   return { bearing, zoneIdx, zone: ZONES16[zoneIdx], padaIdx, pada: GATES32[padaIdx] }

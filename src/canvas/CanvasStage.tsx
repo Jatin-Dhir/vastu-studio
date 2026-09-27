@@ -166,7 +166,11 @@ export function CanvasStage() {
     const v = viewRef.current
     worldRef.current?.setAttribute('transform', `translate(${v.tx} ${v.ty}) scale(${v.k}) rotate(${v.rot})`)
   }
-  const setViewLive = (v: ViewState) => { viewRef.current = v; applyDom() }
+  // a non-finite view poisons every later tap (NaN points, NaN markers) — refuse it outright
+  const setViewLive = (v: ViewState) => {
+    if (!Number.isFinite(v.tx) || !Number.isFinite(v.ty) || !Number.isFinite(v.k) || !Number.isFinite(v.rot) || v.k <= 0) return
+    viewRef.current = v; applyDom()
+  }
   const commitView = () => {
     window.clearTimeout(commitTimer.current)
     useStore.getState().setView(viewRef.current)
@@ -561,12 +565,14 @@ export function CanvasStage() {
       const lp = lastPinch.current
       if (lp) {
         const v = viewRef.current
-        const nk = Math.min(60, Math.max(0.02, (v.k * dpx) / lp.d))
+        // two fingers landing on one spot would scale by 0/0 — hold the zoom until they part
+        const nk = lp.d > 0.5 && dpx > 0.5 ? Math.min(60, Math.max(0.02, (v.k * dpx) / lp.d)) : v.k
         let ntx = mx - ((mx - v.tx) * nk) / v.k
         let nty = my - ((my - v.ty) * nk) / v.k
         ntx += mx - lp.mx; nty += my - lp.my
         setViewLive({ tx: ntx, ty: nty, k: nk, rot: v.rot })
-        const dAng = norm180(angNow - lp.ang)
+        // coincident fingers have no angle either — no twist until they part
+        const dAng = lp.d > 0.5 && dpx > 0.5 ? norm180(angNow - lp.ang) : 0
         lp.twist += dAng
         if (!lp.rotating && Math.abs(lp.twist) > 8) lp.rotating = true
         if (lp.rotating && dAng !== 0) rotateViewAbout(dAng, { x: mx, y: my })

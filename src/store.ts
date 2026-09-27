@@ -3,6 +3,11 @@ import { splitBulge } from './geometry'
 import type { AuthSnapshot } from './auth/types'
 import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, TextNote, Tool, Unit, ViewState } from './types'
 import type { DetectedRoom } from './roomDetect'
+import { markerKindMeta } from './vastu'
+
+/** Every coordinate that enters the store must be a real number: one NaN point (a zero-
+ *  distance pinch once made them) crashes the placement lookups and autosaves itself. */
+const finitePt = (p: Pt | null | undefined): p is Pt => !!p && Number.isFinite(p.x) && Number.isFinite(p.y)
 
 export interface Toast {
   id: number
@@ -351,6 +356,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     selectedText: null,
     textEditing: false,
     addText: (p, color, size) => {
+      if (!finitePt(p)) return ''
       push()
       const id = (crypto as any).randomUUID ? crypto.randomUUID() : `tx${Math.floor(performance.now() * 1000)}`
       set((s) => ({
@@ -361,7 +367,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       return id
     },
     updateText: (id, patch) => { push(); set((s) => ({ texts: s.texts.map((t) => (t.id === id ? { ...t, ...patch } : t)) })) },
-    moveText: (id, p) => set((s) => ({ texts: s.texts.map((t) => (t.id === id ? { ...t, p } : t)) })),
+    moveText: (id, p) => { if (finitePt(p)) set((s) => ({ texts: s.texts.map((t) => (t.id === id ? { ...t, p } : t)) })) },
     deleteText: (id) => {
       push()
       set((s) => ({ texts: s.texts.filter((t) => t.id !== id), selectedText: s.selectedText === id ? null : s.selectedText, textEditing: false }))
@@ -500,14 +506,22 @@ export const useStore = create<VastuStore>()((set, get) => {
         ...(tool !== 'room' ? { roomDraft: null } : {}),
       })
     },
-    setView: (view) => set({ view }),
+    setView: (view) => {
+      if (![view.tx, view.ty, view.k, view.rot].every(Number.isFinite) || view.k <= 0) return
+      set({ view })
+    },
     setUnit: (unit) => set({ unit }),
-    setMetersPerPx: (metersPerPx, scaleSource) =>
-      set({ metersPerPx, scaleSource, ...(metersPerPx != null ? { scaleSuggestion: null } : {}) }),
+    setMetersPerPx: (metersPerPx, scaleSource) => {
+      // a zero-length calibration line gives Infinity; a scale must be a real, positive length
+      if (metersPerPx != null && !(Number.isFinite(metersPerPx) && metersPerPx > 0)) return
+      set({ metersPerPx, scaleSource, ...(metersPerPx != null ? { scaleSuggestion: null } : {}) })
+    },
 
-    addPoint: (p) => { push(); set((s) => ({ pts: [...s.pts, p], bulges: [...s.bulges, 0] })) },
-    movePoint: (i, p) =>
-      set((s) => ({ pts: s.pts.map((q, j) => (j === i ? p : q)) })),
+    addPoint: (p) => { if (!finitePt(p)) return; push(); set((s) => ({ pts: [...s.pts, p], bulges: [...s.bulges, 0] })) },
+    movePoint: (i, p) => {
+      if (!finitePt(p)) return
+      set((s) => ({ pts: s.pts.map((q, j) => (j === i ? p : q)) }))
+    },
     insertPoint: (i, p) => {
       push()
       set((s) => {
@@ -565,7 +579,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     },
     reopenPolygon: () => { push(); set({ closed: false }) },
     clearOutline: () => { push(); set({ pts: [], bulges: [], closed: false, centerOverride: null, highlightZone: null }) },
-    setCenterOverride: (centerOverride) => set({ centerOverride }),
+    setCenterOverride: (centerOverride) => { if (centerOverride === null || finitePt(centerOverride)) set({ centerOverride }) },
     setNorth: (northDeg, source = 'manual') =>
       set({ northDeg: ((northDeg % 360) + 360) % 360, northSource: source }),
     setCompass: (c) => set((s) => ({ compass: { ...s.compass, ...c } })),
@@ -588,18 +602,22 @@ export const useStore = create<VastuStore>()((set, get) => {
         selectedEdge: sel.edge !== undefined ? sel.edge : s.selectedEdge,
       })),
     addMarker: (p) => {
+      if (!finitePt(p)) return ''
       push()
       const s = get()
       const meta = s.markerKind
       const id = (crypto as any).randomUUID ? crypto.randomUUID() : `mk${Math.floor(performance.now() * 1000)}`
       const count = s.markers.filter((m) => m.kind === meta).length
-      const base = meta.charAt(0).toUpperCase() + meta.slice(1)
+      // the kind's own name ("Air conditioner"), never its internal id ("Ac")
+      const base = markerKindMeta(meta).name
       const marker: Marker = { id, kind: meta, label: count > 0 ? `${base} ${count + 1}` : base, p }
       set({ markers: [...s.markers, marker], selectedMarker: id, selectedStroke: null, selectedRoomShape: null, roomShapeEditing: false, selectedText: null, textEditing: false })
       return id
     },
-    moveMarker: (id, p) =>
-      set((s) => ({ markers: s.markers.map((m) => (m.id === id ? { ...m, p } : m)) })),
+    moveMarker: (id, p) => {
+      if (!finitePt(p)) return
+      set((s) => ({ markers: s.markers.map((m) => (m.id === id ? { ...m, p } : m)) }))
+    },
     updateMarker: (id, patch) => {
       push()
       set((s) => ({ markers: s.markers.map((m) => (m.id === id ? { ...m, ...patch } : m)) }))
@@ -626,18 +644,21 @@ export const useStore = create<VastuStore>()((set, get) => {
     roomDrawMode: 'rect',
     roomShapeEditing: false,
     addRoomShape: (shape, pts) => {
+      if (!pts.every(finitePt)) return ''
       push()
       const s = get()
       const kind = s.roomShapeKind
       const id = (crypto as any).randomUUID ? crypto.randomUUID() : `rm${Math.floor(performance.now() * 1000)}`
       const count = s.roomShapes.filter((r) => r.kind === kind).length
-      const base = kind.charAt(0).toUpperCase() + kind.slice(1)
+      const base = markerKindMeta(kind).name
       const room: RoomShape = { id, kind, shape, label: count > 0 ? `${base} ${count + 1}` : base, pts }
       set({ roomShapes: [...s.roomShapes, room], selectedRoomShape: id, selectedMarker: null, markerEditing: false, selectedStroke: null, selectedText: null, textEditing: false })
       return id
     },
-    updateRoomShapePts: (id, pts) =>
-      set((s) => ({ roomShapes: s.roomShapes.map((r) => (r.id === id ? { ...r, pts } : r)) })),
+    updateRoomShapePts: (id, pts) => {
+      if (!pts.every(finitePt)) return
+      set((s) => ({ roomShapes: s.roomShapes.map((r) => (r.id === id ? { ...r, pts } : r)) }))
+    },
     updateRoomShape: (id, patch) => {
       push()
       set((s) => ({ roomShapes: s.roomShapes.map((r) => (r.id === id ? { ...r, ...patch } : r)) }))

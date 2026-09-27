@@ -18,7 +18,7 @@ import { consumeSafeBoot } from './ui/ErrorBoundary'
 import { MobileApp } from './mobile/MobileApp'
 import { isPhone, usePhone } from './mobile/phone'
 import { importFiles, importFromUrl, loadDemo } from './importFile'
-import { autosave, clearAutosave, loadAutosave } from './importers/project'
+import { autosave, clearAutosave, loadAutosave, sanitizeProject } from './importers/project'
 import { getMostRecent, getProject, newProjectId, putProject, requestPersistence } from './db'
 import { ProjectsModal } from './ui/ProjectsModal'
 import { ReportView } from './ui/ReportView'
@@ -289,7 +289,9 @@ export default function App() {
         if (!rec) return
         const s2 = useStore.getState()
         if (s2.bg.kind !== 'none' || s2.pts.length > 0) return // user already started something
-        s2.loadProject(rec.data)
+        let data
+        try { data = sanitizeProject(rec.data) } catch { return }
+        s2.loadProject(data)
         s2.setProjectMeta({ id: rec.id, name: rec.name })
         setTimeout(requestFit, 120)
         if (!isPhone()) s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
@@ -301,7 +303,9 @@ export default function App() {
         if (!rec) return
         const s2 = useStore.getState()
         if (s2.bg.kind !== 'none' || s2.pts.length > 0) return // user already started something
-        s2.loadProject(rec.data)
+        let data
+        try { data = sanitizeProject(rec.data) } catch { return }
+        s2.loadProject(data)
         s2.setProjectMeta({ id: rec.id, name: rec.name })
         setTimeout(requestFit, 120)
         if (!isPhone()) s2.toast(`Resumed “${rec.name}” — all projects live under the folder icon`, 'info', 'Start fresh', () => {
