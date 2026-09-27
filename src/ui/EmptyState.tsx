@@ -1,4 +1,5 @@
 import { FileUp, Map as MapIcon, PenLine, Sparkles } from 'lucide-react'
+import { IS_MAC } from '../platform'
 import { useStore } from '../store'
 import { importFromUrl, loadDemo, startBlank } from '../importFile'
 
@@ -56,7 +57,7 @@ export function EmptyState() {
         <div className="empty-foot">
           {!(typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches) && (
             <>
-              <span>Paste a screenshot any time with <kbd>Ctrl</kbd>+<kbd>V</kbd></span>
+              <span>Paste a screenshot any time with {IS_MAC ? <kbd>⌘V</kbd> : <><kbd>Ctrl</kbd>+<kbd>V</kbd></>}</span>
               <span className="dot">·</span>
             </>
           )}

@@ -407,7 +407,7 @@ export default function App() {
     <div className="app">
       <TopBar />
       <TabStrip />
-      <div className="stage-wrap">
+      <main className="stage-wrap" aria-label="Plan">
         <CanvasStage />
         <QuickBar />
         <RotateChip />
@@ -423,7 +423,7 @@ export default function App() {
         {!hasContent && <EmptyState />}
         <CalibrateBar />
         <StatusChip />
-      </div>
+      </main>
       {/* fixed to the real viewport, like Toasts — .stage-wrap clips absolute children
           with overflow:hidden, which was cramping this against the dock on real phones */}
       <GuideCard />

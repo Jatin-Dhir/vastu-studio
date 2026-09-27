@@ -121,10 +121,15 @@ export function GuideCard() {
   return (
     <aside className="guide-card" aria-label="Guide">
       <div className="guide-rows">
-        {track.map((t, i) => (
+        {track.map((t, i) => {
+          const now = !t.done && !t.skipped && track.findIndex((q) => !q.done && !q.skipped) === i
+          return (
           <button
             key={t.id}
-            className={`guide-row ${t.done ? 'done' : ''} ${t.skipped ? 'skipped' : ''} ${!t.done && !t.skipped && track.findIndex((q) => !q.done && !q.skipped) === i ? 'now' : ''}`}
+            className={`guide-row ${t.done ? 'done' : ''} ${t.skipped ? 'skipped' : ''} ${now ? 'now' : ''}`}
+            // narrow windows hide the step names, leaving only the dot — the name must still be spoken
+            aria-label={`${t.label}${t.done ? ' (done)' : t.skipped ? ' (skipped)' : ''}`}
+            aria-current={now ? 'step' : undefined}
             onClick={() => goToStep(t.id)}
           >
             <span className="guide-dot">
@@ -132,7 +137,8 @@ export function GuideCard() {
             </span>
             <span className="guide-name">{t.label}</span>
           </button>
-        ))}
+          )
+        })}
         <button className="guide-close" aria-label="Hide the guide" onClick={dismiss}>
           <X size={13} strokeWidth={2.4} />
         </button>

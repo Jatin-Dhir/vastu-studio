@@ -196,7 +196,10 @@ export function CanvasStage() {
   }
 
   // external view changes (fit, project load) flow into the ref; every render re-asserts the DOM transform
-  useEffect(() => { viewRef.current = view }, [view])
+  // a view committed from outside (fit, rotate, the store) must reach viewRef BEFORE the layout
+  // effect below writes the transform — synced in a passive effect it arrived a render late,
+  // so the drawing kept the old transform while its labels were already sized for the new k
+  useLayoutEffect(() => { viewRef.current = view }, [view])
   useLayoutEffect(() => { applyDom() })
 
   // the DXF parser loads with the first DXF, not with every start; a stale parse (the plan
