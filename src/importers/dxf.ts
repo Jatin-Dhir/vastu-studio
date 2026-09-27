@@ -68,20 +68,20 @@ function sampleBulge(p1: XY, p2: XY, bulge: number, out: XY[]) {
   if (chord < 1e-9 || Math.abs(theta) < 1e-6) { out.push(p2); return }
   const r = chord / (2 * Math.sin(Math.abs(theta) / 2))
   const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2
-  const h = Math.sqrt(Math.max(0, r * r - (chord / 2) * (chord / 2)))
-  // perpendicular to chord; bulge > 0 = CCW arc
+  // centre on the chord's left normal at signed distance chord·(1−b²)/(4b): left of the chord
+  // for a CCW arc under 180° (0 < b < 1), right of it past 180° (b > 1), mirrored for b < 0.
+  // (It used to sit on the wrong side for every |b| < 1, so a filleted corner imported as a
+  // 270° loop bulging out of the wall.)
   const ux = -(p2.y - p1.y) / chord, uy = (p2.x - p1.x) / chord
-  const sign = bulge > 0 ? 1 : -1
-  const cx = mx - sign * h * ux, cy = my - sign * h * uy
-  let sa = Math.atan2(p1.y - cy, p1.x - cx)
-  let ea = Math.atan2(p2.y - cy, p2.x - cx)
-  if (bulge > 0 && ea < sa) ea += Math.PI * 2
-  if (bulge < 0 && ea > sa) ea -= Math.PI * 2
-  const n = Math.max(4, Math.ceil((Math.abs(ea - sa) / (Math.PI * 2)) * 64))
-  for (let i = 1; i <= n; i++) {
-    const t = sa + ((ea - sa) * i) / n
+  const off = (chord * (1 - bulge * bulge)) / (4 * bulge)
+  const cx = mx + ux * off, cy = my + uy * off
+  const sa = Math.atan2(p1.y - cy, p1.x - cx)
+  const n = Math.max(4, Math.ceil((Math.abs(theta) / (Math.PI * 2)) * 64))
+  for (let i = 1; i < n; i++) {
+    const t = sa + (theta * i) / n
     out.push({ x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) })
   }
+  out.push(p2) // land exactly on the vertex, not a float's width off it
 }
 
 /** Uniform-ish B-spline sampling via de Boor; falls back to control polygon. */
