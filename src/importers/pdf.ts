@@ -1,8 +1,34 @@
-import * as pdfjs from 'pdfjs-dist'
-import type { PDFDocumentProxy } from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
+// The legacy build, not the default one: pdf.js 5's modern build calls Uint8Array#toHex,
+// Map#getOrInsertComputed, Math.sumPrecise and Promise.try, so PDF import failed outright
+// on Safari 18, Chrome 131 and any WebView that is not brand new. The legacy build carries
+// its own polyfills and reads the same files.
+import * as pdfjs from 'pdfjs-dist/legacy/build/pdf.mjs'
+import type { PDFDocumentProxy } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?url'
 
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
+
+// Safari has no async iteration on ReadableStream, and pdf.js reads a page's text layer with
+// `for await` over one — so the printed "1 : 100" scale was never found there. Only the
+// missing method is added; engines that have it keep their own.
+if (typeof ReadableStream !== 'undefined' && !(Symbol.asyncIterator in ReadableStream.prototype)) {
+  Object.defineProperty(ReadableStream.prototype, Symbol.asyncIterator, {
+    configurable: true,
+    writable: true,
+    value: async function* <T>(this: ReadableStream<T>) {
+      const reader = this.getReader()
+      try {
+        for (;;) {
+          const { done, value } = await reader.read()
+          if (done) return
+          yield value
+        }
+      } finally {
+        reader.releaseLock()
+      }
+    },
+  })
+}
 
 // pdfjs fetches the worker lazily, so a PDF imported for the first time offline would fail —
 // warm the service-worker cache once it controls the page (the native shell has no SW; no-op there)
