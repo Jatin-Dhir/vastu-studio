@@ -115,10 +115,84 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
   let y = 56
 
   /* ---- primitives ---- */
-  const color = (c: RGB) => doc.setTextColor(c[0], c[1], c[2])
+  const cur = { family: SANS, size: 9.5, bold: false, rgb: INK as RGB }
+  const color = (c: RGB) => { cur.rgb = c; doc.setTextColor(c[0], c[1], c[2]) }
   const fill = (c: RGB) => doc.setFillColor(c[0], c[1], c[2])
   const stroke = (c: RGB, w = 0.5) => { doc.setDrawColor(c[0], c[1], c[2]); doc.setLineWidth(w) }
-  const font = (family: string, size: number, bold = false) => { doc.setFont(family, bold ? 'bold' : 'normal'); doc.setFontSize(size) }
+  const font = (family: string, size: number, bold = false) => {
+    cur.family = family; cur.size = size; cur.bold = bold
+    doc.setFont(family, bold ? 'bold' : 'normal'); doc.setFontSize(size)
+  }
+
+  /* ---- text the embedded faces cannot draw ----
+     jsPDF has no complex-script shaping and the faces carry Latin only, so a Hindi client
+     name, room label or note used to vanish from the report (and "Śrī" lost its letters
+     before the faces grew Latin Extended). A run with any such character is typeset by the
+     browser — which shapes Devanagari and every other script with the system's own fonts —
+     onto a canvas at print resolution and placed on the same baseline. Everything else stays
+     real, selectable PDF text. */
+  const COVERED = custom
+    ? /^[\u0000-\u02FF\u1D00-\u1DBF\u1E00-\u1EFF\u2000-\u20CF\u2100-\u218F\u2190-\u21FF\u2C60-\u2C7F\uA720-\uA7FF\uFEFF]*$/
+    : /^[\u0000-\u00FF\u2013\u2014\u2018\u2019\u201C\u201D\u2022\u2026\u20AC]*$/
+  const covered = (t: string) => COVERED.test(t)
+  const PXPT = 4 // canvas pixels per PDF point (~290 dpi)
+  const SANS_CSS = "'Inter Variable', Inter, 'Nirmala UI', 'Noto Sans Devanagari', 'Kohinoor Devanagari', 'Devanagari Sangam MN', Mangal, 'Segoe UI', Roboto, Arial, sans-serif"
+  const SERIF_CSS = "'Cormorant Garamond', 'Nirmala UI', 'Noto Serif Devanagari', 'Kohinoor Devanagari', 'Devanagari Sangam MN', Mangal, Georgia, serif"
+  const cssFont = (px: number) => `${cur.bold || cur.family === SERIF ? 600 : 400} ${px}px ${cur.family === SERIF ? SERIF_CSS : SANS_CSS}`
+  const mctx = document.createElement('canvas').getContext('2d')!
+  const widthOf = (t: string): number => {
+    if (covered(t)) return doc.getTextWidth(t)
+    mctx.font = cssFont(cur.size * PXPT)
+    return mctx.measureText(t).width / PXPT
+  }
+  const splitLines = (t: string, width: number): string[] => {
+    if (covered(t)) return doc.splitTextToSize(t, width) as string[]
+    mctx.font = cssFont(cur.size * PXPT)
+    const out: string[] = []
+    for (const para of t.split('\n')) {
+      let line = ''
+      for (const word of para.split(/(\s+)/)) {
+        const next = line + word
+        if (line.trim() && mctx.measureText(next.trimEnd()).width / PXPT > width) { out.push(line.trimEnd()); line = word.trimStart() }
+        else line = next
+      }
+      out.push(line.trimEnd())
+    }
+    return out
+  }
+  const drawLine = (t: string, x: number, at: number, align?: 'left' | 'right') => {
+    if (!t) return
+    if (covered(t)) { doc.text(t, x, at, align === 'right' ? { align: 'right' } : undefined); return }
+    const px = cur.size * PXPT
+    mctx.font = cssFont(px)
+    const m = mctx.measureText(t)
+    const asc = Math.ceil(Math.max(m.actualBoundingBoxAscent || 0, px * 0.95))
+    const desc = Math.ceil(Math.max(m.actualBoundingBoxDescent || 0, px * 0.3))
+    const pad = 4
+    const c = document.createElement('canvas')
+    c.width = Math.ceil(m.width) + pad * 2; c.height = asc + desc
+    const g = c.getContext('2d')!
+    g.font = cssFont(px); g.fillStyle = `rgb(${cur.rgb[0]},${cur.rgb[1]},${cur.rgb[2]})`; g.textBaseline = 'alphabetic'
+    g.fillText(t, pad, asc)
+    const w = c.width / PXPT
+    const left = (align === 'right' ? x - m.width / PXPT : x) - pad / PXPT
+    doc.addImage(c.toDataURL('image/png'), 'PNG', left, at - asc / PXPT, w, c.height / PXPT)
+  }
+  /** How far a shaped run rises above Latin capitals of the same size (Devanagari's ि and
+   *  other marks sit above the headline) — the first line gives it that much more room. */
+  const tallExtra = (t: string): number => {
+    if (covered(t)) return 0
+    mctx.font = cssFont(cur.size * PXPT)
+    const asc = (mctx.measureText(t).actualBoundingBoxAscent || 0) / PXPT
+    return Math.max(0, asc - cur.size * 0.74)
+  }
+  /** One line that must fit its column: trimmed with an ellipsis instead of running over. */
+  const fit = (t: string, width: number): string => {
+    if (widthOf(t) <= width) return t
+    let lo = 0, hi = t.length
+    while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (widthOf(t.slice(0, mid).trimEnd() + '…') <= width) lo = mid; else hi = mid - 1 }
+    return t.slice(0, lo).trimEnd() + '…'
+  }
   const ensure = (h: number) => { if (y + h > BOTTOM) { doc.addPage(); y = 56 } }
   const hairline = (x1: number, x2: number, at = y) => { stroke(RULE); doc.line(x1, at, x2, at) }
 
@@ -134,14 +208,15 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     if (o.space) doc.setCharSpace(o.space)
     const x = o.x ?? M
     const width = o.width ?? (M + CW - x)
-    const lines: string[] = doc.splitTextToSize(s, width)
+    const lines: string[] = splitLines(s, width)
     const lh = o.lh ?? size * 1.45
     const start = y
-    for (const ln of lines) {
+    lines.forEach((ln, i) => {
+      if (i === 0) y += tallExtra(ln)
       ensure(lh)
-      doc.text(ln, o.align === 'right' ? x + width : x, y, o.align === 'right' ? { align: 'right' } : undefined)
+      drawLine(ln, o.align === 'right' ? x + width : x, y, o.align)
       y += lh
-    }
+    })
     if (o.space) doc.setCharSpace(0)
     y += o.gap ?? 0
     return y - start
@@ -149,7 +224,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
   /** Measure without drawing. */
   const measure = (raw: string, size: number, width: number, bold = false, family = SANS, lh = size * 1.45): number => {
     font(family, size, bold)
-    return (doc.splitTextToSize(clean(raw), width) as string[]).length * lh
+    return splitLines(clean(raw), width).length * lh
   }
   /** Tracked uppercase label — eyebrows, table heads, tiny captions. */
   const label = (s: string, x: number, at: number, c: RGB = MUTED, size = 6.5, align: 'left' | 'right' = 'left') => {
@@ -210,8 +285,8 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
       const x = M + i * colW
       label(k, x, y)
       font(SANS, 9.5); color(INK)
-      const lines: string[] = doc.splitTextToSize(clean(v), colW - 14)
-      lines.forEach((ln, li) => doc.text(ln, x, y + 12 + li * 12))
+      const lines = splitLines(clean(v), colW - 14)
+      lines.forEach((ln, li) => drawLine(ln, x, y + 12 + li * 12))
       rowH = Math.max(rowH, 12 + lines.length * 12)
     })
     y += rowH + 4
@@ -330,10 +405,13 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     head('Entrances', 50)
     for (const e of data.entrances) {
       ensure(40)
+      let pillW = 0
+      if (e.badge) { font(SANS, 6.6, true); doc.setCharSpace(0.5); pillW = doc.getTextWidth(e.badge.toUpperCase()) + 12; doc.setCharSpace(0) }
       font(SANS, 10, true); color(INK)
-      doc.text(clean(e.title), M, y)
-      if (e.badge) pill(e.badge, e.badgeSev, M + doc.getTextWidth(clean(e.title)) + 10, y)
-      y += 14
+      const tl = splitLines(clean(e.title), CW - (pillW ? pillW + 10 : 0))
+      tl.forEach((ln, i) => drawLine(ln, M, y + i * 13))
+      if (e.badge) { const w0 = widthOf(tl[0] ?? ''); pill(e.badge, e.badgeSev, M + w0 + 10, y); font(SANS, 10, true) }
+      y += 14 + (tl.length - 1) * 13
       for (const ln of e.lines) text(ln, { size: 9, color: MUTED, lh: 13 })
       y += 8
     }
@@ -342,7 +420,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
   /* ================================================================ rooms */
   if (data.rooms.length) {
     head('Rooms & objects', 70)
-    const cols = [0.2, 0.13, 0.3, 0.17, 0.2]
+    const cols = [0.19, 0.18, 0.26, 0.17, 0.2]
     const xs = cols.map((_, i) => M + cols.slice(0, i).reduce((a, b) => a + b * CW, 0))
     const heads = ['Item', 'Type', 'Where it sits', 'Pada', 'Verdict']
     heads.forEach((h, i) => label(h, xs[i], y))
@@ -356,9 +434,9 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
         + (r.note ? measure(r.note, 8.5, subW, false, SANS, 12) : 0)
       ensure(Math.min(30 + subH, 90))
       font(SANS, 9.5, true); color(INK)
-      doc.text((doc.splitTextToSize(clean(r.item), cols[0] * CW - 10) as string[])[0] ?? '', xs[0], y)
+      drawLine(fit(clean(r.item), cols[0] * CW - 10), xs[0], y)
       font(SANS, 9); color(MUTED)
-      doc.text(clean(r.type), xs[1], y)
+      drawLine(fit(clean(r.type), cols[1] * CW - 8), xs[1], y)
       // the zone split as a stacked bar, then its legend
       const bx = xs[2], bw = cols[2] * CW - 14
       let acc = 0
@@ -438,7 +516,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     doc.setPage(p)
     hairline(M, M + CW, H - 40)
     font(SANS, 7); color(MUTED)
-    doc.text(clean(`${data.projectName} — Vastu analysis`), M, H - 28)
+    drawLine(fit(clean(`${data.projectName} — Vastu analysis`), CW / 2 - 50), M, H - 28)
     doc.text(`Page ${p} of ${pages}`, M + CW, H - 28, { align: 'right' })
     label('Vastu Studio', M + CW / 2, H - 28, mix(MUTED, 0.85), 6)
   }
@@ -448,7 +526,8 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
 
 export async function exportReportPdf(data: ReportPdfData): Promise<void> {
   const blob = await buildReportPdf(data)
-  downloadBlob(blob, `${data.projectName.replace(/[^\w\- ]+/g, '') || 'plan'}-vastu-report.pdf`)
+  const base = data.projectName.replace(/[\\/:*?"<>|\u0000-\u001F]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80)
+  downloadBlob(blob, `${base || 'plan'} - Vastu report.pdf`)
 }
 
 function hexToRgb(hex: string): RGB {
