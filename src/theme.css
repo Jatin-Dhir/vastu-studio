@@ -7,6 +7,7 @@
    separate, larger piece of work, not a CSS toggle. */
 
 :root[data-theme='paper'] {
+  color-scheme: light;
   --bg: #F3F1EA;
   --bg-2: #ECE8DE;
   --panel: rgba(255, 253, 248, 0.86);

@@ -44,6 +44,8 @@
   --thumb-ring: #2a2410;
   --font: 'Inter Variable', Inter, system-ui, -apple-system, sans-serif;
   --serif: 'Cormorant Garamond', Georgia, serif;
+  /* native controls (scrollbars, select menus) follow the ground — Paper resets it */
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -1802,6 +1804,12 @@ kbd {
 .report-foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #E8E4D8; color: #667080; font-size: 10.5px; }
 
 @media print {
+  /* the app is a full-height, overflow-clipped flex shell (fixed on phones): left as it is,
+     the report printed only its first page on phones and sat under a blank band where the
+     hidden top bar still took space on desktop — print only the report, in normal flow */
+  html, body, #root { height: auto !important; overflow: visible !important; background: #fff !important; }
+  .app, .m-app { position: static !important; display: block !important; height: auto !important; overflow: visible !important; }
+  .app > :not(.report-backdrop), .m-app > :not(.report-backdrop) { display: none !important; }
   body * { visibility: hidden; }
   .report-page, .report-page * { visibility: visible; }
   .report-backdrop { position: static; padding: 0; background: #fff; overflow: visible; }
