@@ -1,4 +1,5 @@
 import type { BgState, ProjectFile } from './types'
+import { uid } from './uid'
 
 export interface ProjectRecord {
   id: string
@@ -157,7 +158,7 @@ export const listPresets = () =>
   )
 
 export function newProjectId(): string {
-  return (crypto as any).randomUUID ? crypto.randomUUID() : `pj${Math.floor(performance.now() * 1000)}`
+  return uid('pj')
 }
 
 /** Ask the browser not to evict our storage under pressure (best effort). */

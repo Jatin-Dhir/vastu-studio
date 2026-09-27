@@ -17,6 +17,7 @@ import { hasPdfOpen } from '../importers/pdfState'
 import { useSettled } from '../canvas/gesture'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
+import { uid } from '../uid'
 
 const WALL_COLORS = ['#C9C6BC', '#FFFFFF', '#4A4A4A', '#8FA3B3', '#C98B6B', '#B7C9A8']
 const WALL_COLOR_NAMES: Record<string, string> = {
@@ -443,7 +444,7 @@ export function RightPanel() {
     const cs = useStore.getState().compass
     if (!cs.customUrl) return
     try {
-      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `cp${Math.floor(performance.now() * 1000)}`
+      const id = uid('cp')
       await putPreset({ id, name: `My chakra ${presets.length + 1}`, dataUrl: cs.customUrl, aspect: cs.customAspect ?? 1, createdAt: Date.now() })
       setPresets(await listPresets())
       useStore.getState().toast('Saved — it now lives in your compass picker on this device', 'ok')

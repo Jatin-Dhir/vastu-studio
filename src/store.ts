@@ -4,6 +4,7 @@ import type { AuthSnapshot } from './auth/types'
 import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, ProjectFile, ReportMeta, RoomShape, RoomShapeKind, ScaleSource, Stroke, TextNote, Tool, Unit, ViewState } from './types'
 import type { DetectedRoom } from './roomDetect'
 import { markerKindMeta } from './vastu'
+import { uid } from './uid'
 
 /** Every coordinate that enters the store must be a real number: one NaN point (a zero-
  *  distance pinch once made them) crashes the placement lookups and autosaves itself. */
@@ -372,7 +373,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     addText: (p, color, size) => {
       if (!finitePt(p)) return ''
       push()
-      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `tx${Math.floor(performance.now() * 1000)}`
+      const id = uid('tx')
       set((s) => ({
         texts: [...s.texts, { id, p, text: '', color, size }],
         selectedText: id,
@@ -633,7 +634,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       push()
       const s = get()
       const meta = s.markerKind
-      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `mk${Math.floor(performance.now() * 1000)}`
+      const id = uid('mk')
       const count = s.markers.filter((m) => m.kind === meta).length
       // the kind's own name ("Air conditioner"), never its internal id ("Ac")
       const base = markerKindMeta(meta).name
@@ -675,7 +676,7 @@ export const useStore = create<VastuStore>()((set, get) => {
       push()
       const s = get()
       const kind = s.roomShapeKind
-      const id = (crypto as any).randomUUID ? crypto.randomUUID() : `rm${Math.floor(performance.now() * 1000)}`
+      const id = uid('rm')
       const count = s.roomShapes.filter((r) => r.kind === kind).length
       const base = markerKindMeta(kind).name
       const room: RoomShape = { id, kind, shape, label: count > 0 ? `${base} ${count + 1}` : base, pts }

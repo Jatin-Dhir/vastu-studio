@@ -10,6 +10,7 @@ import { setGestureBusy } from './gesture'
 import { at } from './svgText'
 import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
+import { uid } from '../uid'
 
 /** Finger-sized targets and slop while the last press was a finger. It starts from the primary
  *  pointer, then follows the pointer actually in use: a Windows touch laptop, a Surface with its
@@ -884,7 +885,7 @@ export function CanvasStage() {
       for (let i = 1; i < arr.length; i++) total += dist(arr[i - 1], arr[i])
       if (arr.length >= 2 && total > 4 / k2) {
         s0.addStroke({
-          id: (crypto as any).randomUUID ? crypto.randomUUID() : `st${Math.floor(performance.now() * 1000)}`,
+          id: uid('st'),
           kind: s0.drawMode as 'pen' | 'line' | 'arrow', // 'drawing' only arms for these three
           pts: s0.drawMode === 'pen' ? simplifyPath(arr, 0.4 / k2) : [arr[0], arr[arr.length - 1]],
           color: s0.drawMode === 'pen' ? s0.penColor : s0.lineColor,
@@ -904,7 +905,7 @@ export function CanvasStage() {
         if (Math.hypot(p2.x - p1.x, p2.y - p1.y) > 6 / k2) {
           haptic('light')
           s0.addStroke({
-            id: (crypto as any).randomUUID ? crypto.randomUUID() : `st${Math.floor(performance.now() * 1000)}`,
+            id: uid('st'),
             kind: s0.drawMode as 'rect' | 'ellipse',
             pts: [p1, p2],
             color: s0.lineColor,
