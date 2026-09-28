@@ -49,7 +49,7 @@ export function PlansScreen() {
       const n = await backupLibrary()
       if (!n) useStore.getState().toast('Nothing to back up yet', 'info')
     } catch {
-      useStore.getState().toast('The plans could not be read for a backup', 'warn')
+      useStore.getState().toast('Couldn’t read the plans for a backup. Reload the app and try again.', 'warn')
     } finally { setBackingUp(false) }
   }
 
@@ -126,7 +126,9 @@ export function PlansScreen() {
 
       {rows.length > 0 && (
         <section className="m-backup">
-          <button className="btn-ghost m-btn" disabled={backingUp} onClick={() => void backup()}>
+          {/* aria-disabled, not disabled, while it works: a natively disabled button drops the
+              focus it holds, and a keyboard user would land on the page, not back here */}
+          <button className="btn-ghost m-btn" aria-disabled={backingUp || undefined} onClick={() => { if (!backingUp) void backup() }}>
             <Archive size={16} /> {backingUp ? 'Preparing the backup…' : 'Back up all plans'}
           </button>
           <p>One file with every plan. Open it in the laptop app or on another phone to bring them all back.</p>

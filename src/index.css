@@ -65,6 +65,8 @@ body {
 }
 button { font-family: var(--font); color: inherit; background: none; border: none; cursor: pointer; padding: 0; }
 button:disabled { opacity: 0.38; cursor: default; }
+/* busy but still focusable (a control at work keeps the focus it holds) */
+button[aria-disabled='true'] { opacity: 0.6; cursor: progress; }
 input, select { font-family: var(--font); }
 /* iOS/Android emulate sticky :hover + a synthesized-click delay on tap — this
    removes both without touching the stage's own touch-action: none for gestures */

@@ -10,6 +10,9 @@ import { at } from './svgText'
 export const FONT = "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
 export const GOLD = '#D9B45B'
 const INKHALO = 'rgba(9,10,14,0.78)'
+/** The ground of the canvas's small tags (room names, the area): light text on it reads over
+ *  any drawing, light or dark, which a halo alone did not. */
+const TAG_INK = '#101116'
 /** Muted gold-brown — the design system's secondary-line ink (design language spec). */
 const MUTED = '#8C7642'
 /** Gate verdict colours, the same ladder as every other verdict in the app: auspicious green
@@ -873,7 +876,7 @@ function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
             })}
             {pick && <g transform={vr ? `rotate(${-vr} ${ax} ${ay})` : undefined}>
               <rect x={ax - tagW / 2} y={ay - tagH / 2} width={tagW} height={tagH} rx={4.5 / k}
-                fill="#101116" fillOpacity={0.8} stroke={meta.color} strokeWidth={(on ? 1.6 : 1.1) / k} />
+                fill={TAG_INK} fillOpacity={0.8} stroke={meta.color} strokeWidth={(on ? 1.6 : 1.1) / k} />
               <text {...at(ax, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
                 fill="#F5EFDD" textAnchor="middle" dominantBaseline="central">
                 {r.label}
@@ -1001,7 +1004,7 @@ function CenterMarker(props: {
         const ay = c.y + 28 / k
         return (
           <g transform={vr ? `rotate(${-vr} ${c.x} ${ay})` : undefined}>
-            <rect x={c.x - w / 2} y={ay - h / 2} width={w} height={h} rx={5 / k} fill="#101116" fillOpacity={0.72} />
+            <rect x={c.x - w / 2} y={ay - h / 2} width={w} height={h} rx={5 / k} fill={TAG_INK} fillOpacity={0.72} />
             <text {...at(c.x, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
               fill="#F3E9CF" textAnchor="middle" dominantBaseline="central">
               {areaText}

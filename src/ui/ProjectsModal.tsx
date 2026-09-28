@@ -190,7 +190,9 @@ export function ProjectsModal() {
       </div>
       <div className="proj-foot">
         <p className="zone-note">Projects are kept on this device. Back up all puts every one in a single .vastu file; open it on any device to bring them back.</p>
-        <button className="btn-ghost" disabled={!rows.length || backingUp} onClick={() => void backup()}>
+        {/* busy is aria-disabled, so the button keeps focus while it works; empty is truly disabled */}
+        <button className="btn-ghost" disabled={!rows.length} aria-disabled={backingUp || undefined}
+          onClick={() => { if (!backingUp) void backup() }}>
           <Archive size={14} /> {backingUp ? 'Backing up…' : `Back up all${rows.length ? ` (${rows.length})` : ''}`}
         </button>
       </div>
