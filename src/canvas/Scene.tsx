@@ -28,6 +28,72 @@ function farthestFrom(c: Pt, pts: Pt[]): number {
   return m
 }
 
+/** The room a label takes on the plan, as a capsule (a segment with a radius) in world units:
+ *  what a movable label has to stay clear of. A point's circle is a capsule with a = b. */
+export interface Keepout { a: Pt; b: Pt; r: number }
+
+function distToSegment(p: Pt, a: Pt, b: Pt): number {
+  const dx = b.x - a.x, dy = b.y - a.y
+  const L2 = dx * dx + dy * dy
+  const t = L2 > 0 ? Math.max(0, Math.min(1, ((p.x - a.x) * dx + (p.y - a.y) * dy) / L2)) : 0
+  return Math.hypot(p.x - (a.x + t * dx), p.y - (a.y + t * dy))
+}
+
+function segmentsCross(p1: Pt, p2: Pt, q1: Pt, q2: Pt): boolean {
+  const o = (a: Pt, b: Pt, c: Pt) => Math.sign((b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x))
+  return o(p1, p2, q1) !== o(p1, p2, q2) && o(q1, q2, p1) !== o(q1, q2, p2)
+}
+
+function capsulesMeet(a: Keepout, b: Keepout): boolean {
+  if (segmentsCross(a.a, a.b, b.a, b.b)) return true
+  const d = Math.min(
+    distToSegment(a.a, b.a, b.b), distToSegment(a.b, b.a, b.b),
+    distToSegment(b.a, a.a, a.b), distToSegment(b.b, a.a, a.b),
+  )
+  return d < a.r + b.r
+}
+
+/** Advance width of Inter at 600–800: 0.6 em a character is within a few percent for the
+ *  capitals, digits and foot/inch marks these labels carry. */
+const textW = (text: string, size: number) => text.length * 0.6 * size
+
+/** A label kept screen-upright (turned by -vr) and centred on p, as a capsule. */
+function uprightCapsule(p: Pt, w: number, h: number, vr: number): Keepout {
+  const rad = (-vr * Math.PI) / 180
+  const half = Math.max(0, w / 2 - h / 2)
+  const ux = Math.cos(rad) * half, uy = Math.sin(rad) * half
+  return { a: { x: p.x - ux, y: p.y - uy }, b: { x: p.x + ux, y: p.y + uy }, r: h / 2 }
+}
+
+/** The 16-zone ring's lettering size, or null when that tier stays hidden. A tier appears once
+ *  its ring has room for it and is never drawn below a readable size: the diagonals used to
+ *  come in at 4.8 px and the rest at 7 px. Shared with the keep-outs so they match what shows. */
+function zoneLabelSize(i: number, R: number, k: number): number | null {
+  const cardinal = i % 4 === 0
+  const diagonal = i % 4 === 2
+  const ringPx = R * k
+  if (!cardinal && !diagonal && ringPx < 167) return null
+  if (diagonal && ringPx < 114) return null
+  return cardinal ? Math.min(Math.max(R * 0.062, 9.5 / k), R * 0.11) : Math.max(R * 0.042, 9 / k)
+}
+
+/** Below this on-screen radius the Brahmasthan circle speaks for itself: its label would only
+ *  crowd the plot's centre, where the area and the nearest room names already sit. */
+const BRAHMA_LABEL_MIN_PX = 50
+
+/** Where the Brahmasthan label sits: above its circle, or below it when a marker or its caption
+ *  is in the way above and the space below is clear (it used to run under the Pooja marker). */
+function brahmaLabelY(c: Pt, brahmaR: number, k: number, avoid: Pt[]): number {
+  const half = textW('Brahmasthan', 10.5 / k) / 2
+  const blocked = (y: number) => avoid.some((p) => Math.abs(p.x - c.x) < half + 14 / k && Math.abs(p.y - y) < 17 / k)
+  const above = c.y - brahmaR - 9 / k
+  const below = c.y + brahmaR + 19 / k
+  return blocked(above - 4 / k) && !blocked(below - 4 / k) ? below : above
+}
+
+/** Gate names are sized to their pada; the longest decides when every one can be read. */
+const LONGEST_DEVTA = Math.max(...GATES32.map((g) => g.devta.length))
+
 /** Perceived luminance of a hex color (0 = black, 1 = white) — used to balance fill alpha
  *  across hues so light colours don't glow and dark ones don't sink at one flat opacity. */
 function relLuminance(hex: string): number {
@@ -302,6 +368,8 @@ function Outline(props: {
   pts: Pt[]; bulges: number[]; closed: boolean; k: number; metersPerPx: number | null; unit: Unit
   showEdgeLabels: boolean; center: Pt | null; vr?: number
   wallColor?: string; wallWidthM?: number; wallOpacity?: number
+  /** labels that outrank the wall lengths: the wheel's letters, markers and their captions */
+  keepouts?: Keepout[]
 }) {
   const {
     pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center, vr = 0,
@@ -333,29 +401,51 @@ function Outline(props: {
         strokeLinejoin="round" strokeLinecap="round" />
       <path d={d} fill="none" stroke={wallColor} strokeWidth={Math.max(1.2 / k, wallW - 2.6 / k)}
         strokeLinejoin="round" strokeLinecap="round" />
-      {showEdgeLabels && metersPerPx && edges.map(([a, b, bu], i) => {
-        const L = edgeLength(a, b, bu)
-        if (L * k < 46) return null
-        const chordL = Math.hypot(b.x - a.x, b.y - a.y) || 1
-        const mid = edgePoint(a, b, bu, 0.5) // tangent at the arc midpoint is parallel to the chord
-        let rot = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
-        const screenRot = ((rot + vr) % 360 + 360) % 360
-        if (screenRot > 90 && screenRot < 270) rot += 180
-        let nx = (b.y - a.y) / chordL, ny = -(b.x - a.x) / chordL
-        if (center) {
-          const toC = { x: center.x - mid.x, y: center.y - mid.y }
-          if (nx * toC.x + ny * toC.y > 0) { nx = -nx; ny = -ny }
-        }
-        const off = wallW / 2 + 9 / k
-        const p = { x: mid.x + nx * off, y: mid.y + ny * off }
-        return (
-          <text key={i} {...at(p.x, p.y, rot, 11.5 / k)} fontSize={11.5 / k} fontWeight={600} fontFamily={FONT}
-            fill="#F3E9CF" textAnchor="middle" dominantBaseline="central"
-            {...haloProps(3 / k)}>
-            {formatLen(L * metersPerPx, unit)}
-          </text>
-        )
-      })}
+      {showEdgeLabels && metersPerPx && (() => {
+        // a length makes way for what matters more (the wheel's letters, markers and their
+        // captions, the lengths already placed): it slides along its own wall to a free
+        // stretch, and stays off the plan at this zoom when there is none. They used to sit
+        // on the "W", under a door's gate code, into "Bore well".
+        const taken: Keepout[] = [...(props.keepouts ?? [])]
+        const size = 11.5 / k
+        return edges.map(([a, b, bu], i) => {
+          const L = edgeLength(a, b, bu)
+          if (L * k < 46) return null
+          const text = formatLen(L * metersPerPx, unit)
+          const half = textW(text, size) / 2
+          const chordL = Math.hypot(b.x - a.x, b.y - a.y) || 1
+          const ux = (b.x - a.x) / chordL, uy = (b.y - a.y) / chordL
+          let rot = (Math.atan2(b.y - a.y, b.x - a.x) * 180) / Math.PI
+          const screenRot = ((rot + vr) % 360 + 360) % 360
+          if (screenRot > 90 && screenRot < 270) rot += 180
+          let nx = uy, ny = -ux
+          const mid = edgePoint(a, b, bu, 0.5) // tangent at the arc midpoint is parallel to the chord
+          if (center) {
+            const toC = { x: center.x - mid.x, y: center.y - mid.y }
+            if (nx * toC.x + ny * toC.y > 0) { nx = -nx; ny = -ny }
+          }
+          const off = wallW / 2 + 9 / k
+          const reach = Math.max(0, half - size / 2)
+          // a curved wall keeps its label at the arc's middle, the one place the chord's angle is true
+          const ts = Math.abs(bu) < 0.02 ? [0.5, 0.36, 0.64, 0.23, 0.77] : [0.5]
+          for (const t of ts) {
+            if (t !== 0.5 && (t * L < half + 6 / k || (1 - t) * L < half + 6 / k)) continue
+            const m = t === 0.5 ? mid : edgePoint(a, b, bu, t)
+            const p = { x: m.x + nx * off, y: m.y + ny * off }
+            const cap: Keepout = { a: { x: p.x - ux * reach, y: p.y - uy * reach }, b: { x: p.x + ux * reach, y: p.y + uy * reach }, r: size * 0.55 }
+            if (taken.some((q) => capsulesMeet(cap, q))) continue
+            taken.push(cap)
+            return (
+              <text key={i} {...at(p.x, p.y, rot, size)} fontSize={size} fontWeight={600} fontFamily={FONT}
+                fill="#F3E9CF" textAnchor="middle" dominantBaseline="central"
+                {...haloProps(3 / k)}>
+                {text}
+              </text>
+            )
+          }
+          return null
+        })
+      })()}
     </g>
   )
 }
@@ -371,9 +461,27 @@ interface ChakraProps {
   baseR: number
   /** light paper ground (PNG export) — the white banding ink flips dark */
   paper?: boolean
+  /** 'body' draws the wheel itself, beneath the walls; 'labels' only its lettering, above them.
+   *  Lettering drawn under the walls was cut by them ("WSW" read "WS"). */
+  part?: 'body' | 'labels'
 }
 
-function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number }) {
+function DegreeTicks({ c, R, north, numbers, k, vr = 0, part = 'body' }: {
+  c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number; part?: 'body' | 'labels'
+}) {
+  if (part === 'labels') {
+    if (!numbers) return null
+    // held to a readable size; the tier only opens once the ring has room for seven of them
+    const size = Math.max(R * 0.032, 9.5 / k)
+    return (
+      <g>
+        {[45, 90, 135, 180, 225, 270, 315].map((d) => (
+          <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={size}
+            text={`${d}°`} fill="#CBD2DF" weight={600} opacity={0.92} halo={size * 0.26} vr={vr} />
+        ))}
+      </g>
+    )
+  }
   const px = R * k
   // the lattice follows Vastu's own sector geometry (45/22.5/11.25°) instead of a generic
   // 5/10/30 protractor, and coarsens at low zoom so minor ticks never alias into sub-pixel fuzz
@@ -398,18 +506,29 @@ function DegreeTicks({ c, R, north, numbers, k, vr = 0 }: { c: Pt; R: number; no
         stroke={ink} strokeWidth={w / k} opacity={op} />,
     )
   }
-  return (
-    <g>
-      {ticks}
-      {numbers && [45, 90, 135, 180, 225, 270, 315].map((d) => (
-        <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={R * 0.032}
-          text={`${d}°`} fill="#CBD2DF" weight={500} opacity={0.9} halo={R * 0.008} vr={vr} />
-      ))}
-    </g>
-  )
+  return <g>{ticks}</g>
 }
 
-function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: ChakraProps) {
+function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, part = 'body' }: ChakraProps) {
+  if (part === 'labels') {
+    return (
+      <g>
+        {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 300} k={k} vr={vr} part="labels" />}
+        {compass.labels && ZONES16.map((z, i) => {
+          const size = zoneLabelSize(i, R, k)
+          if (size == null) return null
+          const cardinal = i % 4 === 0
+          return (
+            <RingLabel key={z.key} c={c} deg={north + i * 22.5} r={R * 1.065}
+              size={size}
+              text={z.key} weight={cardinal ? 800 : 600}
+              fill={i === 0 ? '#F26B57' : cardinal ? '#F5EBD3' : '#D8DCE6'}
+              halo={size * 0.28} spacing={R * 0.004} vr={vr} upright={cardinal} />
+          )
+        })}
+      </g>
+    )
+  }
   const clip = compass.clip && closed && pts.length >= 3
   const clipId = `${idPrefix}-plotclip`
   // clipped fills must reach every corner of the plot regardless of the Size slider — the
@@ -451,32 +570,51 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR }: 
       })}
       <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={R * 1.001} fill="none" stroke="#FFF6DF" strokeWidth={0.5 / k} opacity={0.4} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 260} k={k} vr={vr} />}
+      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
       <NorthNeedle c={c} R={R} north={north} k={k} />
-      {compass.labels && ZONES16.map((z, i) => {
-        const mid = north + i * 22.5
-        const cardinal = i % 4 === 0
-        const diagonal = i % 4 === 2
-        // zoom-aware disclosure: cardinals always (readable floor), the rest earn their place
-        const tierPx = R * 0.042 * k
-        if (!cardinal && !diagonal && tierPx < 7) return null
-        if (!cardinal && diagonal && tierPx < 4.8) return null
-        const size = cardinal
-          ? Math.min(Math.max(R * 0.062, 9.5 / k), R * 0.11)
-          : R * 0.042
-        return (
-          <RingLabel key={z.key} c={c} deg={mid} r={R * 1.065}
-            size={size}
-            text={z.key} weight={cardinal ? 800 : 600}
-            fill={i === 0 ? '#F26B57' : cardinal ? '#F5EBD3' : '#D8DCE6'}
-            halo={size * 0.28} spacing={R * 0.004} vr={vr} upright={cardinal} />
-        )
-      })}
     </g>
   )
 }
 
-function Gates32({ c, R, north, compass, k, vr, paper }: ChakraProps) {
+function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProps) {
+  if (part === 'labels') {
+    if (!compass.labels) return null
+    // names once the longest of them reads at 8 px or more; below that the codes alone, held
+    // at 8.5 px, while the ring still has room for all 32 (they used to go down to 5 px)
+    const nameFloorPx = Math.min(R * 0.033, (R * 0.16) / (LONGEST_DEVTA * 0.58)) * k
+    const codeSize = Math.max(R * 0.03, 8.5 / k)
+    return (
+      <g>
+        {nameFloorPx >= 8 && GATES32.map((g, i) => {
+          const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
+          // stagger radii even/odd and trim the width budget so neighbouring long names
+          // (Papayakshma, Bhringaraja…) stop nearly touching across the pada boundary
+          const stagger = i % 2 === 0 ? 0.955 : 0.9
+          const nameSize = Math.min(R * 0.033, (R * 0.16) / (g.devta.length * 0.58))
+          return (
+            <Fragment key={g.code}>
+              <RingLabel c={c} deg={mid} r={R * stagger} size={nameSize} text={g.devta}
+                fill="#EFE7D2" weight={600} halo={R * 0.01} vr={vr} />
+              <RingLabel c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
+                fill="#B8A26B" weight={700} spacing={R * 0.002} halo={R * 0.008} vr={vr} />
+            </Fragment>
+          )
+        })}
+        {nameFloorPx < 8 && R * k >= 150 && GATES32.map((g, i) => {
+          const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
+          return (
+            <RingLabel key={g.code} c={c} deg={mid} r={R * 0.9} size={codeSize} text={g.code}
+              fill="#D9CCA6" weight={700} halo={codeSize * 0.26} vr={vr} />
+          )
+        })}
+        {['N', 'E', 'S', 'W'].map((t, i) => (
+          <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07}
+            size={Math.min(Math.max(R * 0.055, 10 / k), R * 0.1)}
+            text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.014} vr={vr} upright />
+        ))}
+      </g>
+    )
+  }
   const r0 = R * 0.8
   return (
     <g>
@@ -515,40 +653,11 @@ function Gates32({ c, R, north, compass, k, vr, paper }: ChakraProps) {
       <CasedCircle cx={c.x} cy={c.y} r={r0} k={k} width={1 / k} opacity={0.55} />
       {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
       <NorthNeedle c={c} R={R} north={north} k={k} />
-      {compass.labels && R * 0.033 * k >= 6.2 && GATES32.map((g, i) => {
-        const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
-        // stagger radii even/odd and trim the width budget so neighbouring long names
-        // (Papayakshma, Bhringaraja…) stop nearly touching across the pada boundary
-        const stagger = i % 2 === 0 ? 0.955 : 0.9
-        const nameSize = Math.min(R * 0.033, (R * 0.16) / (g.devta.length * 0.58))
-        return (
-          <Fragment key={g.code}>
-            <RingLabel c={c} deg={mid} r={R * stagger} size={nameSize} text={g.devta}
-              fill="#EFE7D2" weight={600} halo={R * 0.01} vr={vr} />
-            <RingLabel c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
-              fill="#B8A26B" weight={700} spacing={R * 0.002} halo={R * 0.008} vr={vr} />
-          </Fragment>
-        )
-      })}
-      {compass.labels && GATES32.length > 0 && R * 0.033 * k < 6.2 && GATES32.map((g, i) => {
-        // too small for names — codes only, on the mid ring, when they can still be read
-        if (R * 0.03 * k < 5) return null
-        const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
-        return (
-          <RingLabel key={g.code} c={c} deg={mid} r={R * 0.9} size={R * 0.03} text={g.code}
-            fill="#D9CCA6" weight={700} halo={R * 0.008} vr={vr} />
-        )
-      })}
-      {compass.labels && ['N', 'E', 'S', 'W'].map((t, i) => (
-        <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07}
-          size={Math.min(Math.max(R * 0.055, 10 / k), R * 0.1)}
-          text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.014} vr={vr} upright />
-      ))}
     </g>
   )
 }
 
-function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
+function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: ChakraProps) {
   const frame = useMemo(() => {
     if (!closed || pts.length < 3) return null
     const rad = (-north * Math.PI) / 180
@@ -573,24 +682,26 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
   // screen-upright, the same result RingLabel's own flip logic gets for the ring compasses.
   const upr = -(north + vr)
 
-  const cells = []
+  const cellRects = []
+  const cellNames = []
   for (let row = 0; row < 9; row++) {
     for (let col = 0; col < 9; col++) {
       const name = mandalaCellName(row, col)
       const x = minX + col * cw, y = minY + row * ch
       const isBrahma = row >= 3 && row <= 5 && col >= 3 && col <= 5
       if (isBrahma) {
-        cells.push(<rect key={`f${row}-${col}`} x={x} y={y} width={cw} height={ch}
+        cellRects.push(<rect key={`f${row}-${col}`} x={x} y={y} width={cw} height={ch}
           fill={GOLD} fillOpacity={0.07} />)
       } else if (name) {
-        cells.push(<rect key={`f${row}-${col}`} x={x} y={y} width={cw} height={ch}
+        cellRects.push(<rect key={`f${row}-${col}`} x={x} y={y} width={cw} height={ch}
           fill={paper ? '#14151A' : '#FFFFFF'} fillOpacity={0.028} />)
       }
       if (name && compass.devtas) {
         const size = Math.min(Math.min(cw, ch) * 0.24, (cw * 0.9) / (name.length * 0.56))
-        if (size * k < 5.5) continue
+        // below 8 px a name is a smudge, not a word
+        if (size * k < 8) continue
         const tx = x + cw / 2, ty = y + ch / 2
-        cells.push(
+        cellNames.push(
           <text key={`n${row}-${col}`} {...at(tx, ty, upr, size)}
             fontSize={size} fontFamily={FONT} fontWeight={600} fill="#EDE4CC"
             textAnchor="middle" dominantBaseline="central" opacity={0.92}
@@ -606,6 +717,7 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
     const size = big
       ? Math.min(cw, ch) * 0.5
       : Math.min(Math.min(cw, ch) * 0.26, (cw * 1.9) / (text.length * 0.56))
+    if (!big && size * k < 8) return null
     const tx = minX + colC * cw, ty = minY + rowC * ch
     return (
       <text {...at(tx, ty, upr, size)} fontSize={size} fontFamily={FONT}
@@ -614,6 +726,40 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
         {...haloProps(size * 0.2)}>
         {text}
       </text>
+    )
+  }
+
+  // north needle above the frame's top edge — no counter-rotation, since its whole job
+  // is to point at north, tracking the frame's own rotation exactly as Dial's needle does
+  const nx = (minX + maxX) / 2
+  const needleD = `M${nx} ${minY - ch * 0.95} L${nx + cw * 0.1} ${minY - ch * 0.58} L${nx - cw * 0.1} ${minY - ch * 0.58} Z`
+
+  if (part === 'labels') {
+    return (
+      <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+        {cellNames}
+        {compass.devtas && (
+          <g>
+            {innerLabel(MANDALA_INNER.center, 4.5, 4.5, true)}
+            {innerLabel(MANDALA_INNER.n, 4.5, 2)}
+            {innerLabel(MANDALA_INNER.e, 7, 4.5)}
+            {innerLabel(MANDALA_INNER.s, 4.5, 7)}
+            {innerLabel(MANDALA_INNER.w, 2, 4.5)}
+            {innerLabel(MANDALA_INNER.ne, 7, 2)}
+            {innerLabel(MANDALA_INNER.se, 7, 7)}
+            {innerLabel(MANDALA_INNER.sw, 2, 7)}
+            {innerLabel(MANDALA_INNER.nw, 2, 2)}
+          </g>
+        )}
+        {compass.labels && (
+          <text {...at(nx, minY - ch * 0.35, upr, Math.min(cw, ch) * 0.42)} fontSize={Math.min(cw, ch) * 0.42}
+            fontFamily={FONT} fontWeight={800} fill="#F26B57" textAnchor="middle"
+            dominantBaseline="central"
+            {...haloProps(Math.min(cw, ch) * 0.09)}>
+            N
+          </text>
+        )}
+      </g>
     )
   }
 
@@ -626,48 +772,22 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper }: ChakraProps) {
       stroke={GOLD} strokeWidth={(strong ? 1.5 : 0.7) / k} opacity={strong ? 0.8 : 0.45} />)
   }
 
-  // north needle above the frame's top edge — no counter-rotation, since its whole job
-  // is to point at north, tracking the frame's own rotation exactly as Dial's needle does
-  const nx = (minX + maxX) / 2
-  const needleD = `M${nx} ${minY - ch * 0.95} L${nx + cw * 0.1} ${minY - ch * 0.58} L${nx - cw * 0.1} ${minY - ch * 0.58} Z`
-
   return (
     <g transform={`rotate(${north} ${c.x} ${c.y})`}>
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
         fill="none" stroke={INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
         fill="none" stroke={GOLD} strokeWidth={2 / k} opacity={0.9} />
-      {cells}
+      {cellRects}
       {lines}
-      {compass.devtas && (
-        <g>
-          {innerLabel(MANDALA_INNER.center, 4.5, 4.5, true)}
-          {innerLabel(MANDALA_INNER.n, 4.5, 2)}
-          {innerLabel(MANDALA_INNER.e, 7, 4.5)}
-          {innerLabel(MANDALA_INNER.s, 4.5, 7)}
-          {innerLabel(MANDALA_INNER.w, 2, 4.5)}
-          {innerLabel(MANDALA_INNER.ne, 7, 2)}
-          {innerLabel(MANDALA_INNER.se, 7, 7)}
-          {innerLabel(MANDALA_INNER.sw, 2, 7)}
-          {innerLabel(MANDALA_INNER.nw, 2, 2)}
-        </g>
-      )}
       <path d={needleD} fill="#F26B57" stroke={INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
       <path d={needleD} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
-      {compass.labels && (
-        <text {...at(nx, minY - ch * 0.35, upr, Math.min(cw, ch) * 0.42)} fontSize={Math.min(cw, ch) * 0.42}
-          fontFamily={FONT} fontWeight={800} fill="#F26B57" textAnchor="middle"
-          dominantBaseline="central"
-          {...haloProps(Math.min(cw, ch) * 0.09)}>
-          N
-        </text>
-      )}
     </g>
   )
 }
 
-function CustomOverlay({ c, R, north, compass }: ChakraProps) {
-  if (!compass.customUrl) return null
+function CustomOverlay({ c, R, north, compass, part = 'body' }: ChakraProps) {
+  if (part === 'labels' || !compass.customUrl) return null
   const aspect = compass.customAspect ?? 1
   let w = 2 * R, h = 2 * R * aspect
   if (h > 2 * R) { h = 2 * R; w = h / aspect }
@@ -685,10 +805,13 @@ function CustomOverlay({ c, R, north, compass }: ChakraProps) {
 
 /** Drawn room/area outlines — rect, ellipse, or polygon. Same MarkerKind vocabulary
  *  and colour as point markers, so a room and a pin of the same kind read as one system. */
-function RoomShapesLayer({ shapes, selected, k, vr }: {
+function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
   shapes: RoomShape[]; selected?: string | null; k: number; vr: number
+  /** markers, captions and the centre's labels, which a tag must not sit on */
+  keepouts?: Keepout[]
 }) {
   if (shapes.length === 0) return null
+  const taken: Keepout[] = [...(keepouts ?? [])]
   return (
     <g>
       {shapes.map((r) => {
@@ -698,10 +821,13 @@ function RoomShapesLayer({ shapes, selected, k, vr }: {
         if (!p1 || !p2) return null
         let shapeEl: React.ReactElement<React.SVGProps<SVGElement>>
         let cx: number, cy: number
+        // the box a corner tag may sit in (an ellipse's inscribed rectangle)
+        let box: { x: number; y: number; w: number; h: number } | null = null
         if (r.shape === 'ellipse') {
           cx = (p1.x + p2.x) / 2; cy = (p1.y + p2.y) / 2
           const rx = Math.abs(p2.x - p1.x) / 2, ry = Math.abs(p2.y - p1.y) / 2
           shapeEl = <ellipse cx={cx} cy={cy} rx={rx} ry={ry} />
+          box = { x: cx - rx * 0.7071, y: cy - ry * 0.7071, w: rx * 1.4142, h: ry * 1.4142 }
         } else if (r.shape === 'polygon' && r.pts.length >= 3) {
           const xs = r.pts.map((p) => p.x), ys = r.pts.map((p) => p.y)
           cx = (Math.min(...xs) + Math.max(...xs)) / 2
@@ -713,7 +839,27 @@ function RoomShapesLayer({ shapes, selected, k, vr }: {
           const w = Math.abs(p2.x - p1.x), h = Math.abs(p2.y - p1.y)
           cx = x + w / 2; cy = y + h / 2
           shapeEl = <rect x={x} y={y} width={w} height={h} rx={Math.min(6 / k, w / 4, h / 4)} />
+          box = { x, y, w, h }
         }
+        // the name as a small tag in the room's top-left corner, clear of the drawing's own room
+        // name, which plans print at the centre (the two used to garble into "L[Living]G"); a
+        // room too small for that, a polygon, or a turned view keeps the tag at the centre
+        const size = 10 / k
+        const tagW = textW(r.label, size) + 12 / k, tagH = 17 / k
+        const turned = Math.abs((((vr % 360) + 540) % 360) - 180) > 0.5
+        const spots: Pt[] = []
+        if (!turned && box && box.w * k >= tagW * k + 26 && box.h * k >= 50) {
+          const inX = 9 / k + tagW / 2, inY = 9 / k + tagH / 2
+          spots.push(
+            { x: box.x + inX, y: box.y + inY }, { x: box.x + box.w - inX, y: box.y + inY },
+            { x: box.x + inX, y: box.y + box.h - inY }, { x: box.x + box.w - inX, y: box.y + box.h - inY },
+          )
+        }
+        spots.push({ x: cx, y: cy })
+        // the first corner clear of the markers, the centre's labels and the tags already placed
+        const pick = spots.find((p) => !taken.some((q) => capsulesMeet(uprightCapsule(p, tagW, tagH, vr), q))) ?? spots[0]
+        taken.push(uprightCapsule(pick, tagW, tagH, vr))
+        const ax = pick.x, ay = pick.y
         return (
           <g key={r.id}>
             {cloneElement(shapeEl, { fill: meta.color, fillOpacity: on ? 0.28 : 0.16 })}
@@ -722,11 +868,14 @@ function RoomShapesLayer({ shapes, selected, k, vr }: {
               fill: 'none', stroke: meta.color, strokeWidth: (on ? 2.6 : 1.8) / k,
               strokeDasharray: on ? undefined : `${9 / k} ${5 / k}`, opacity: 0.95,
             })}
-            <text {...at(cx, cy, -vr, 10.5 / k)} fontSize={10.5 / k} fontFamily={FONT} fontWeight={700}
-              fill="#F5EFDD" textAnchor="middle" dominantBaseline="central"
-              {...haloProps(3 / k)}>
-              {r.label}
-            </text>
+            <g transform={vr ? `rotate(${-vr} ${ax} ${ay})` : undefined}>
+              <rect x={ax - tagW / 2} y={ay - tagH / 2} width={tagW} height={tagH} rx={4.5 / k}
+                fill="#101116" fillOpacity={0.8} stroke={meta.color} strokeWidth={(on ? 1.6 : 1.1) / k} />
+              <text {...at(ax, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
+                fill="#F5EFDD" textAnchor="middle" dominantBaseline="central">
+                {r.label}
+              </text>
+            </g>
           </g>
         )
       })}
@@ -800,8 +949,11 @@ function MarkersLayer(props: {
 function CenterMarker(props: {
   c: Pt; brahmaR: number; k: number; brahmasthan: boolean; closed: boolean
   areaText: string | null; overridden: boolean; vr?: number; north: number
+  /** markers and their captions: the Brahmasthan label steps below its circle to clear them */
+  avoid?: Pt[]
 }) {
   const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
+  const bY = brahmaLabelY(c, brahmaR, k, props.avoid ?? [])
   return (
     <g>
       {closed && brahmasthan && brahmaR > 0 && (
@@ -814,11 +966,11 @@ function CenterMarker(props: {
             fill="none" stroke={INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
           <circle cx={c.x} cy={c.y} r={brahmaR}
             fill="none" stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
-          <text {...at(c.x, c.y - brahmaR - 9 / k, -vr, 10.5 / k)} fontSize={10.5 / k} fontFamily={FONT}
+          {brahmaR * k >= BRAHMA_LABEL_MIN_PX && <text {...at(c.x, bY, -vr, 10.5 / k)} fontSize={10.5 / k} fontFamily={FONT}
             fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
             {...haloProps(2.8 / k)}>
             Brahmasthan
-          </text>
+          </text>}
         </g>
       )}
       <line x1={c.x - 15 / k} y1={c.y} x2={c.x + 15 / k} y2={c.y}
@@ -838,13 +990,22 @@ function CenterMarker(props: {
           centre pinned
         </text>
       )}
-      {areaText && (
-        <text {...at(c.x, c.y + 30 / k, -vr, 12.5 / k)} fontSize={12.5 / k} fontFamily={FONT} fontWeight={700}
-          fill="#F3E9CF" textAnchor="middle"
-          {...haloProps(3.4 / k)}>
-          {areaText}
-        </text>
-      )}
+      {areaText && (() => {
+        // on a dark tag: the area sits where the drawing's own walls and room names cross the
+        // centre, and a halo alone let "945 sq ft" run into them
+        const size = 12.5 / k
+        const w = textW(areaText, size) + 14 / k, h = 19 / k
+        const ay = c.y + 28 / k
+        return (
+          <g transform={vr ? `rotate(${-vr} ${c.x} ${ay})` : undefined}>
+            <rect x={c.x - w / 2} y={ay - h / 2} width={w} height={h} rx={5 / k} fill="#101116" fillOpacity={0.72} />
+            <text {...at(c.x, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
+              fill="#F3E9CF" textAnchor="middle" dominantBaseline="central">
+              {areaText}
+            </text>
+          </g>
+        )
+      })()}
     </g>
   )
 }
@@ -885,6 +1046,56 @@ export function Scene(props: SceneProps) {
   // compass is showing), falling back to the plot's own circumradius when no wheel is selected
   const tieR = chakraProps ? chakraProps.R : R
 
+  // what the wall lengths must stay clear of, in the order the eye needs them: the wheel's
+  // letters, then each marker, its caption and (for an entrance) its gate code
+  const keepouts: Keepout[] = []
+  if (drawn && !props.compassHidden && drawn.compass.labels) {
+    if (drawn.compass.id === 'zones16') {
+      ZONES16.forEach((z, i) => {
+        const size = zoneLabelSize(i, drawn.R, k)
+        if (size == null) return
+        const p = polar(drawn.c, drawn.north + i * 22.5, drawn.R * 1.065)
+        keepouts.push({ a: p, b: p, r: textW(z.key, size) / 2 + size * 0.3 })
+      })
+    } else if (drawn.compass.id === 'gates32') {
+      const size = Math.min(Math.max(drawn.R * 0.055, 10 / k), drawn.R * 0.1)
+      for (const d of [0, 90, 180, 270]) {
+        const p = polar(drawn.c, drawn.north + d, drawn.R * 1.07)
+        keepouts.push({ a: p, b: p, r: size * 0.8 })
+      }
+    }
+  }
+  const brahmaR = center ? brahmasthanRadius(sampled) * ((compass.brahmaPct ?? 100) / 100) : 0
+  const avoid: Pt[] = []
+  for (const m of props.markers ?? []) {
+    keepouts.push({ a: m.p, b: m.p, r: 12 / k })
+    const cap = { x: m.p.x, y: m.p.y + 16.5 / k }
+    keepouts.push(uprightCapsule(cap, textW(m.label, 9.5 / k), 12 / k, vr))
+    avoid.push(m.p, cap)
+    if (m.kind === 'entrance' && center && tieR > 0 && tieR * k > 100) {
+      const p = polar(center, northDeg + placementOf(m.p, center, northDeg).bearing, tieR + 14 / k)
+      keepouts.push({ a: p, b: p, r: 12 / k })
+    }
+  }
+  // what a room's tag must not sit on: all of the above, the wheel's degree numbers, and the
+  // centre cross with its labels
+  const tagKeepouts: Keepout[] = [...keepouts]
+  if (drawn && !props.compassHidden && drawn.compass.id === 'zones16' && drawn.compass.degreeRing && drawn.R * k > 300) {
+    const size = Math.max(drawn.R * 0.032, 9.5 / k)
+    for (const d of [45, 90, 135, 180, 225, 270, 315]) {
+      const p = polar(drawn.c, drawn.north + d, drawn.R * 0.905)
+      tagKeepouts.push({ a: p, b: p, r: textW(`${d}°`, size) / 2 + size * 0.2 })
+    }
+  }
+  if (center && pts.length >= 3) {
+    tagKeepouts.push({ a: center, b: center, r: 17 / k })
+    if (areaText) tagKeepouts.push(uprightCapsule({ x: center.x, y: center.y + 28 / k }, textW(areaText, 12.5 / k) + 14 / k, 19 / k, vr))
+    if (closed && compass.brahmasthan && brahmaR * k >= BRAHMA_LABEL_MIN_PX) {
+      const y = brahmaLabelY(center, brahmaR, k, avoid)
+      tagKeepouts.push(uprightCapsule({ x: center.x, y: y - 4 / k }, textW('Brahmasthan', 10.5 / k), 13 / k, vr))
+    }
+  }
+
   return (
     <g>
       <defs>
@@ -918,16 +1129,25 @@ export function Scene(props: SceneProps) {
       })()}
       <g id={`${idPrefix}-outline`}><Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr}
-        wallColor={props.wallColor} wallWidthM={props.wallWidthM} wallOpacity={props.wallOpacity} /></g>
+        wallColor={props.wallColor} wallWidthM={props.wallWidthM} wallOpacity={props.wallOpacity}
+        keepouts={keepouts} /></g>
+      {/* the wheel's lettering, above the walls that used to cut it */}
+      <g key={`${drawn?.compass.id ?? compass.id}-labels`} className="compass-enter" opacity={(drawn?.compass ?? compass).opacity}
+        display={props.compassHidden ? 'none' : undefined}>
+        {drawn && drawn.compass.id === 'zones16' && <Zones16Layer {...drawn} part="labels" />}
+        {drawn && drawn.compass.id === 'gates32' && <Gates32Layer {...drawn} part="labels" />}
+        {drawn && drawn.compass.id === 'grid9' && <Grid9Layer {...drawn} part="labels" />}
+      </g>
       <StrokesLayer strokes={props.strokes ?? []} />
       <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} />
-      <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} />
+      <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} keepouts={tagKeepouts} />
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}
-          brahmaR={brahmasthanRadius(sampled) * ((compass.brahmaPct ?? 100) / 100)}
+          brahmaR={brahmaR}
           k={k} brahmasthan={compass.brahmasthan}
-          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} north={northDeg} />
+          closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} north={northDeg}
+          avoid={avoid} />
       )}
     </g>
   )

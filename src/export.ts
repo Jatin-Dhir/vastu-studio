@@ -1,7 +1,6 @@
 import { createElement, type ReactElement } from 'react'
 import { createRoot } from 'react-dom/client'
 import { flushSync } from 'react-dom'
-import interWoff2Url from '@fontsource-variable/inter/files/inter-latin-wght-normal.woff2?url'
 import { Scene } from './canvas/Scene'
 import { importDxf } from './importers/dxf'
 import { centroid, circumradius, perimeter, polygonArea, sampledPolygon } from './geometry'
@@ -24,21 +23,28 @@ function svgMarkup(el: ReactElement): string {
   return out
 }
 
-let fontDataUrl: Promise<string> | null = null
-/** Inter as a data URL for the rasterised SVG (an SVG image cannot fetch its own fonts). It was
- *  inlined into the startup bundle (47 KB gz); now it is read once, at the first export, from
- *  the same file the page's own CSS already loaded. */
-function interFontDataUrl(): Promise<string> {
-  fontDataUrl ??= fetch(interWoff2Url)
-    .then((r) => r.blob())
+let fontFaces: Promise<string> | null = null
+/** Inter for the rasterised SVG (an SVG image cannot fetch its own fonts), as @font-face rules
+ *  with data URLs, read once at the first export. The two static faces the PDF report already
+ *  ships, not the variable font: inside an SVG image WebKit ignores a variable font's weight and
+ *  draws its thin master for every weight (measured: the same ink at 300 and 800), which left
+ *  the figure's title and date faint. Regular covers weights to 550, semibold everything above;
+ *  no format() hint, which WebKit's SVG-image loader has rejected before. */
+function interFontFaces(): Promise<string> {
+  const read = (file: string) => fetch(`${import.meta.env.BASE_URL}fonts/${file}`)
+    .then((r) => { if (!r.ok) throw new Error(file); return r.blob() })
     .then((b) => new Promise<string>((res, rej) => {
       const fr = new FileReader()
       fr.onload = () => res(String(fr.result))
       fr.onerror = () => rej(fr.error)
       fr.readAsDataURL(b)
     }))
-    .catch(() => { fontDataUrl = null; return '' })
-  return fontDataUrl
+  fontFaces ??= Promise.all([read('Inter-400.ttf'), read('Inter-600.ttf')])
+    .then(([regular, semibold]) =>
+      `@font-face{font-family:'Inter Variable';src:url(${regular});font-weight:100 550;font-style:normal;}` +
+      `@font-face{font-family:'Inter Variable';src:url(${semibold});font-weight:551 900;font-style:normal;}`)
+    .catch(() => { fontFaces = null; return '' })
+  return fontFaces
 }
 
 /** A nice round scale-bar length for the current unit, targeting a fraction of the image width. */
@@ -118,7 +124,8 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
       maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y)
     }
   }
-  const pad = (maxX - minX) * 0.02 + 24
+  // room for the wall lengths and captions drawn just outside the outermost walls and markers
+  const pad = (maxX - minX) * 0.035 + 24
   minX -= pad; minY -= pad; maxX += pad; maxY += pad
 
   // reserve bands for the title strip and the stats footer
@@ -132,6 +139,12 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   // second ceiling keeps either output dimension <= 4000px (area under the ~16.7MP iOS canvas cap)
   const k0 = Math.min(4, Math.max(0.6, 2800 / Math.max(w, h)), 4000 / Math.max(w, h))
   const outW = Math.round(w * k0), outH = Math.round(h * k0)
+  // The canvas draws captions, wall lengths and markers at a fixed screen size (px / k). Here
+  // that size is chosen for the width the image is actually looked at: the report shows it
+  // ~730 px wide, where the old 1.9x scale left captions and lengths ~4 px tall. At outW/760
+  // every such label reads at its on-screen size there, and the wheel's detail tiers decide
+  // what to show from that same apparent size.
+  const labelScale = Math.max(1.9, Math.min(4.5, outW / 760))
 
   const dxf = s.bg.kind === 'dxf' && s.bg.dxfText ? importDxf(s.bg.dxfText) : null
 
@@ -139,7 +152,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     bg: s.bg, dxf, pts: s.pts, bulges: s.bulges, closed: s.closed, center, R,
     centerOverridden: !!s.centerOverride,
     northDeg: s.northDeg, compass: s.compass, metersPerPx: s.metersPerPx,
-    unit: s.unit, k: k0 / 1.9, showEdgeLabels: s.showEdgeLabels,
+    unit: s.unit, k: k0 / labelScale, showEdgeLabels: s.showEdgeLabels,
     markers: s.markers, strokes: s.strokes, roomShapes: s.roomShapes, texts: s.texts, idPrefix: 'exp',
     wallColor: s.wallColor, wallWidthM: s.wallWidthM, wallOpacity: s.wallOpacity,
     paper: true,
@@ -149,7 +162,8 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   const rawTitle = (s.projectName && s.projectName !== 'Untitled plan' ? s.projectName : s.bg.name?.replace(/\.[^.]+$/, '')) || 'Vastu plan'
   // long filenames would run under the right-anchored date — trim before composing
   const title = rawTitle.length > 40 ? rawTitle.slice(0, 39).trimEnd() + '…' : rawTitle
-  const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
+  // the same form as the report's own header above the figure
+  const dateStr = new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })
   const t1 = w * 0.024, t2 = w * 0.0145
   const northSourceLabel =
     s.northSource === 'map' ? 'auto from map'
@@ -203,13 +217,12 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     ] : []),
   )
 
-  const font = await interFontDataUrl()
+  const faces = await interFontFaces()
   const svg = svgMarkup(
     createElement(
       'svg',
       { xmlns: 'http://www.w3.org/2000/svg', width: outW, height: outH, viewBox: `${minX} ${minY} ${w} ${h}` },
-      createElement('style', null,
-        font ? `@font-face{font-family:'Inter Variable';src:url(${font});font-weight:100 900;font-style:normal;}` : ''),
+      createElement('style', null, faces),
       createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#F3F1EA' }),
       scene,
       furniture,

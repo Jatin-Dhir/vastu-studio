@@ -234,6 +234,10 @@ export function CanvasStage() {
       : circumradius(center, sampled) * 1.03
   }, [center, pts.length, sampled, closed])
 
+  /** What the fit needs of the wheel. The fit runs from event listeners, so it reads this
+   *  rather than a render's closure. */
+  const ringRef = useRef<{ c: Pt; R: number } | null>(null)
+
   const toWorld = (clientX: number, clientY: number): Pt => {
     const rect = svgRef.current!.getBoundingClientRect()
     const { tx, ty, k, rot } = viewRef.current
@@ -304,10 +308,20 @@ export function CanvasStage() {
     else if (s.pts.length > 0) b = boundsOf(s.pts)
     else return
     const rect = svg.getBoundingClientRect()
-    const hasBg = s.bg.kind !== 'none'
     const mobile = rect.width <= 760
-    const padL = mobile ? 18 : 88
-    const padR = mobile ? 18 : hasBg ? 348 : 88
+    // measured, not assumed: the tool rail and the side panel change width with touch-sized
+    // controls, and a fixed 88/348 px left wall lengths under the rail at 820 px and 5 px from
+    // the panel at 1024 px (all in the stage's own coordinates)
+    const box = (sel: string) => {
+      const r = document.querySelector(sel)?.getBoundingClientRect()
+      return r && r.width > 0 && r.height > 0 ? r : null
+    }
+    const railEl = mobile ? null : box('.tool-rail')
+    const panelEl = mobile ? null : box('.panel')
+    const railR = railEl && railEl.right < rect.left + rect.width / 3 ? railEl.right - rect.left : 0
+    const panelL = panelEl && panelEl.left > rect.left + rect.width / 2 ? panelEl.left - rect.left : rect.width
+    const padL = mobile ? 18 : Math.max(24, railR + 24)
+    const padR = mobile ? 18 : Math.max(24, rect.width - panelL + 24)
     const padT = mobile ? 60 : 76
     // fit into the band the user can actually SEE: measure whatever floating chrome is
     // stacked along the bottom right now (dock, sheet, guide card, calibrate bar) instead
@@ -330,16 +344,48 @@ export function CanvasStage() {
     const rot = viewRef.current.rot
     const rad = (rot * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
+    const turn = (p: Pt) => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos })
     const corners = [
       { x: b.minX, y: b.minY }, { x: b.maxX, y: b.minY },
       { x: b.maxX, y: b.maxY }, { x: b.minX, y: b.maxY },
-    ].map((p) => ({ x: p.x * cos - p.y * sin, y: p.x * sin + p.y * cos }))
+    ].map(turn)
     const rminX = Math.min(...corners.map((p) => p.x)), rmaxX = Math.max(...corners.map((p) => p.x))
     const rminY = Math.min(...corners.map((p) => p.y)), rmaxY = Math.max(...corners.map((p) => p.y))
     const rw = Math.max(rmaxX - rminX, 1), rh = Math.max(rmaxY - rminY, 1)
-    const k = Math.min(60, Math.max(0.02, Math.min(availW / rw, availH / rh) * 0.95))
-    const tx = padL + (availW - rw * k) / 2 - rminX * k
-    const ty = padT + (availH - rh * k) / 2 - rminY * k
+    let k = Math.min(availW / rw, availH / rh) * 0.95
+    // The wheel and the letters just outside it may use the margins the drawing leaves, but
+    // never go under the rail, the panel, the top chips or the phone's dock. Held as hard
+    // content, the whole ring shrank a typical plan from 38% to 28%; as soft content it only
+    // costs zoom when it truly would not fit, and otherwise just slides the view.
+    const ring = ringRef.current
+    const soft = {
+      l: mobile ? 8 : railR + 14, r: mobile ? rect.width - 8 : panelL - 14,
+      t: mobile ? 56 : 62, b: rect.height - (mobile ? padB : 8),
+    }
+    let u: { minX: number; minY: number; maxX: number; maxY: number } | null = null
+    if (ring) {
+      const rc = turn(ring.c)
+      const reach = ring.R * 1.12
+      u = {
+        minX: Math.min(rminX, rc.x - reach), maxX: Math.max(rmaxX, rc.x + reach),
+        minY: Math.min(rminY, rc.y - reach), maxY: Math.max(rmaxY, rc.y + reach),
+      }
+      const softW = Math.max(120, soft.r - soft.l), softH = Math.max(120, soft.b - soft.t)
+      k = Math.min(k, Math.min(softW / (u.maxX - u.minX), softH / (u.maxY - u.minY)) * 0.97)
+    }
+    k = Math.min(60, Math.max(0.02, k))
+    let tx = padL + (availW - rw * k) / 2 - rminX * k
+    let ty = padT + (availH - rh * k) / 2 - rminY * k
+    if (u) {
+      // slide, within what keeps the drawing in its band, until the wheel clears the chrome
+      const settle = (t: number, lo: number, hi: number) => (lo <= hi ? Math.min(hi, Math.max(lo, t)) : t)
+      tx = settle(tx,
+        Math.max(padL - rminX * k, soft.l - u.minX * k),
+        Math.min(rect.width - padR - rmaxX * k, soft.r - u.maxX * k))
+      ty = settle(ty,
+        Math.max(padT - rminY * k, soft.t - u.minY * k),
+        Math.min(rect.height - padB - rmaxY * k, soft.b - u.maxY * k))
+    }
     setViewLive({ tx, ty, k, rot })
     commitView()
   }
@@ -1150,6 +1196,11 @@ export function CanvasStage() {
   const sceneCompass = useMemo(() => (!analysisOk
     ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
     : compass), [analysisOk, compass])
+  useLayoutEffect(() => {
+    ringRef.current = closed && center && sceneCompass.id !== 'none' && R > 0
+      ? { c: center, R: Math.min(R * ((sceneCompass.scalePct ?? 100) / 100), R * 1.5) }
+      : null
+  })
   const tracing = tool === 'trace' && !closed
   const nearFirst = tracing && cursor && pts.length >= 3 && dist(cursor, pts[0]) < closePx() / k
   const showHandles = !locked && (tool === 'trace' || tool === 'select') && pts.length > 0
