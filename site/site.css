@@ -198,7 +198,18 @@ a { color: var(--gold); text-decoration-thickness: 1px; text-underline-offset: 3
 .act-still-list b { font: 600 72px/0.9 var(--serif); color: var(--gold); grid-row: 1 / span 2; }
 .act-still-list span { font: 600 26px/1 var(--serif); }
 .act-still-list p { margin: 0; color: var(--text-2); }
-.act.still .act-open, .act.still .act-card { opacity: 1; transform: none; pointer-events: auto; }
+/* still (reduced motion, or no WebGL): the copy joins the page instead of floating over the table,
+   and the act cards stay out, since the list says the same. Made visible in the copy's one grid
+   cell, all three printed over the title and its buttons. Title first; beside the plan when wide. */
+.act.still .act-open { opacity: 1; transform: none; pointer-events: auto; }
+.act.still .act-card { display: none; }
+.act.still .act-copy { position: static; width: auto; max-width: 560px; order: -1; }
+@media (min-width: 1000px) {
+  .act.still .act-pin { grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); align-items: center; column-gap: var(--s6); }
+  .act.still .act-copy { order: 0; grid-column: 1; grid-row: 1; }
+  .act.still .act-stage { grid-column: 2; grid-row: 1; width: 100%; }
+  .act.still .act-still-list { grid-column: 1 / -1; }
+}
 
 /* the static stage (reduced motion / no WebGL), drawn by the studio's renderer */
 .stage { position: relative; width: 100%; }

@@ -856,10 +856,13 @@ function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
           )
         }
         spots.push({ x: cx, y: cy })
-        // the first corner clear of the markers, the centre's labels and the tags already placed
-        const pick = spots.find((p) => !taken.some((q) => capsulesMeet(uprightCapsule(p, tagW, tagH, vr), q))) ?? spots[0]
-        taken.push(uprightCapsule(pick, tagW, tagH, vr))
-        const ax = pick.x, ay = pick.y
+        // the first corner clear of the markers, the centre's labels and the tags already placed;
+        // with none free the tag steps off at this zoom (the room is still named in the panel),
+        // except for the selected room, which always says what it is
+        const free = spots.find((p) => !taken.some((q) => capsulesMeet(uprightCapsule(p, tagW, tagH, vr), q)))
+        const pick = free ?? (on ? spots[0] : null)
+        if (pick) taken.push(uprightCapsule(pick, tagW, tagH, vr))
+        const ax = pick?.x ?? cx, ay = pick?.y ?? cy
         return (
           <g key={r.id}>
             {cloneElement(shapeEl, { fill: meta.color, fillOpacity: on ? 0.28 : 0.16 })}
@@ -868,14 +871,14 @@ function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
               fill: 'none', stroke: meta.color, strokeWidth: (on ? 2.6 : 1.8) / k,
               strokeDasharray: on ? undefined : `${9 / k} ${5 / k}`, opacity: 0.95,
             })}
-            <g transform={vr ? `rotate(${-vr} ${ax} ${ay})` : undefined}>
+            {pick && <g transform={vr ? `rotate(${-vr} ${ax} ${ay})` : undefined}>
               <rect x={ax - tagW / 2} y={ay - tagH / 2} width={tagW} height={tagH} rx={4.5 / k}
                 fill="#101116" fillOpacity={0.8} stroke={meta.color} strokeWidth={(on ? 1.6 : 1.1) / k} />
               <text {...at(ax, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
                 fill="#F5EFDD" textAnchor="middle" dominantBaseline="central">
                 {r.label}
               </text>
-            </g>
+            </g>}
           </g>
         )
       })}
