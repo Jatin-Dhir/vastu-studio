@@ -32,8 +32,8 @@
 /* paragraphs never end on one stranded word */
 .report-page p, .report-verdict, .report-note, .report-assess-item, .report-finding-ctx { text-wrap: pretty; }
 
-/* the form's hints: WebKit's default placeholder grey measured 2.3:1 on the field */
-.report-meta input::placeholder, .report-notes::placeholder { color: #6E7584; opacity: 1; }
+/* the form's hints: WebKit's default placeholder grey measured 2.3:1 on the field; this is 4.8 */
+.report-meta input::placeholder, .report-notes::placeholder { color: #6A7180; opacity: 1; }
 
 /* zone/room tables scroll sideways inside their own box — the report page
    (and print page) never gets a horizontal scrollbar because of a table */
