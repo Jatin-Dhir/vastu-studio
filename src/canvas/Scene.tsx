@@ -94,6 +94,25 @@ function brahmaLabelY(c: Pt, brahmaR: number, k: number, avoid: Pt[]): number {
   return blocked(above - 4 / k) && !blocked(below - 4 / k) ? below : above
 }
 
+/** The pada grid's frame: the plot's bounding box in a frame turned by -north about c (the grid
+ *  itself is drawn inside rotate(north, c)). Shared with the keep-outs. */
+function gridFrame(c: Pt, north: number, pts: Pt[]): { minX: number; minY: number; maxX: number; maxY: number } {
+  const rad = (-north * Math.PI) / 180
+  const cos = Math.cos(rad), sin = Math.sin(rad)
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
+  for (const p of pts) {
+    const x = c.x + (p.x - c.x) * cos - (p.y - c.y) * sin
+    const y = c.y + (p.x - c.x) * sin + (p.y - c.y) * cos
+    minX = Math.min(minX, x); maxX = Math.max(maxX, x)
+    minY = Math.min(minY, y); maxY = Math.max(maxY, y)
+  }
+  return { minX, minY, maxX, maxY }
+}
+
+/** Where the grid's central name sits, in its own (turned) frame: the upper part of Brahma's
+ *  nine cells, since at their exact middle the plot's centre cross cut through it. */
+const BRAHMA_ROW = 3.8
+
 /** Gate names are sized to their pada; the longest decides when every one can be read. */
 const LONGEST_DEVTA = Math.max(...GATES32.map((g) => g.devta.length))
 
@@ -661,19 +680,10 @@ function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraPr
 }
 
 function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: ChakraProps) {
-  const frame = useMemo(() => {
-    if (!closed || pts.length < 3) return null
-    const rad = (-north * Math.PI) / 180
-    const cos = Math.cos(rad), sin = Math.sin(rad)
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-    for (const p of pts) {
-      const x = c.x + (p.x - c.x) * cos - (p.y - c.y) * sin
-      const y = c.y + (p.x - c.x) * sin + (p.y - c.y) * cos
-      minX = Math.min(minX, x); maxX = Math.max(maxX, x)
-      minY = Math.min(minY, y); maxY = Math.max(maxY, y)
-    }
-    return { minX, minY, maxX, maxY }
-  }, [pts, closed, north, c.x, c.y])
+  const frame = useMemo(
+    () => (!closed || pts.length < 3 ? null : gridFrame(c, north, pts)),
+    [pts, closed, north, c.x, c.y],
+  )
 
   if (!frame) return null
   const { minX, minY, maxX, maxY } = frame
@@ -743,7 +753,7 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
         {cellNames}
         {compass.devtas && (
           <g>
-            {innerLabel(MANDALA_INNER.center, 4.5, 4.5, true)}
+            {innerLabel(MANDALA_INNER.center, 4.5, BRAHMA_ROW, true)}
             {innerLabel(MANDALA_INNER.n, 4.5, 2)}
             {innerLabel(MANDALA_INNER.e, 7, 4.5)}
             {innerLabel(MANDALA_INNER.s, 4.5, 7)}
@@ -1092,6 +1102,15 @@ export function Scene(props: SceneProps) {
       const p = polar(drawn.c, drawn.north + d, drawn.R * 0.905)
       tagKeepouts.push({ a: p, b: p, r: textW(`${d}°`, size) / 2 + size * 0.2 })
     }
+  }
+  if (drawn && !props.compassHidden && drawn.compass.id === 'grid9' && drawn.compass.devtas && drawn.closed && drawn.pts.length >= 3) {
+    const f = gridFrame(drawn.c, drawn.north, drawn.pts)
+    const cw = (f.maxX - f.minX) / 9, ch = (f.maxY - f.minY) / 9
+    const size = Math.min(cw, ch) * 0.5
+    const dx = f.minX + 4.5 * cw - drawn.c.x, dy = f.minY + BRAHMA_ROW * ch - drawn.c.y
+    const rad = (drawn.north * Math.PI) / 180
+    const p = { x: drawn.c.x + dx * Math.cos(rad) - dy * Math.sin(rad), y: drawn.c.y + dx * Math.sin(rad) + dy * Math.cos(rad) }
+    tagKeepouts.push(uprightCapsule(p, textW(MANDALA_INNER.center, size), size * 0.8, vr))
   }
   if (center && pts.length >= 3) {
     tagKeepouts.push({ a: center, b: center, r: 17 / k })
