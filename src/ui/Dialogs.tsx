@@ -332,11 +332,12 @@ const SHORTCUTS: [string, string][] = [
   ['?', 'This help'],
 ]
 
-const RECAP = [
+/** The same order as the steps in the top bar, in the words of the device in hand. */
+const recap = (press: 'tap' | 'click') => [
   'Import a plan — a PDF, photo, AutoCAD file, or a satellite capture from Maps.',
+  `Trace the boundary — ${press} each corner, then the tick to close it.`,
   'Set the scale — drag the ruler along a wall you know the length of.',
-  'Trace the boundary — tap each corner, then the tick to close it.',
-  'Confirm north — tap the plan’s north arrow, tail then tip.',
+  `Confirm north — ${press} the plan’s north arrow, tail then tip.`,
   'Mark doors and rooms — each one gets an instant zone verdict, then open the report.',
 ]
 
@@ -346,31 +347,40 @@ const GESTURES: [string, string][] = [
   ['Tap ✓', 'Close the outline'],
   ['Tap a point or edge', 'Select it — chips appear for delete / adjust'],
   ['Drag out a room, hold', 'A perfect square or circle'],
-  ['Hold the sheet handle', 'Drag the panel between peek, half and full'],
 ]
+/** Only where the panel is a bottom sheet (narrow windows); beside the plan it has no handle. */
+const SHEET_GESTURE: [string, string] = ['Hold the sheet handle', 'Drag the panel between peek, half and full']
 
 export function ShortcutsDialog() {
   const open = useStore((s) => s.shortcutsOpen)
   const setOpen = useStore((s) => s.setShortcutsOpen)
-  const coarse = typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches
+  const coarse = typeof window !== 'undefined' && !!window.matchMedia?.('(pointer: coarse)').matches
+  const sheet = typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 760px)').matches
   if (!open) return null
+  const rows = coarse ? (sheet ? [...GESTURES, SHEET_GESTURE] : GESTURES) : SHORTCUTS
+  // the keyboard list runs to two columns, so the whole dialog fits a 680 px tall window
+  const columns = coarse ? [rows] : [rows.slice(0, Math.ceil(rows.length / 2)), rows.slice(Math.ceil(rows.length / 2))]
   return (
-    <Dialog title="Help" onClose={() => setOpen(false)} width={400}>
+    <Dialog title="Help" onClose={() => setOpen(false)} width={coarse ? 400 : 640}>
       <div className="subhead">How it works</div>
       <ol className="dialog-list">
-        {RECAP.map((line, i) => <li key={i}>{line}</li>)}
+        {recap(coarse ? 'tap' : 'click').map((line, i) => <li key={i}>{line}</li>)}
       </ol>
       <div className="subhead">{coarse ? 'Gestures' : 'Keyboard shortcuts'}</div>
-      <div className="shortcut-list">
-        {(coarse ? GESTURES : SHORTCUTS).map(([keys, what]) => (
-          <div key={keys} className="shortcut-row">
-            <span className="shortcut-keys">
-              {coarse ? keys : keys.split(' / ').map((k2, i) => (
-                <span key={k2}>{i > 0 && ' / '}<kbd>{k2}</kbd></span>
-              ))}
-            </span>
-            <span className="lbl">{what}</span>
-          </div>
+      <div className="shortcut-cols">
+        {columns.map((col, c) => (
+          <dl key={c} className="shortcut-list">
+            {col.map(([keys, what]) => (
+              <div key={keys} className="shortcut-row">
+                <dt className="shortcut-keys">
+                  {coarse ? keys : keys.split(' / ').map((k2, i) => (
+                    <span key={k2}>{i > 0 && ' / '}<kbd>{k2}</kbd></span>
+                  ))}
+                </dt>
+                <dd className="lbl">{what}</dd>
+              </div>
+            ))}
+          </dl>
         ))}
       </div>
     </Dialog>

@@ -31,6 +31,7 @@
   --teal: #2E7E84;
   --danger: #C23B2E;
   --danger-fg: #A8301F;
+  --scroll-shade: rgba(60, 48, 24, 0.16);
   --warn: #8A5A0E;
   --ok: #2E7040;
   /* light ground needs whisper-weight elevation — heavy dark blur reads as grime on paper */

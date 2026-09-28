@@ -52,7 +52,7 @@ export function ReportScreen() {
   ev.findings.forEach((f) => { counts[f.severity] += 1 })
   const line = ev.findings.length === 0
     ? 'Mark the rooms and the main door for the report to speak to specific placements.'
-    : counts.bad > 0 ? `${counts.bad} ${counts.bad === 1 ? 'placement needs' : 'placements need'} attention${counts.good ? `, ${counts.good} favourable` : ''}.`
+    : counts.bad > 0 ? `${counts.bad} ${counts.bad === 1 ? 'finding' : 'findings'} to address${counts.good ? `, ${counts.good} favourable` : ''}.`
       : counts.warn > 0 ? `${counts.warn} ${counts.warn === 1 ? 'point' : 'points'} of caution${counts.good ? `, ${counts.good} favourable` : ''}.`
         : 'Everything marked sits in a favourable zone.'
 

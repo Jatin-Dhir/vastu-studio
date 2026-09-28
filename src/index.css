@@ -26,6 +26,7 @@
      lighter stop — identical to --gold on Ink; Paper deepens them to hold 4.5:1 */
   --gold-text: var(--gold);
   --gold-solid: var(--gold);
+  --scroll-shade: rgba(0, 0, 0, 0.55);
   --teal: #6FC7CE;
   --danger: #E2574C;
   --danger-fg: #F09A92;
@@ -232,13 +233,22 @@ button, .chip, .qpill, .icon-btn, .rail-btn, .toggle, .compass-card, .sheet-hand
    two-line wordmark or button reads as broken, so squeezing is never the fallback. */
 .brand { flex-shrink: 0; }
 .brand-name, .topbar button { white-space: nowrap; }
-@media (min-width: 761px) and (max-width: 1220px) {
+/* step labels come off only where they cannot fit. Measured with the labels on, the bar
+   needs 1179 px with a mouse and 1251 px with touch-sized controls while the utility icons
+   show, and 823 px and 855 px once those fold into the More sheet (at 1010 px, or 1100 px on
+   touch) — so a tablet with room to spare keeps its words. Each band keeps ~20 px in hand. */
+@media (min-width: 761px) and (max-width: 849px), (min-width: 1011px) and (max-width: 1199px) {
   .step-label { display: none; }
   .topbar { gap: 10px; }
 }
-@media (pointer: coarse) and (min-width: 761px) and (max-width: 1340px) {
+@media (pointer: coarse) and (min-width: 850px) and (max-width: 879px),
+       (pointer: coarse) and (min-width: 1101px) and (max-width: 1269px) {
   .step-label { display: none; }
   .topbar { gap: 10px; }
+}
+/* on touch the utility icons have already folded between 1011 and 1100 px: room enough */
+@media (pointer: coarse) and (min-width: 1011px) and (max-width: 1100px) {
+  .step-label { display: inline; }
 }
 @media (min-width: 761px) and (max-width: 1010px) {
   .btn-primary .hide-mobile { display: none; }
@@ -903,6 +913,7 @@ kbd {
   animation: toastInTop 0.22s cubic-bezier(0.2, 0.9, 0.3, 1);
   max-width: min(420px, 90vw);
   cursor: default;
+  text-wrap: pretty;
 }
 @keyframes toastIn { from { opacity: 0; transform: translateY(10px) scale(0.97); } to { opacity: 1; transform: none; } }
 @keyframes toastInTop { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
@@ -952,9 +963,16 @@ kbd {
   }
 }
 
-.shortcut-list { display: flex; flex-direction: column; gap: 7px; }
-.shortcut-row { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
+/* keys in one column, what they do in the next, every description starting at the same edge
+   (a wrapped description used to flip from right-aligned to ragged left) */
+.shortcut-cols { display: flex; gap: 12px 28px; flex-wrap: wrap; }
+.shortcut-list { flex: 1 1 240px; margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 7px 12px; align-items: baseline; }
+/* the tool keys are single letters; the editing column carries the long combinations */
+.shortcut-cols > .shortcut-list:first-child:not(:only-child) { flex: 0.85 1 215px; }
+.shortcut-cols > .shortcut-list:last-child:not(:only-child) { flex: 1.15 1 285px; }
+.shortcut-row { display: contents; }
 .shortcut-keys { white-space: nowrap; }
+.shortcut-list dd { margin: 0; text-wrap: pretty; }
 .toast.ok svg { color: var(--ok); }
 .toast.warn svg { color: var(--warn); }
 .toast.info svg { color: var(--teal); }
@@ -1001,11 +1019,23 @@ kbd {
   animation: dialogIn 0.22s cubic-bezier(0.2, 0.9, 0.3, 1.1);
 }
 @keyframes dialogIn { from { opacity: 0; transform: translateY(12px) scale(0.98); } to { opacity: 1; transform: none; } }
+/* a dialog taller than the window scrolls: a soft shade at the edge says there is more. The two
+   covers scroll with the content and hide the shades at either end (the classic local/scroll
+   background pair), so a dialog that fits shows nothing extra */
+.dialog {
+  background:
+    linear-gradient(var(--panel-solid) 30%, rgb(var(--panel-solid-rgb) / 0)) center top / 100% 36px no-repeat local,
+    linear-gradient(rgb(var(--panel-solid-rgb) / 0), var(--panel-solid) 70%) center bottom / 100% 36px no-repeat local,
+    radial-gradient(farthest-side at 50% 0, var(--scroll-shade), transparent) center top / 100% 12px no-repeat scroll,
+    radial-gradient(farthest-side at 50% 100%, var(--scroll-shade), transparent) center bottom / 100% 12px no-repeat scroll,
+    var(--panel-solid);
+}
 .dialog-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
 .dialog-head h3 { margin: 0; font-family: var(--serif); font-size: 21px; font-weight: 600; letter-spacing: 0.01em; }
 .dialog-sub { margin: 0 0 14px; color: var(--muted); font-size: 12.5px; line-height: 1.55; }
 .dialog-sub b { color: var(--text); }
 .dialog-list { margin: 0 0 14px; padding-left: 18px; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+.dialog-list li { text-wrap: pretty; }
 .dialog-list b { color: var(--text); }
 .dialog-actions { display: flex; justify-content: flex-end; gap: 9px; margin-top: 6px; }
 .cal-row { display: flex; flex-direction: column; gap: 10px; margin-bottom: 12px; }

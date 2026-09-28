@@ -647,7 +647,7 @@ export function ReportView() {
             <h2>Zone balance (16 zones)</h2>
             <div className="report-table-wrap">
               <table className="report-table">
-                <thead><tr><th><span style={SR_ONLY}>Colour</span></th><th>Zone</th><th>Theme</th><th>Share</th>{metersPerPx && <th>Area</th>}<th>Status</th></tr></thead>
+                <thead><tr><th><span style={SR_ONLY}>Colour</span></th><th>Zone</th><th>Theme</th><th className="num">Share</th>{metersPerPx && <th className="num">Area</th>}<th>Status</th></tr></thead>
                 <tbody>
                   {rows.map((r, i) => {
                     const flag = shapeFindingByZone.get(i)
@@ -658,8 +658,8 @@ export function ReportView() {
                           <td><span className="report-zonechip" style={{ background: r.color }} /></td>
                           <td><b>{r.key}</b> {r.name}</td>
                           <td>{r.theme}</td>
-                          <td>{r.pct.toFixed(1)}%</td>
-                          {metersPerPx && <td>{formatArea(r.areaPx * metersPerPx ** 2, unit)}</td>}
+                          <td className="num">{r.pct.toFixed(1)}%</td>
+                          {metersPerPx && <td className="num">{formatArea(r.areaPx * metersPerPx ** 2, unit)}</td>}
                           <td>
                             {flag
                               ? <Pill sev={flag.severity}>{over ? 'Over-occupied' : 'Under-used'}</Pill>

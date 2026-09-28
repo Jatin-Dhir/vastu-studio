@@ -24,10 +24,16 @@
 
 /* ----- applies at every size ----- */
 
-/* numbers (areas, bearings, percentages, degrees) line up instead of jittering */
-.report-page {
-  font-variant-numeric: tabular-nums;
-}
+/* numbers in columns (shares, areas) line up instead of jittering — only there: in Inter,
+   tabular figures also widen the hyphen, which spread every hyphenated word of the running
+   text apart ("south - south - east") in Chromium */
+.report-table .num { font-variant-numeric: tabular-nums; text-align: right; }
+
+/* paragraphs never end on one stranded word */
+.report-page p, .report-verdict, .report-note, .report-assess-item, .report-finding-ctx { text-wrap: pretty; }
+
+/* the form's hints: WebKit's default placeholder grey measured 2.3:1 on the field */
+.report-meta input::placeholder, .report-notes::placeholder { color: #6E7584; opacity: 1; }
 
 /* zone/room tables scroll sideways inside their own box — the report page
    (and print page) never gets a horizontal scrollbar because of a table */
@@ -82,7 +88,9 @@
   background: #F4F2EA;
   border: 1px solid #E8E4D8;
 }
-.report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1E2430; }
+/* lining figures: the serif's default old-style ones made 0 read as a lowercase o and dropped
+   3, 4 and 5 below the line */
+.report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1E2430; font-variant-numeric: lining-nums tabular-nums; }
 .report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #5E6777; }
 .report-stat-good .report-stat-num { color: #2E7040; }
 .report-stat-warn .report-stat-num { color: #8A5A0E; }

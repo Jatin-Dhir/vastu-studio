@@ -130,7 +130,8 @@ export function buildAssessment(args: {
 
   const bits: string[] = []
   if (others.length > 0) {
-    bits.push(`Of the ${others.length} placements marked, ${wellPlaced} sit in their favourable zones and ${offSeat} ${offSeat === 1 ? 'calls' : 'call'} for attention.`)
+    const scope = entrances.length ? `, besides the ${entrances.length === 1 ? 'entrance' : 'entrances'}` : ''
+    bits.push(`Of the ${others.length} ${others.length === 1 ? 'room or object' : 'rooms and objects'} marked${scope}, ${wellPlaced} ${wellPlaced === 1 ? 'sits' : 'sit'} in ${wellPlaced === 1 ? 'its' : 'their'} favourable ${wellPlaced === 1 ? 'zone' : 'zones'} and ${offSeat} ${offSeat === 1 ? 'calls' : 'call'} for attention.`)
   }
   if (args.strongest && args.weakest) {
     bits.push(`The plot gives its most area to ${args.strongest.key} (${args.strongest.pct.toFixed(1)}%) and its least to ${args.weakest.key} (${args.weakest.pct.toFixed(1)}%).`)

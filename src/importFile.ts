@@ -109,7 +109,7 @@ export async function importFiles(files: FileList | File[] | Blob[], opts?: { na
       requestFit()
       s.toast(
         dxf.metersPerPx
-          ? `DXF imported — scale read from drawing units (${formatScale(dxf.metersPerPx, s.unit)})`
+          ? `DXF imported — scale read from drawing units (${formatScale(dxf.metersPerPx, s.unit).replace(/ /g, '\u00a0')})`
           : 'DXF imported — set the scale next',
         'ok',
       )

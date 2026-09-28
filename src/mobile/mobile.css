@@ -104,7 +104,7 @@
 }
 .m-resume span { font-size: 12px; font-weight: 600; color: var(--gold-2); }
 .m-resume b { font-size: 15px; }
-.m-empty { display: flex; flex-direction: column; gap: 10px; padding: 24px 4px; }
+.m-empty { display: flex; flex-direction: column; gap: 10px; padding: 24px 0; }
 .m-empty h2 { margin: 0; font-family: var(--serif); font-size: 24px; font-weight: 600; line-height: 1.15; }
 .m-empty p { margin: 0 0 6px; font-size: 14px; line-height: 1.55; color: var(--muted); text-wrap: pretty; }
 

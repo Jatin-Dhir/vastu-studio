@@ -183,14 +183,20 @@ export function ItemsCard({ markers, roomShapes, center, northDeg }: {
     if (st.roomShapes.some((r) => r.id === id)) st.setSelectedRoomShape(id)
     else st.setSelectedMarker(id)
   }
-  const right = list.filter((a) => a.verdict === 'ideal' || a.verdict === 'good').length
-  const off = list.filter((a) => a.verdict === 'caution' || a.verdict === 'avoid').length
+  const favourable = list.filter((a) => a.verdict === 'ideal' || a.verdict === 'good').length
+  const caution = list.filter((a) => a.verdict === 'caution').length
+  const avoid = list.filter((a) => a.verdict === 'avoid').length
+  const tally = [
+    favourable ? `${favourable} favourable` : '',
+    caution ? `${caution} caution` : '',
+    avoid ? `${avoid} avoid` : '',
+  ].filter(Boolean).join(' · ') || 'all neutral'
   if (list.length === 0) return null
   return (
     <section className="card">
       <header className="card-head">
         <h2>Rooms & objects</h2>
-        <span className="file-chip">{right} right · {off} to move</span>
+        <span className="file-chip">{tally}</span>
       </header>
       <div className="item-list">
         {list.map((a) => {
