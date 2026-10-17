@@ -188,6 +188,9 @@ function friendlyImportError(err: unknown, ext: string): string {
   if (/decode image|could not read file/i.test(msg)) {
     return 'This image could not be read — try saving it as PNG or JPG'
   }
+  if (ext === 'pdf' && /worker/i.test(msg)) {
+    return 'The PDF reader was restarting — import the file again'
+  }
   return msg || 'Import failed — try the file again, or export it as PDF, PNG or DXF'
 }
 

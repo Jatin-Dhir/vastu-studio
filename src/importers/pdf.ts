@@ -12,11 +12,21 @@ import workerUrl from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker&url'
 import { setOpenPdf } from './pdfState'
 
 let port: Worker | null = null
-function ensureWorker() {
-  if (port) return
+let pdfWorker: pdfjs.PDFWorker | null = null
+
+/** One worker for every document, handed to pdf.js explicitly. Left to itself (through
+ *  GlobalWorkerOptions.workerPort), pdf.js makes each document own its handle on the shared
+ *  worker, and closing a document marks that handle "being destroyed" until the close finishes.
+ *  Opening the next PDF started inside that window and failed with "PDFWorker.create - the
+ *  worker is being destroyed": every second import, and every import right after a project
+ *  switch. A worker passed in is owned by no document, so closing one never touches it. */
+function ensureWorker(): pdfjs.PDFWorker {
+  if (pdfWorker && !pdfWorker.destroyed) return pdfWorker
+  port?.terminate()
   // the build emits a classic (iife) script; the dev server serves the same file as a module
   port = new Worker(workerUrl, { type: import.meta.env.DEV ? 'module' : 'classic' })
-  pdfjs.GlobalWorkerOptions.workerPort = port
+  pdfWorker = pdfjs.PDFWorker.create({ port })
+  return pdfWorker
 }
 
 // Safari has no async iteration on ReadableStream, and pdf.js reads a page's text layer with
@@ -51,10 +61,23 @@ function closeDoc() {
 export async function openPdf(data: ArrayBuffer, key: string): Promise<number> {
   closeDoc()
   setOpenPdf(null, null)
-  ensureWorker()
-  currentDoc = await pdfjs.getDocument({ data }).promise
+  // pdf.js transfers the buffer to its worker, so keep a copy for the one retry below
+  const spare = data.slice(0)
+  let doc: PDFDocumentProxy
+  try {
+    doc = await pdfjs.getDocument({ data, worker: ensureWorker() }).promise
+  } catch (err) {
+    // a worker that died (a crash, or the system reclaiming it) is replaced once, then retried
+    if (!/worker/i.test(err instanceof Error ? err.message : '')) throw err
+    pdfWorker?.destroy()
+    pdfWorker = null
+    doc = await pdfjs.getDocument({ data: spare, worker: ensureWorker() }).promise
+  }
+  // two imports racing: the last to finish is the open one, and the other is released
+  closeDoc()
+  currentDoc = doc
   setOpenPdf(key, closeDoc)
-  return currentDoc.numPages
+  return doc.numPages
 }
 
 export { hasPdfOpen } from './pdfState'
