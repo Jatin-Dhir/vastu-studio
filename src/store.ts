@@ -172,6 +172,8 @@ export interface VastuStore {
   mapOpen: boolean
   dwgNotice: boolean
   busy: string | null
+  /** a newer release found by the updater, kept so the menu can offer it after its toast fades */
+  appUpdate: { version: string; install: () => void } | null
   /** a scale read from the import itself (printed 1:N, DXF units, map capture) — offered until used or replaced */
   scaleSuggestion: { metersPerPx: number; label: string; source: 'pdf' | 'dxf' } | null
   setScaleSuggestion: (s: { metersPerPx: number; label: string; source: 'pdf' | 'dxf' } | null) => void
@@ -256,7 +258,8 @@ export interface VastuStore {
   setMapOpen: (open: boolean) => void
   setDwgNotice: (open: boolean) => void
   setBusy: (msg: string | null) => void
-  toast: (msg: string, kind?: Toast['kind'], actionLabel?: string, onAction?: () => void) => void
+  setAppUpdate: (u: { version: string; install: () => void } | null) => void
+  toast: (msg: string, kind?: Toast['kind'], actionLabel?: string, onAction?: () => void, opts?: { durationMs?: number }) => void
   dismissToast: (id: number) => void
   undo: () => void
   redo: () => void
@@ -453,6 +456,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     mapOpen: false,
     dwgNotice: false,
     busy: null,
+    appUpdate: null,
     scaleSuggestion: null,
     setScaleSuggestion: (scaleSuggestion) => set({ scaleSuggestion }),
     scaleSkipped: false,
@@ -710,8 +714,9 @@ export const useStore = create<VastuStore>()((set, get) => {
     setMapOpen: (mapOpen) => set({ mapOpen }),
     setDwgNotice: (dwgNotice) => set({ dwgNotice }),
     setBusy: (busy) => set({ busy }),
+    setAppUpdate: (appUpdate) => set({ appUpdate }),
 
-    toast: (msg, kind = 'info', actionLabel, onAction) => {
+    toast: (msg, kind = 'info', actionLabel, onAction, opts) => {
       const id = toastSeq++
       // identical repeats replace instead of stacking
       set((s) => ({ toasts: [...s.toasts.filter((t) => t.msg !== msg).slice(-3), { id, msg, kind, actionLabel, onAction }] }))
@@ -719,7 +724,7 @@ export const useStore = create<VastuStore>()((set, get) => {
         if (heldToasts.has(id)) window.setTimeout(expire, 1500)
         else get().dismissToast(id)
       }
-      window.setTimeout(expire, actionLabel ? 9000 : 4200)
+      window.setTimeout(expire, opts?.durationMs ?? (actionLabel ? 9000 : 4200))
     },
     dismissToast: (id) => { heldToasts.delete(id); set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })) },
 

@@ -1,7 +1,8 @@
 import {
   Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
-  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, Ruler, Save, ShieldCheck, Square as SquareIcon, Trash2, Undo2, Upload, UserRound, Wand2,
+  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, RefreshCw, Ruler, Save, ShieldCheck, Square as SquareIcon, Trash2, Undo2, Upload, UserRound, Wand2,
 } from 'lucide-react'
+import { APP_VERSION, canUpdate, checkForUpdates } from '../updater'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { mod } from '../platform'
@@ -107,6 +108,7 @@ export function TopBar() {
   const appearanceOpen = useStore((s) => s.appearanceOpen)
   const setAppearanceOpen = useStore((s) => s.setAppearanceOpen)
   const auth = useStore((s) => s.auth)
+  const appUpdate = useStore((s) => s.appUpdate)
 
   const savePortable = () => { if (requireLicense()) saveProjectFile() }
 
@@ -146,6 +148,7 @@ export function TopBar() {
   ]
 
   const moreRows: SheetRow[] = [
+    ...(appUpdate ? [{ icon: Download, label: `Update to ${appUpdate.version}`, sub: 'Download, install and restart', onTap: appUpdate.install }] : []),
     {
       icon: locked ? Lock : LockOpen,
       label: locked ? 'Unlock editing' : 'Lock the plan',
@@ -182,6 +185,7 @@ export function TopBar() {
       }] : []),
     ] : []),
     { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },
+    ...(canUpdate() ? [{ icon: RefreshCw, label: 'Check for updates', sub: `This is version ${APP_VERSION}`, onTap: () => { void checkForUpdates(true) } }] : []),
     { icon: Eraser, label: 'Clear…', sub: 'Remove just the background, markers, drawings or outline', onTap: () => setClearOpen(true) },
   ]
 

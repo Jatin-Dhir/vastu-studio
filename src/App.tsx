@@ -306,6 +306,9 @@ export default function App() {
   /* autosave + restore: legacy localStorage migrates into the IndexedDB library once */
   useEffect(() => {
     requestPersistence()
+    // the installed apps look for a newer release a few seconds after starting: quiet when there
+    // is nothing new or no connection, a toast and a menu entry when there is
+    window.setTimeout(() => { void import('./updater').then((m) => m.checkForUpdates()) }, 6000)
     initAuth()
     const st = useStore.getState()
     // after a render crash the next boot stays blank instead of reopening the plan that broke

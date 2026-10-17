@@ -1,4 +1,5 @@
-import { HelpCircle, LogOut, ShieldCheck } from 'lucide-react'
+import { Download, HelpCircle, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
+import { APP_VERSION, canUpdate, checkForUpdates } from '../updater'
 import { useStore } from '../store'
 import { signOut } from '../auth/session'
 import { AUTH_ENABLED } from '../auth/supabase'
@@ -10,6 +11,7 @@ const fmtDate = (iso: string) => new Date(iso).toLocaleDateString('en-IN', { day
 /** Who is signed in, how the app looks, and the few settings a phone needs. */
 export function AccountScreen() {
   const auth = useStore((s) => s.auth)
+  const appUpdate = useStore((s) => s.appUpdate)
   const theme = useStore((s) => s.theme)
   const setTheme = useStore((s) => s.setTheme)
   const unit = useStore((s) => s.unit)
@@ -54,7 +56,10 @@ export function AccountScreen() {
 
       <section className="m-card">
         <button className="btn-ghost m-btn" onClick={() => setShortcutsOpen(true)}><HelpCircle size={15} /> How the flow works</button>
-        <p className="m-muted m-about">Vastu Studio for Android · the practitioner's drawing board. Plans stay on this phone; the charts come from your account.</p>
+        {canUpdate() && (appUpdate
+          ? <button className="btn-primary m-btn" onClick={appUpdate.install}><Download size={15} /> Update to {appUpdate.version}</button>
+          : <button className="btn-ghost m-btn" onClick={() => void checkForUpdates(true)}><RefreshCw size={15} /> Check for updates</button>)}
+        <p className="m-muted m-about">Vastu Studio {APP_VERSION} for Android · the practitioner's drawing board. Plans stay on this phone; the charts come from your account.</p>
       </section>
       <ShortcutsDialog />
     </div>

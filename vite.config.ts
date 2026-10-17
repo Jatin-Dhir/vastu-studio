@@ -131,10 +131,15 @@ function colorMixFallback(): PostcssPlugin {
   }
 }
 
+/** The installed apps' version, from one place: the desktop shell's config (Android's versionName
+ *  is kept equal to it). The updater compares against it. */
+const APP_VERSION = JSON.parse(readFileSync(resolve(__dirname, 'src-tauri/tauri.conf.json'), 'utf8')).version as string
+
 export default defineConfig({
   base: './',
   plugins: [react(), devSave(), preloadInter(), swPrecache()],
   css: { postcss: { plugins: [colorMixFallback()] } },
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   server: { port: 5173 },
   build: {
     // Safari 15 (iPhone 6s/7 on iOS 15), Chrome/Edge/WebView 99, Firefox 99: syntax newer than
