@@ -15,7 +15,7 @@ export const DOWNLOADS = {
 export const ASSET_NAMES = { windows: 'VastuStudio-Setup-x64.exe', android: 'VastuStudio-android.apk' }
 
 /** Shown until the live release feed answers (or when it can't). */
-export const FALLBACK_RELEASE = { version: '1.3.1', publishedAt: '2026-10-17', sizes: { windows: 6.4e6, android: 9.3e6 } }
+export const FALLBACK_RELEASE = { version: '1.3.2', publishedAt: '2026-10-17', sizes: { windows: 7.5e6, android: 9.3e6 } }
 
 /** How a practitioner asks for a seat. Leave both empty and the page offers sign-in only.
  *  whatsapp: digits with the country code, no plus — e.g. '91xxxxxxxxxx'. */
