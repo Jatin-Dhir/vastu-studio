@@ -12,22 +12,24 @@ import { ZONE_RULES, onChartsChanged } from './rules16'
 
 export interface ZoneDef { key: string; name: string; theme: string; color: string }
 
+/** Zone colours as the owner set them (2026-10-17): ESE a mehndi green, SE ruby, SSE red and S
+ *  the orange next to it, and the western zones (WSW, W, WNW, NW) greyed rather than blue. */
 export const ZONES16: ZoneDef[] = [
   { key: 'N',   name: 'North',            theme: 'Career · Money · Opportunity', color: '#4B93D1' },
   { key: 'NNE', name: 'North-North-East', theme: 'Health · Immunity',            color: '#55A8CF' },
   { key: 'NE',  name: 'North-East',       theme: 'Mind · Clarity · Wisdom',      color: '#6FC7CE' },
   { key: 'ENE', name: 'East-North-East',  theme: 'Fun · Refreshment',            color: '#74C4A2' },
   { key: 'E',   name: 'East',             theme: 'Social · Associations',        color: '#63B56F' },
-  { key: 'ESE', name: 'East-South-East',  theme: 'Churning · Analysis',          color: '#A3BF62' },
-  { key: 'SE',  name: 'South-East',       theme: 'Fire · Cash · Energy',         color: '#E0684F' },
-  { key: 'SSE', name: 'South-South-East', theme: 'Power · Confidence',           color: '#E58255' },
-  { key: 'S',   name: 'South',            theme: 'Fame · Recognition',           color: '#D95F45' },
+  { key: 'ESE', name: 'East-South-East',  theme: 'Churning · Analysis',          color: '#97BF62' },
+  { key: 'SE',  name: 'South-East',       theme: 'Fire · Cash · Energy',         color: '#D0325F' },
+  { key: 'SSE', name: 'South-South-East', theme: 'Power · Confidence',           color: '#D95F45' },
+  { key: 'S',   name: 'South',            theme: 'Fame · Recognition',           color: '#E58255' },
   { key: 'SSW', name: 'South-South-West', theme: 'Expenditure · Disposal',       color: '#C88A52' },
   { key: 'SW',  name: 'South-West',       theme: 'Relationships · Stability',    color: '#B3793F' },
-  { key: 'WSW', name: 'West-South-West',  theme: 'Education · Savings',          color: '#A58D68' },
-  { key: 'W',   name: 'West',             theme: 'Gains · Profits',              color: '#7C8EA6' },
-  { key: 'WNW', name: 'West-North-West',  theme: 'Detox · De-stress',            color: '#9092BC' },
-  { key: 'NW',  name: 'North-West',       theme: 'Support · Banking',            color: '#A9A6CB' },
+  { key: 'WSW', name: 'West-South-West',  theme: 'Education · Savings',          color: '#998B74' },
+  { key: 'W',   name: 'West',             theme: 'Gains · Profits',              color: '#848F9E' },
+  { key: 'WNW', name: 'West-North-West',  theme: 'Detox · De-stress',            color: '#989AB4' },
+  { key: 'NW',  name: 'North-West',       theme: 'Support · Banking',            color: '#AFADC4' },
   { key: 'NNW', name: 'North-North-West', theme: 'Attraction · Bedroom',         color: '#7B9BC7' },
 ]
 

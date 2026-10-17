@@ -16,8 +16,9 @@ const TAG_INK = '#101116'
 /** Muted gold-brown — the design system's secondary-line ink (design language spec). */
 const MUTED = '#8C7642'
 /** Gate verdict colours, the same ladder as every other verdict in the app: auspicious green
- *  (ZONES16 E), challenging amber, inauspicious red (ZONES16 SE). The charts' 'avoid' class
- *  is most of the negative gates, so it takes the strongest colour. */
+ *  (ZONES16 E), challenging amber, inauspicious red. The charts' 'avoid' class is most of the
+ *  negative gates, so it takes the strongest colour. These are verdict colours, kept apart
+ *  from the zone palette (SE is ruby now; the gate red did not follow it). */
 const GATE_GOOD = '#63B56F'
 const GATE_CAUTION = '#D9A13B'
 const GATE_AVOID = '#E0684F'
