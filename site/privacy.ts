@@ -5,9 +5,9 @@ import '@fontsource/cormorant-garamond/600.css'
 import './site.css'
 import { contactLinks } from './config'
 
-const { whatsapp, mail } = contactLinks()
+const { whatsapp, write, email } = contactLinks()
 const line = document.querySelector<HTMLElement>('[data-contact]')
-if (line && (whatsapp || mail)) {
+if (line && (whatsapp || write)) {
   const link = (href: string, text: string, external: boolean) => {
     const a = document.createElement('a')
     a.href = href
@@ -15,9 +15,12 @@ if (line && (whatsapp || mail)) {
     if (external) { a.target = '_blank'; a.rel = 'noopener noreferrer' }
     return a
   }
-  line.replaceChildren('Write to the studio ')
+  line.replaceChildren('Write to Vastu Studio ')
   if (whatsapp) line.append(link(whatsapp, 'on WhatsApp', true))
-  if (whatsapp && mail) line.append(' or ')
-  if (mail) line.append(link(mail, 'by email', false))
+  if (whatsapp && write) line.append(' or ')
+  if (write) line.append('at ', link(write, email, false))
   line.append('.')
 }
+// the footer's Contact link, as on the front page
+const foot = document.querySelector<HTMLAnchorElement>('[data-contact-link]')
+if (foot && write) { foot.href = write; foot.hidden = false }

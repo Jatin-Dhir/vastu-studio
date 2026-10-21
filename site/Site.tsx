@@ -249,7 +249,7 @@ export function Site({ returning }: { returning: boolean }) {
   }, [])
 
   const z = ZONES16[zone ?? 2]
-  const { whatsapp, mail } = contact
+  const { whatsapp, mail, write, email } = contact
   const dl: Record<Way, { name: string; sub: string; meta: string; note: string; href: string; act: ReactNode }> = {
     windows: {
       name: 'Windows', sub: 'Windows 10 and 11, 64-bit', meta: `${ASSET_NAMES.windows} · ${fmtMB(rel.sizes.windows)}`,
@@ -437,6 +437,7 @@ export function Site({ returning }: { returning: boolean }) {
               <a className="btn btn-line" href={APP_URL}>{returning ? 'Back to the studio' : 'Already have a seat? Sign in'} {Icon.arrow}</a>
             </div>
             {!whatsapp && !mail && <p className="fine">Seats are issued by Vastu Studio. Ask the practitioner who introduced you to it.</p>}
+            {email && <p className="fine">Seat requests go to <a href={mail}>{email}</a>.</p>}
           </div>
         </section>
 
@@ -463,6 +464,7 @@ export function Site({ returning }: { returning: boolean }) {
             <a href={APP_URL}>Open the studio</a>
             <a href={DOWNLOADS.releases}>All releases</a>
             <a href="./privacy/">Privacy</a>
+            {write && <a href={write}>Contact</a>}
           </nav>
         </div>
         <div className="foot-bottom">

@@ -30,13 +30,19 @@ export function visitorPlatform(): Platform {
 export const FALLBACK_RELEASE = { version: '1.3.2', publishedAt: '2026-10-17', sizes: { windows: 7.5e6, android: 9.3e6 } }
 
 /** How a practitioner asks for a seat. Leave both empty and the page offers sign-in only.
- *  whatsapp: digits with the country code, no plus — e.g. '91xxxxxxxxxx'. */
-export const CONTACT = { whatsapp: '', email: '' }
+ *  whatsapp: digits with the country code, no plus — e.g. '91xxxxxxxxxx'. The address is kept
+ *  in two halves, joined only when the page runs, so it never sits whole in the shipped script
+ *  for an address harvester to find. */
+export const CONTACT = { whatsapp: '', email: ['jatindhir.dev', 'gmail.com'].join('@') }
 
-/** The links the page offers for asking — empty strings until CONTACT names a way. */
-export function contactLinks(): { whatsapp: string; mail: string } {
+/** The links the page offers for asking — empty strings until CONTACT names a way. `write` is a
+ *  plain mailto for general contact; `mail` opens a seat request. */
+export function contactLinks(): { whatsapp: string; mail: string; write: string; email: string } {
+  const hello = 'Hello — I would like a Vastu Studio seat.'
   return {
-    whatsapp: CONTACT.whatsapp ? `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent('Hello — I would like a Vastu Studio seat.')}` : '',
-    mail: CONTACT.email ? `mailto:${CONTACT.email}?subject=${encodeURIComponent('Vastu Studio seat')}` : '',
+    whatsapp: CONTACT.whatsapp ? `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent(hello)}` : '',
+    mail: CONTACT.email ? `mailto:${CONTACT.email}?subject=${encodeURIComponent('Vastu Studio seat')}&body=${encodeURIComponent(hello)}` : '',
+    write: CONTACT.email ? `mailto:${CONTACT.email}` : '',
+    email: CONTACT.email,
   }
 }
