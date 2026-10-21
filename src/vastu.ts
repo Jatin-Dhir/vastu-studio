@@ -12,7 +12,7 @@ import { ZONE_RULES, onChartsChanged } from './rules16'
 
 export interface ZoneDef { key: string; name: string; theme: string; color: string }
 
-/** Zone colours as the owner set them (2026-10-17): ESE a greenish-brown olive, SE flamingo pink, SSE red and S
+/** Zone colours as the owner set them (2026-10-17): ESE a greenish-brown olive, SE a soft pastel flamingo pink, SSE red and S
  *  the orange next to it, and the western zones (WSW, W, WNW, NW) greyed rather than blue. */
 export const ZONES16: ZoneDef[] = [
   { key: 'N',   name: 'North',            theme: 'Career · Money · Opportunity', color: '#4B93D1' },
@@ -21,7 +21,7 @@ export const ZONES16: ZoneDef[] = [
   { key: 'ENE', name: 'East-North-East',  theme: 'Fun · Refreshment',            color: '#74C4A2' },
   { key: 'E',   name: 'East',             theme: 'Social · Associations',        color: '#63B56F' },
   { key: 'ESE', name: 'East-South-East',  theme: 'Churning · Analysis',          color: '#A0A558' },
-  { key: 'SE',  name: 'South-East',       theme: 'Fire · Cash · Energy',         color: '#E6869F' },
+  { key: 'SE',  name: 'South-East',       theme: 'Fire · Cash · Energy',         color: '#EA9CAF' },
   { key: 'SSE', name: 'South-South-East', theme: 'Power · Confidence',           color: '#D95F45' },
   { key: 'S',   name: 'South',            theme: 'Fame · Recognition',           color: '#E58255' },
   { key: 'SSW', name: 'South-South-West', theme: 'Expenditure · Disposal',       color: '#C88A52' },
