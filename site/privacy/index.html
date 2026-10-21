@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>Privacy — Vastu Studio</title>
+  <meta name="description" content="What Vastu Studio keeps and what it never sees. Plans and reports stay on your device; the server keeps your account and your seat." />
+  <meta name="theme-color" content="#0B0908" />
+  <link rel="canonical" href="https://jatin-dhir.github.io/vastu-studio/privacy/" />
+  <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="../app/icons/icon-180.png" />
+  <!-- static on purpose: a policy should read without scripts; the module only brings the faces and fills in the studio's contact -->
+  <script type="module" src="../privacy.ts"></script>
+</head>
+<body>
+  <div class="site legal-page">
+    <a class="skip" href="#policy">Skip to content</a>
+    <header class="nav scrolled">
+      <a class="nav-brand" href="../" aria-label="Vastu Studio, home">
+        <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" class="mark"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" stroke-width="2.2" /><circle cx="16" cy="16" r="3" fill="currentColor" /></svg>
+        Vastu <em>Studio</em>
+      </a>
+      <div class="nav-cta"><a class="btn-line" href="../">Back to the site</a></div>
+    </header>
+
+    <main id="policy" class="legal">
+      <div class="wrap">
+        <header class="legal-head">
+          <h1>Privacy</h1>
+          <p class="legal-lede">Your clients’ plans stay on your device. This page lists everything the Vastu Studio apps and this website send anywhere, and why.</p>
+          <p class="legal-date">Last updated 21 October 2026</p>
+        </header>
+
+        <article class="legal-sheet">
+          <section>
+            <h2>Plans stay on your device</h2>
+            <p>The floor plans you import, the outlines, rooms and marks you draw, your notes and the reports you make are stored only on the device you made them on: in the browser for the studio at this address, and inside the app on Windows and Android. Vastu Studio never uploads them. A library backup is a file you save and keep yourself.</p>
+          </section>
+
+          <section>
+            <h2>What the server keeps</h2>
+            <p>Your account lives with Supabase, on servers in Tokyo, Japan. For each practitioner it holds:</p>
+            <ul>
+              <li>Your phone number and name, as the studio entered them when it issued your seat.</li>
+              <li>Your password, kept only as a one-way hash that no one can read back.</li>
+              <li>Your seat: when it ends, and whether it is active.</li>
+              <li>The device your seat is open on: an identifier the app makes up for itself, a label such as “Vastu Studio app · Windows PC”, and when it last checked in. This is how one seat stays on one device.</li>
+              <li>A short activity record: when you sign in, open the studio, analyse a plan and open a report, each with the time. It holds no plan, no address and no client detail.</li>
+              <li>The studio’s own notes on your seat.</li>
+            </ul>
+            <p>Nothing from a plan reaches the server.</p>
+          </section>
+
+          <section>
+            <h2>What the apps fetch</h2>
+            <ul>
+              <li>The charts that turn zone shares into verdicts, when you sign in. A copy stays on your device so the studio keeps working without signal for a few days.</li>
+              <li>Notices from the studio, shown once in the app.</li>
+              <li>Updates. A few seconds after they open, the Windows and Android apps ask GitHub whether a newer version is out. Updates download from GitHub, and the Windows app checks each one’s signature before installing it.</li>
+            </ul>
+          </section>
+
+          <section>
+            <h2>Location, only for the compass</h2>
+            <p>On a phone, the compass can correct its magnetic heading to true north. If you allow location, it sends your position to the studio’s declination service, which answers how far magnetic north lies from true north there. The answer is kept on the phone for a month, and nothing else uses your location. Without it, the compass shows the magnetic heading.</p>
+          </section>
+
+          <section>
+            <h2>Maps, only when you use them</h2>
+            <p>If you capture a plot from the map, the map pictures come from Esri and OpenStreetMap (and from MapTiler, if you add your own key), and place searches go to OpenStreetMap’s Nominatim and to Komoot’s Photon. Like any website, those services see your internet address and the area or place you asked for.</p>
+          </section>
+
+          <section>
+            <h2>This website</h2>
+            <p>No cookies, no analytics and no advertising. GitHub Pages serves these pages, and the download section asks GitHub which version is the newest. If you have used the studio in this browser, the page notices that on your own device and offers a way back to it; nothing about it is sent.</p>
+          </section>
+
+          <section>
+            <h2>Changing or closing your account</h2>
+            <p>Ask the studio to correct your details or to close your account. Closing it deletes the account together with its device record and activity record. Plans on your devices are yours: delete them in the app, or clear this site’s data in your browser.</p>
+            <p data-contact>Write to the studio that issued your seat, or to the practitioner who introduced you.</p>
+          </section>
+
+          <section>
+            <h2>If this changes</h2>
+            <p>When what Vastu Studio keeps changes, this page changes with it, and the date at the top moves.</p>
+          </section>
+        </article>
+      </div>
+    </main>
+
+    <!-- the front page's footer (site/Site.tsx) — keep the two in step -->
+    <footer class="foot">
+      <div class="wrap">
+        <div class="foot-brand"><svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true" class="mark"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" stroke-width="2.2" /><circle cx="16" cy="16" r="3" fill="currentColor" /></svg> Vastu <em>Studio</em></div>
+        <p class="foot-line">The instrument for Vastu practitioners. Made in India.</p>
+        <nav class="foot-links" aria-label="Footer">
+          <a href="../app/">Open the studio</a>
+          <a href="https://github.com/Jatin-Dhir/vastu-studio/releases">All releases</a>
+          <a href="./" aria-current="page">Privacy</a>
+        </nav>
+        <p class="foot-fine">Plans and reports stay on your device. The server keeps your account and your seat, and sends the charts. © 2026 Vastu Studio.</p>
+      </div>
+    </footer>
+  </div>
+</body>
+</html>

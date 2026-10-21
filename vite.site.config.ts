@@ -9,6 +9,9 @@ import react from '@vitejs/plugin-react'
 export default defineConfig({
   root: resolve(__dirname, 'site'),
   base: './',
+  // its own dependency cache: sharing node_modules/.vite with the studio's dev server makes the
+  // two invalidate each other's optimized deps ("504 Outdated Optimize Dep") when both run
+  cacheDir: resolve(__dirname, 'node_modules/.vite-site'),
   publicDir: resolve(__dirname, 'site/public'),
   plugins: [react()],
   // CompassDial's haptic tick reaches into the app store through src/native.ts; the site has
@@ -20,6 +23,8 @@ export default defineConfig({
     emptyOutDir: true,
     chunkSizeWarningLimit: 900,
     rollupOptions: {
+      // the front page, and the privacy page as plain HTML at privacy/
+      input: { main: resolve(__dirname, 'site/index.html'), privacy: resolve(__dirname, 'site/privacy/index.html') },
       output: { manualChunks: { react: ['react', 'react-dom'], gsap: ['gsap', 'lenis'], three: ['three'] } },
     },
   },

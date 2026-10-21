@@ -20,3 +20,11 @@ export const FALLBACK_RELEASE = { version: '1.3.2', publishedAt: '2026-10-17', s
 /** How a practitioner asks for a seat. Leave both empty and the page offers sign-in only.
  *  whatsapp: digits with the country code, no plus — e.g. '91xxxxxxxxxx'. */
 export const CONTACT = { whatsapp: '', email: '' }
+
+/** The links the page offers for asking — empty strings until CONTACT names a way. */
+export function contactLinks(): { whatsapp: string; mail: string } {
+  return {
+    whatsapp: CONTACT.whatsapp ? `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent('Hello — I would like a Vastu Studio seat.')}` : '',
+    mail: CONTACT.email ? `mailto:${CONTACT.email}?subject=${encodeURIComponent('Vastu Studio seat')}` : '',
+  }
+}

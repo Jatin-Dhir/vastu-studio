@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { ArrowRight, ArrowUpRight, Check, Download, Globe, MessageCircle, Mail, Monitor, Smartphone } from 'lucide-react'
 import { Act } from './Act'
 import { DialDemo } from './DialDemo'
-import { armReveals, fanPages, heroIntro, initSmoothScroll, refreshTriggers, reducedMotion, scrubSection } from './motion'
-import { APP_URL, ASSET_NAMES, CONTACT, DOWNLOADS, FALLBACK_RELEASE, REPO, REPO_API } from './config'
+import { armReveals, fanPages, heroIntro, initSmoothScroll, refreshTriggers, reducedMotion, scrubSection, warmImages } from './motion'
+import { APP_URL, ASSET_NAMES, DOWNLOADS, FALLBACK_RELEASE, REPO_API, contactLinks } from './config'
 import { ZONES16 } from '../src/vastu'
 import shotVerdicts from './shots/desktop-verdicts.webp'
 import shotInk from './shots/desktop-ink.webp'
@@ -95,14 +95,43 @@ function ZoneStrip() {
   )
 }
 
-const FAQ = [
-  { q: 'Which system does it read?', a: 'The sixteen-zone reading with the thirty-two entrance gates and the 81-pada mandala. The charts that turn geometry into verdicts come with your seat and stay on the server; the studio downloads them when you sign in.' },
-  { q: 'What can I import?', a: 'A PDF, an AutoCAD DXF, a photo or scan of a blueprint, or a plot captured from satellite view. Scale comes from any known length, or from the drawing’s own units.' },
-  { q: 'How is north set?', a: 'Tap the tail and tip of the drawing’s north arrow, type a bearing, or take it from the phone compass, which corrects the magnetic heading to true north for your location.' },
-  { q: 'Does it work on site without signal?', a: 'Yes. Once loaded the studio works offline, and a seat stays valid for several days without reaching the server. Plans and reports never leave the device.' },
-  { q: 'Can I use it on my laptop and my phone?', a: 'One seat opens the studio on one device at a time, on every platform. Sign out on one, sign in on the other — or move the seat from the sign-in screen.' },
-  { q: 'How do I get a seat?', a: 'Seats are issued by the studio, per practitioner, per year. Ask the practitioner who introduced you, or write to the studio.' },
-]
+interface Faq { q: string; a: string; rich?: ReactNode }
+
+/** The questions, as plain text (also handed to search engines as FAQ data) with an optional
+ *  richer answer for the page itself where a link helps. */
+function faqs(contact: { whatsapp: string; mail: string }): Faq[] {
+  const ask = contact.whatsapp || contact.mail
+  return [
+    { q: 'Which system does it read?', a: 'The sixteen-zone reading with the thirty-two entrance gates and the 81-pada mandala. The charts that turn geometry into verdicts come with your seat and stay on the server; the studio downloads them when you sign in.' },
+    { q: 'What can I import?', a: 'A PDF, an AutoCAD DXF, a photo or scan of a blueprint, or a plot captured from satellite view. Scale comes from any known length, or from the drawing’s own units.' },
+    { q: 'How is north set?', a: 'Tap the tail and tip of the drawing’s north arrow, type a bearing, or take it from the phone compass, which corrects the magnetic heading to true north for your location.' },
+    { q: 'Does it work on site without signal?', a: 'Yes. Once loaded the studio works offline, and a seat stays valid for several days without reaching the server. Plans and reports never leave the device.' },
+    {
+      q: 'Who can see my clients’ plans?',
+      a: 'Only you. Plans, notes and reports are stored on the device you made them on and are never uploaded. The server keeps your account and your seat, nothing from a plan. The privacy page lists every detail.',
+      rich: <>Only you. Plans, notes and reports are stored on the device you made them on and are never uploaded. The server keeps your account and your seat, nothing from a plan. The <a href="./privacy/">privacy page</a> lists every detail.</>,
+    },
+    { q: 'Can I use it on my laptop and my phone?', a: 'One seat opens the studio on one device at a time, on every platform. Sign out on one, sign in on the other — or move the seat from the sign-in screen.' },
+    { q: 'How do updates arrive?', a: 'The Windows app looks for a new version each time it opens, checks its signature and installs it with one click. The Android app tells you when one is out and opens the download. The studio in the browser is always the newest.' },
+    ask
+      ? {
+          q: 'How do I get a seat?',
+          a: 'Seats are issued by the studio, per practitioner, per year. Write to the studio and it will set one up for you.',
+          rich: <>Seats are issued by the studio, per practitioner, per year. <a href={ask} {...(contact.whatsapp ? { target: '_blank', rel: 'noopener noreferrer' } : {})}>{contact.whatsapp ? 'Message the studio on WhatsApp' : 'Write to the studio'}</a> and it will set one up for you.</>,
+        }
+      : { q: 'How do I get a seat?', a: 'Seats are issued by the studio, per practitioner, per year. Ask the practitioner who introduced you to Vastu Studio.' },
+  ]
+}
+
+/** FAQ data for search and answer engines, from the same list the page shows. */
+function FaqData({ items }: { items: Faq[] }) {
+  const json = JSON.stringify({
+    '@context': 'https://schema.org',
+    '@type': 'FAQPage',
+    mainEntity: items.map((f) => ({ '@type': 'Question', name: f.q, acceptedAnswer: { '@type': 'Answer', text: f.a } })),
+  }).replace(/</g, '\\u003c')
+  return <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: json }} />
+}
 
 /* ------------------------------------------------------------------ the page */
 
@@ -127,14 +156,16 @@ export function Site({ returning }: { returning: boolean }) {
     const offHero = heroIntro(r)
     const offReveals = armReveals(r)
     const offFan = pages.current ? fanPages(pages.current) : () => {}
+    const offWarm = warmImages(r)
     document.fonts?.ready.then(refreshTriggers).catch(() => {})
     r.querySelectorAll('img').forEach((im) => im.addEventListener('load', refreshTriggers, { once: true }))
     window.addEventListener('load', refreshTriggers, { once: true })
-    return () => { offHero(); offReveals(); offFan(); offScroll() }
+    return () => { offHero(); offReveals(); offFan(); offWarm(); offScroll() }
   }, [])
 
-  const whatsapp = CONTACT.whatsapp ? `https://wa.me/${CONTACT.whatsapp}?text=${encodeURIComponent('Hello — I would like a Vastu Studio seat.')}` : ''
-  const mail = CONTACT.email ? `mailto:${CONTACT.email}?subject=${encodeURIComponent('Vastu Studio seat')}` : ''
+  const contact = contactLinks()
+  const { whatsapp, mail } = contact
+  const faq = faqs(contact)
 
   return (
     <div ref={root} className="site">
@@ -151,187 +182,192 @@ export function Site({ returning }: { returning: boolean }) {
         </div>
       </header>
 
-      <Act version={rel.version} returning={returning} />
+      <main>
+        <Act version={rel.version} returning={returning} />
 
-      <ZoneStrip />
+        <ZoneStrip />
 
-      {/* ———— verdicts ———— */}
-      <section className="chapter" id="read">
-        <div className="wrap">
-          <ChapterHead title="What the studio says."
-            lede="These are the studio's own sentences for the plan above: how much of each room sits in which zone, judged against the charts, with the move that fixes it in your units and your direction." />
-          <div className="verdicts">
-            <article className="vcard v-avoid">
-              <header><b>Bath</b><i>avoid</i></header>
-              <p className="v-where">19% in NE · 18% in ENE · on the Brahmasthan</p>
-              <p>The most serious seat: health, memory and wisdom drain away. Move it about 2′ 5″ south-south-east, into ESE, three zones clockwise.</p>
-            </article>
-            <article className="vcard v-ideal">
-              <header><b>Kitchen</b><i>ideal</i></header>
-              <p className="v-where">37% in SSE · 29% in S</p>
-              <p>The fire seat: strength, confidence and delicious, healthy food. Right where it should be.</p>
-            </article>
-            <article className="vcard v-avoid">
-              <header><b>Main door</b><i>N2 · Naga</i></header>
-              <p className="v-where">an inauspicious gate</p>
-              <p>Naga breeds enmity and jealousy. Favourable gates on this wall: N3 Mukhya, N4 Bhallata.</p>
-            </article>
-          </div>
-          <figure className="frame-desktop" data-reveal-img>
-            <img src={shotVerdicts} alt="The Windows studio: the plan with the sixteen-zone wheel, and the Rooms & objects panel listing each room with its zone shares and verdict." width={2880} height={1800} loading="lazy" decoding="async" />
-            <figcaption>The Windows studio. Tap a row for the why and the move.</figcaption>
-          </figure>
-        </div>
-      </section>
-
-      {/* ———— compass ———— */}
-      <section className="chapter compass" id="compass" ref={compassSec}>
-        <div className="wrap">
-          <ChapterHead title="The compass, in your hand."
-            lede="Point the phone at a wall and read its zone, corrected to true north for where you stand, with the ruler, deity, colour, best use and remedy of that direction and the pada under the needle." />
-          <DialDemo sectionRef={compassSec} />
-          <p className="compass-hint">{reducedMotion ? 'On a phone the rose follows where you point.' : 'Keep scrolling and the rose turns. On a phone it follows where you point.'}</p>
-          <div className="compass-facts">
-            <Facts items={[
-              'True north: the magnetic heading corrected by the declination for your location (WMM 2025), or magnetic if you prefer.',
-              'Eight zones with ruler, deity, colour and shape, best use, entrance verdict, remedy and sleep direction.',
-              'The thirty-two padas by name and lean; readings you save stay with the phone.',
-            ]} />
-            <figure className="frame-phone small">
-              <img src={shotPhoneCompass} alt="The compass screen of the Android app: the dial reading 047°, NE Ishan, with the zone's rules, colour, best use and entrance verdict below." width={1170} height={2532} loading="lazy" decoding="async" />
+        {/* ———— verdicts ———— */}
+        <section className="chapter" id="read">
+          <div className="wrap">
+            <ChapterHead title="What the studio says."
+              lede="These are the studio's own sentences for the plan above: how much of each room sits in which zone, judged against the charts, with the move that fixes it in your units and your direction." />
+            <div className="verdicts">
+              <article className="vcard v-avoid">
+                <header><b>Bath</b><i>avoid</i></header>
+                <p className="v-where">19% in NE · 18% in ENE · on the Brahmasthan</p>
+                <p>The most serious seat: health, memory and wisdom drain away. Move it about 2′ 5″ south-south-east, into ESE, three zones clockwise.</p>
+              </article>
+              <article className="vcard v-ideal">
+                <header><b>Kitchen</b><i>ideal</i></header>
+                <p className="v-where">37% in SSE · 29% in S</p>
+                <p>The fire seat: strength, confidence and delicious, healthy food. Right where it should be.</p>
+              </article>
+              <article className="vcard v-avoid">
+                <header><b>Main door</b><i>N2 · Naga</i></header>
+                <p className="v-where">an inauspicious gate</p>
+                <p>Naga breeds enmity and jealousy. Favourable gates on this wall: N3 Mukhya, N4 Bhallata.</p>
+              </article>
+            </div>
+            <figure className="frame-desktop" data-reveal-img>
+              <img src={shotVerdicts} alt="The Windows studio: the plan with the sixteen-zone wheel, and the Rooms & objects panel listing each room with its zone shares and verdict." width={2880} height={1800} loading="lazy" decoding="async" />
+              <figcaption>The Windows studio. Tap a row for the why and the move.</figcaption>
             </figure>
           </div>
-        </div>
-      </section>
+        </section>
 
-      {/* ———— report ———— */}
-      <section className="chapter" id="report">
-        <div className="wrap">
-          <ChapterHead title="A report your client can hold."
-            lede="One tap builds a PDF set in the studio's own faces: the plan with its zones, the room-by-room verdicts, the entrance reading, the zone balance and the written assessment, ready for WhatsApp or print." />
-          <div className="pages" ref={pages}>
-            <figure><img src={shotReport1} alt="Report page 1: the title page with the plan drawn to scale under the sixteen-zone wheel." width={1241} height={1754} loading="lazy" decoding="async" /><figcaption>Cover and plan</figcaption></figure>
-            <figure><img src={shotReport2} alt="Report page 2: the placement verdicts, one row per room, with zone shares and moves." width={1241} height={1754} loading="lazy" decoding="async" /><figcaption>Placements</figcaption></figure>
-            <figure><img src={shotReport3} alt="Report page 3: the zone balance and the written assessment." width={1241} height={1754} loading="lazy" decoding="async" /><figcaption>Balance and assessment</figcaption></figure>
-          </div>
-          <Facts items={[
-            'Client name, address and your practice on the cover; your notes where you wrote them.',
-            'Share straight from the phone, or Save as PDF on the desktop. PNG export of the drawing alone.',
-          ]} />
-        </div>
-      </section>
-
-      {/* ———— everywhere ———— */}
-      <section className="chapter desk" id="everywhere">
-        <div className="wrap">
-          <ChapterHead title="On the desk, on site, in the browser."
-            lede="One seat opens the same studio on every platform. Plans live on the device they were drawn on; the charts, the compass tables and the reports come with the seat." />
-        </div>
-        <figure className="desk-shot" data-reveal-img>
-          <img src={shotInk} alt="The Windows studio in the Ink theme, the sample residence traced with its zones." width={2880} height={1800} loading="lazy" decoding="async" data-parallax="0.06" />
-        </figure>
-        <div className="wrap">
-          <div className="platforms">
-            <article className="platform">
-              <h3><Monitor size={18} aria-hidden="true" /> Windows</h3>
-              <p>A native app with the whole studio: a big canvas, keyboard shortcuts, Paper or Ink, PNG and PDF export.</p>
-            </article>
-            <article className="platform">
-              <h3><Smartphone size={18} aria-hidden="true" /> Android</h3>
-              <p>Built for site visits: photograph a plan, trace it step by step, read it, and point the compass at the walls.</p>
-            </article>
-            <article className="platform">
-              <h3><Globe size={18} aria-hidden="true" /> Browser</h3>
-              <p>The same studio at this address, on any modern browser. Add it to the Home Screen on an iPhone and it opens like an app.</p>
-            </article>
-          </div>
-          <div className="phones">
-            <figure className="frame-phone"><img src={shotPhoneStudio} alt="The Android studio: the plan on a phone with the step strip along the bottom." width={1170} height={2532} loading="lazy" decoding="async" /></figure>
-            <figure className="frame-phone"><img src={shotPhoneAnalysis} alt="The Android studio with the Zones read sheet open, listing every room's verdict." width={1170} height={2532} loading="lazy" decoding="async" /></figure>
-            <figure className="frame-phone"><img src={shotPhonePlans} alt="The Plans tab listing saved plans." width={1170} height={2532} loading="lazy" decoding="async" /></figure>
-          </div>
-        </div>
-      </section>
-
-      {/* ———— why ———— */}
-      <section className="chapter why" id="why">
-        <div className="wrap">
-          <ChapterHead title="Not a calculator."
-            lede="Upload-and-score tools give a number and no way to argue with it. Vastu Studio is an instrument: it measures, shows its geometry, and leaves the judgement to the practitioner." />
-          <dl className="why-list">
-            <div><dt>Measured, never guessed</dt><dd>Every zone share comes from the outline you traced and the north you set, to the degree. Nothing is read off a picture.</dd></div>
-            <div><dt>A verdict you can defend</dt><dd>Each room names its zone, its percentage, the chart it was judged by and the move that fixes it, in your units.</dd></div>
-            <div><dt>Your name on the report</dt><dd>The PDF carries your practice, your notes and your reading. There is no generated score to explain away.</dd></div>
-            <div><dt>Your plans stay yours</dt><dd>Drawings and reports live on your device. The server holds an account, a seat and the charts, nothing else.</dd></div>
-          </dl>
-        </div>
-      </section>
-
-      {/* ———— questions ———— */}
-      <section className="chapter faq" id="faq">
-        <div className="wrap">
-          <ChapterHead title="Questions practitioners ask." lede="" />
-          <div className="faq-list">
-            {FAQ.map((f) => (
-              <details key={f.q}>
-                <summary>{f.q}</summary>
-                <p>{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ———— get ———— */}
-      <section className="chapter get" id="get">
-        <div className="wrap">
-          <ChapterHead title="Get Vastu Studio."
-            lede={`Version ${rel.version}${rel.live ? `, released ${fmtDate(rel.publishedAt)}` : ''}. Install it, then sign in with the seat your studio issued.`} />
-          <div className="downloads">
-            <a className="dl" href={DOWNLOADS.windows}>
-              <span className="dl-icon"><Monitor size={22} aria-hidden="true" /></span>
-              <span className="dl-body">
-                <b>Windows</b>
-                <span>{ASSET_NAMES.windows} · {fmtMB(rel.sizes.windows)} · Windows 10 and 11, 64-bit</span>
-                <small>Windows may show a SmartScreen notice for a new publisher. Choose <i>More info</i>, then <i>Run anyway</i>.</small>
-              </span>
-              <Download size={18} aria-hidden="true" className="dl-arrow" />
-            </a>
-            <a className="dl" href={DOWNLOADS.android}>
-              <span className="dl-icon"><Smartphone size={22} aria-hidden="true" /></span>
-              <span className="dl-body">
-                <b>Android</b>
-                <span>{ASSET_NAMES.android} · {fmtMB(rel.sizes.android)} · Android 8 and up</span>
-                <small>Allow installs from your browser when Android asks. Camera is for importing plans, location for true north.</small>
-              </span>
-              <Download size={18} aria-hidden="true" className="dl-arrow" />
-            </a>
-            <a className="dl" href={APP_URL}>
-              <span className="dl-icon"><Globe size={22} aria-hidden="true" /></span>
-              <span className="dl-body">
-                <b>Browser</b>
-                <span>Nothing to install. Open the studio here.</span>
-                <small>On an iPhone, use Share, then Add to Home Screen, for the app-like studio.</small>
-              </span>
-              <ArrowUpRight size={18} aria-hidden="true" className="dl-arrow" />
-            </a>
-          </div>
-
-          <div className="seat">
-            <div className="seat-copy">
-              <h3>One seat, the whole studio.</h3>
-              <p>Vastu Studio is sold per practitioner, per year. A seat opens the app on one device at a time, on every platform, with the charts, the compass tables, the readings and the reports, and every update while it runs.</p>
+        {/* ———— compass ———— */}
+        <section className="chapter compass" id="compass" ref={compassSec}>
+          <div className="wrap">
+            <ChapterHead title="The compass, in your hand."
+              lede="Point the phone at a wall and read its zone, corrected to true north for where you stand, with the ruler, deity, colour, best use and remedy of that direction and the pada under the needle." />
+            <DialDemo sectionRef={compassSec} />
+            <p className="compass-hint">{reducedMotion ? 'On a phone the rose follows where you point.' : 'Keep scrolling and the rose turns. On a phone it follows where you point.'}</p>
+            <div className="compass-facts">
+              <Facts items={[
+                'True north: the magnetic heading corrected by the declination for your location (WMM 2025), or magnetic if you prefer.',
+                'Eight zones with ruler, deity, colour and shape, best use, entrance verdict, remedy and sleep direction.',
+                'The thirty-two padas by name and lean; readings you save stay with the phone.',
+              ]} />
+              <figure className="frame-phone small">
+                <img src={shotPhoneCompass} alt="The compass screen of the Android app: the dial reading 047°, NE Ishan, with the zone's rules, colour, best use and entrance verdict below." width={1170} height={2532} loading="lazy" decoding="async" />
+              </figure>
             </div>
-            <div className="seat-ctas">
-              {whatsapp && <a className="btn-gold lg" href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={17} aria-hidden="true" /> Ask for a seat on WhatsApp</a>}
-              {!whatsapp && mail && <a className="btn-gold lg" href={mail}><Mail size={17} aria-hidden="true" /> Ask for a seat</a>}
-              <a className={whatsapp || mail ? 'btn-line lg' : 'btn-gold lg'} href={APP_URL}>{returning ? 'Back to the studio' : 'Already have a seat? Sign in'} <ArrowRight size={16} aria-hidden="true" /></a>
-            </div>
-            {!whatsapp && !mail && <p className="seat-note">Seats are issued by the studio. Ask the practitioner who introduced you to Vastu Studio.</p>}
           </div>
-        </div>
-      </section>
+        </section>
 
+        {/* ———— report ———— */}
+        <section className="chapter" id="report">
+          <div className="wrap">
+            <ChapterHead title="A report your client can hold."
+              lede="One tap builds a PDF set in the studio's own faces: the plan with its zones, the room-by-room verdicts, the entrance reading, the zone balance and the written assessment, ready for WhatsApp or print." />
+            <div className="pages" ref={pages}>
+              <figure><img src={shotReport1} alt="Report page 1: the title page with the plan drawn to scale under the sixteen-zone wheel." width={1241} height={1754} loading="lazy" decoding="async" /><figcaption>Cover and plan</figcaption></figure>
+              <figure><img src={shotReport2} alt="Report page 2: the placement verdicts, one row per room, with zone shares and moves." width={1241} height={1754} loading="lazy" decoding="async" /><figcaption>Placements</figcaption></figure>
+              <figure><img src={shotReport3} alt="Report page 3: the zone balance and the written assessment." width={1241} height={1754} loading="lazy" decoding="async" /><figcaption>Balance and assessment</figcaption></figure>
+            </div>
+            <Facts items={[
+              'Client name, address and your practice on the cover; your notes where you wrote them.',
+              'Share straight from the phone, or Save as PDF on the desktop. PNG export of the drawing alone.',
+            ]} />
+          </div>
+        </section>
+
+        {/* ———— everywhere ———— */}
+        <section className="chapter desk" id="everywhere">
+          <div className="wrap">
+            <ChapterHead title="On the desk, on site, in the browser."
+              lede="One seat opens the same studio on every platform. Plans live on the device they were drawn on; the charts, the compass tables and the reports come with the seat." />
+          </div>
+          <figure className="desk-shot" data-reveal-img>
+            <img src={shotInk} alt="The Windows studio in the Ink theme, the sample residence traced with its zones." width={2880} height={1800} loading="lazy" decoding="async" data-parallax="0.06" />
+          </figure>
+          <div className="wrap">
+            <div className="platforms">
+              <article className="platform">
+                <h3><Monitor size={18} aria-hidden="true" /> Windows</h3>
+                <p>A native app with the whole studio: a big canvas, keyboard shortcuts, Paper or Ink, PNG and PDF export. It installs its own updates.</p>
+              </article>
+              <article className="platform">
+                <h3><Smartphone size={18} aria-hidden="true" /> Android</h3>
+                <p>Built for site visits: photograph a plan, trace it step by step, read it, and point the compass at the walls. It tells you when an update is out.</p>
+              </article>
+              <article className="platform">
+                <h3><Globe size={18} aria-hidden="true" /> Browser</h3>
+                <p>The same studio at this address, on any modern browser. Add it to the Home Screen on an iPhone and it opens like an app.</p>
+              </article>
+            </div>
+            <div className="phones">
+              <figure className="frame-phone"><img src={shotPhoneStudio} alt="The Android studio: the plan on a phone with the step strip along the bottom." width={1170} height={2532} loading="lazy" decoding="async" /></figure>
+              <figure className="frame-phone"><img src={shotPhoneAnalysis} alt="The Android studio with the Zones read sheet open, listing every room's verdict." width={1170} height={2532} loading="lazy" decoding="async" /></figure>
+              <figure className="frame-phone"><img src={shotPhonePlans} alt="The Plans tab listing saved plans." width={1170} height={2532} loading="lazy" decoding="async" /></figure>
+            </div>
+          </div>
+        </section>
+
+        {/* ———— why ———— */}
+        <section className="chapter why" id="why">
+          <div className="wrap">
+            <ChapterHead title="Not a calculator."
+              lede="Upload-and-score tools give a number and no way to argue with it. Vastu Studio is an instrument: it measures, shows its geometry, and leaves the judgement to the practitioner." />
+            <dl className="why-list">
+              <div><dt>Measured, never guessed</dt><dd>Every zone share comes from the outline you traced and the north you set, to the degree. Nothing is read off a picture.</dd></div>
+              <div><dt>A verdict you can defend</dt><dd>Each room names its zone, its percentage, the chart it was judged by and the move that fixes it, in your units.</dd></div>
+              <div><dt>Your name on the report</dt><dd>The PDF carries your practice, your notes and your reading. There is no generated score to explain away.</dd></div>
+              <div><dt>Your plans stay yours</dt><dd>Drawings and reports live on your device and are never uploaded. The server keeps your account and your seat; the <a href="./privacy/">privacy page</a> lists every detail.</dd></div>
+            </dl>
+          </div>
+        </section>
+
+        {/* ———— questions ———— */}
+        <section className="chapter faq" id="faq">
+          <div className="wrap">
+            <ChapterHead title="Questions practitioners ask." lede="" />
+            <div className="faq-list">
+              {faq.map((f) => (
+                <details key={f.q}>
+                  <summary>{f.q}</summary>
+                  <p>{f.rich ?? f.a}</p>
+                </details>
+              ))}
+            </div>
+            <FaqData items={faq} />
+          </div>
+        </section>
+
+        {/* ———— get ———— */}
+        <section className="chapter get" id="get">
+          <div className="wrap">
+            <ChapterHead title="Get Vastu Studio."
+              lede={`Version ${rel.version}${rel.live ? `, released ${fmtDate(rel.publishedAt)}` : ''}. Install it, then sign in with the seat your studio issued.`} />
+            <div className="downloads">
+              <a className="dl" href={DOWNLOADS.windows}>
+                <span className="dl-icon"><Monitor size={22} aria-hidden="true" /></span>
+                <span className="dl-body">
+                  <b>Windows</b>
+                  <span>{ASSET_NAMES.windows} · {fmtMB(rel.sizes.windows)} · Windows 10 and 11, 64-bit</span>
+                  <small>Windows may show a SmartScreen notice for a new publisher. Choose <i>More info</i>, then <i>Run anyway</i>.</small>
+                </span>
+                <Download size={18} aria-hidden="true" className="dl-arrow" />
+              </a>
+              <a className="dl" href={DOWNLOADS.android}>
+                <span className="dl-icon"><Smartphone size={22} aria-hidden="true" /></span>
+                <span className="dl-body">
+                  <b>Android</b>
+                  <span>{ASSET_NAMES.android} · {fmtMB(rel.sizes.android)} · Android 8 and up</span>
+                  <small>Allow installs from your browser when Android asks. Camera is for importing plans, location for true north.</small>
+                </span>
+                <Download size={18} aria-hidden="true" className="dl-arrow" />
+              </a>
+              <a className="dl" href={APP_URL}>
+                <span className="dl-icon"><Globe size={22} aria-hidden="true" /></span>
+                <span className="dl-body">
+                  <b>Browser</b>
+                  <span>Nothing to install. Open the studio here.</span>
+                  <small>On an iPhone, use Share, then Add to Home Screen, for the app-like studio.</small>
+                </span>
+                <ArrowUpRight size={18} aria-hidden="true" className="dl-arrow" />
+              </a>
+            </div>
+
+            <div className="seat">
+              <div className="seat-copy">
+                <h3>One seat, the whole studio.</h3>
+                <p>Vastu Studio is sold per practitioner, per year. A seat opens the app on one device at a time, on every platform, with the charts, the compass tables, the readings and the reports, and every update while it runs.</p>
+              </div>
+              <div className="seat-ctas">
+                {whatsapp && <a className="btn-gold lg" href={whatsapp} target="_blank" rel="noopener noreferrer"><MessageCircle size={17} aria-hidden="true" /> Ask for a seat on WhatsApp</a>}
+                {!whatsapp && mail && <a className="btn-gold lg" href={mail}><Mail size={17} aria-hidden="true" /> Ask for a seat</a>}
+                <a className={whatsapp || mail ? 'btn-line lg' : 'btn-gold lg'} href={APP_URL}>{returning ? 'Back to the studio' : 'Already have a seat? Sign in'} <ArrowRight size={16} aria-hidden="true" /></a>
+              </div>
+              {!whatsapp && !mail && <p className="seat-note">Seats are issued by the studio. Ask the practitioner who introduced you to Vastu Studio.</p>}
+            </div>
+          </div>
+        </section>
+
+      </main>
+
+      {/* the privacy page (static HTML) repeats this footer — keep the two in step */}
       <footer className="foot">
         <div className="wrap">
           <div className="foot-brand"><Mark size={20} /> Vastu <em>Studio</em></div>
@@ -339,9 +375,9 @@ export function Site({ returning }: { returning: boolean }) {
           <nav className="foot-links" aria-label="Footer">
             <a href={APP_URL}>Open the studio</a>
             <a href={DOWNLOADS.releases}>All releases</a>
-            <a href={REPO}>Source on GitHub</a>
+            <a href="./privacy/">Privacy</a>
           </nav>
-          <p className="foot-fine">Plans and reports stay on your device. Your account is a phone number and a password; the server keeps that, your seat, and the charts.</p>
+          <p className="foot-fine">Plans and reports stay on your device. The server keeps your account and your seat, and sends the charts. © 2026 Vastu Studio.</p>
         </div>
       </footer>
     </div>

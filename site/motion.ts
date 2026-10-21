@@ -79,12 +79,23 @@ export function armReveals(root: HTMLElement): () => void {
         scrollTrigger: { trigger: el, start: 'top 84%', once: true },
       })
     })
-    // an image arrives the way a print comes off the table: unmasked from the bottom, settling
+    // an image arrives the way a print comes off the table: unmasked from the bottom, settling.
+    // It waits for its picture: on a slow line the unmask used to open an empty frame.
     root.querySelectorAll<HTMLElement>('[data-reveal-img]').forEach((fig) => {
       const img = fig.querySelector('img')
-      const tl = gsap.timeline({ scrollTrigger: { trigger: fig, start: 'top 84%', once: true } })
+      const tl = gsap.timeline({ paused: true })
       tl.fromTo(fig, { clipPath: 'inset(0 0 100% 0)' }, { clipPath: 'inset(0 0 0% 0)', duration: 1.15, ease: 'power4.out' })
       if (img) tl.fromTo(img, { scale: 1.06 }, { scale: 1, duration: 1.3, ease: 'power4.out' }, 0)
+      ScrollTrigger.create({
+        trigger: fig, start: 'top 84%', once: true,
+        onEnter: () => {
+          if (!img || (img.complete && img.naturalWidth > 0)) { tl.play(); return }
+          img.loading = 'eager'
+          const go = () => tl.play()
+          img.addEventListener('load', go, { once: true })
+          img.addEventListener('error', go, { once: true })
+        },
+      })
     })
     root.querySelectorAll<HTMLElement>('[data-parallax]').forEach((el) => {
       const speed = Number(el.dataset.parallax || 0.12)
@@ -163,3 +174,17 @@ export function navTheme(nav: HTMLElement, sections: HTMLElement[]): () => void 
 }
 
 export function refreshTriggers() { ScrollTrigger.refresh() }
+
+/** Once the opening has everything it needs, the product shots further down start loading in the
+ *  background, so a reader who scrolls finds them there rather than watching them arrive. Skipped
+ *  when the browser asks to save data; lazy loading still covers that reader. */
+export function warmImages(root: HTMLElement): () => void {
+  const conn = (navigator as Navigator & { connection?: { saveData?: boolean } }).connection
+  if (conn?.saveData) return () => {}
+  let idle = 0
+  const warm = () => { root.querySelectorAll<HTMLImageElement>('img[loading="lazy"]').forEach((im) => { im.loading = 'eager' }) }
+  const start = () => { idle = window.setTimeout(warm, 1200) }
+  if (document.readyState === 'complete') start()
+  else window.addEventListener('load', start, { once: true })
+  return () => { window.removeEventListener('load', start); window.clearTimeout(idle) }
+}

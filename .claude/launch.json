@@ -46,6 +46,20 @@
         "dev:site"
       ],
       "port": 5180
+    },
+    {
+      "name": "vastu-site-dist",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "vite",
+        "preview",
+        "--config",
+        "vite.site.config.ts",
+        "--port",
+        "5181",
+        "--strictPort"
+      ],
+      "port": 5181
     }
   ]
 }

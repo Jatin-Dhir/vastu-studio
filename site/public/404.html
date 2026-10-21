@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Not on the plan — Vastu Studio</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#0B0908" />
+  <!-- GitHub Pages serves this for any missing address under the site, at that address — so every
+       link here is absolute; a relative one would point somewhere else at every depth. -->
+  <link rel="icon" href="https://jatin-dhir.github.io/vastu-studio/favicon.svg" type="image/svg+xml" />
+  <style>
+    /* the studio's own static faces (they ship for its PDF reports), by absolute address */
+    @font-face { font-family: 'Cormorant 404'; font-weight: 600; font-display: swap; src: url('https://jatin-dhir.github.io/vastu-studio/app/fonts/CormorantGaramond-600.ttf') format('truetype'); }
+    @font-face { font-family: 'Inter 404'; font-weight: 400; font-display: swap; src: url('https://jatin-dhir.github.io/vastu-studio/app/fonts/Inter-400.ttf') format('truetype'); }
+    @font-face { font-family: 'Inter 404'; font-weight: 600; font-display: swap; src: url('https://jatin-dhir.github.io/vastu-studio/app/fonts/Inter-600.ttf') format('truetype'); }
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; min-height: 100dvh; display: grid; place-items: center; padding: 32px 20px;
+      background: #0B0908; color: #F0E9DA; font: 400 17px/1.6 'Inter 404', system-ui, -apple-system, 'Segoe UI', sans-serif; -webkit-font-smoothing: antialiased; }
+    main { max-width: 34rem; }
+    .mark { color: #D9B45B; display: block; margin-bottom: 28px; }
+    h1 { margin: 0 0 18px; font: 600 clamp(44px, 8vw, 72px)/1.04 'Cormorant 404', 'Cormorant Garamond', Georgia, 'Times New Roman', serif; letter-spacing: -0.02em; text-wrap: balance; }
+    p { margin: 0 0 28px; color: #CDC4B1; }
+    nav { display: flex; flex-wrap: wrap; gap: 12px; }
+    a { display: inline-flex; align-items: center; min-height: 44px; padding: 0 18px; border-radius: 999px; font-weight: 600; font-size: 15px; text-decoration: none; }
+    .primary { background: linear-gradient(180deg, #EBCB78, #D9B45B); color: #1B1408; }
+    .line { border: 1px solid rgba(255, 244, 224, 0.15); color: #F0E9DA; }
+    .line:hover { border-color: rgba(235, 203, 120, 0.3); color: #EBCB78; }
+    a:focus-visible { outline: 2px solid #EBCB78; outline-offset: 3px; }
+  </style>
+</head>
+<body>
+  <main>
+    <svg class="mark" width="36" height="36" viewBox="0 0 32 32" aria-hidden="true"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" stroke-width="2.2" /><circle cx="16" cy="16" r="3" fill="currentColor" /></svg>
+    <h1>This page isn’t on the plan.</h1>
+    <p>The address may be old or mistyped. Everything about Vastu Studio starts from the front page.</p>
+    <nav aria-label="Ways back">
+      <a class="primary" href="https://jatin-dhir.github.io/vastu-studio/">Go to the front page</a>
+      <a class="line" href="https://jatin-dhir.github.io/vastu-studio/app/">Open the studio</a>
+    </nav>
+  </main>
+</body>
+</html>
