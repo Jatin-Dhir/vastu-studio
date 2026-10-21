@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Privacy — Vastu Studio</title>
   <meta name="description" content="What Vastu Studio keeps and what it never sees. Plans and reports stay on your device; the server keeps your account and your seat." />
-  <meta name="theme-color" content="#0B0908" />
+  <meta name="theme-color" content="#FFFFFF" />
   <link rel="canonical" href="https://jatin-dhir.github.io/vastu-studio/privacy/" />
   <link rel="icon" href="../favicon.svg" type="image/svg+xml" />
   <link rel="apple-touch-icon" href="../app/icons/icon-180.png" />
@@ -13,14 +13,15 @@
   <script type="module" src="../privacy.ts"></script>
 </head>
 <body>
-  <div class="site legal-page">
+  <div class="site">
     <a class="skip" href="#policy">Skip to content</a>
-    <header class="nav scrolled">
-      <a class="nav-brand" href="../" aria-label="Vastu Studio, home">
+    <header class="hd scrolled">
+      <a class="hd-menu" href="../" style="text-decoration:none"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M19 12H5m0 0 6-6m-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" /></svg><span>Back</span></a>
+      <a class="hd-brand" href="../" aria-label="Vastu Studio, home">
         <svg width="22" height="22" viewBox="0 0 32 32" aria-hidden="true" class="mark"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" stroke-width="2.2" /><circle cx="16" cy="16" r="3" fill="currentColor" /></svg>
-        Vastu <em>Studio</em>
+        <span>Vastu Studio</span>
       </a>
-      <div class="nav-cta"><a class="btn-line" href="../">Back to the site</a></div>
+      <div class="hd-end"><a class="btn btn-dark btn-sm" href="../#download">Download</a></div>
     </header>
 
     <main id="policy" class="legal">
@@ -91,15 +92,16 @@
 
     <!-- the front page's footer (site/Site.tsx) — keep the two in step -->
     <footer class="foot">
-      <div class="wrap">
-        <div class="foot-brand"><svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true" class="mark"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" stroke-width="2.2" /><circle cx="16" cy="16" r="3" fill="currentColor" /></svg> Vastu <em>Studio</em></div>
-        <p class="foot-line">The instrument for Vastu practitioners. Made in India.</p>
+      <div class="foot-top">
+        <a class="foot-brand" href="../"><svg width="20" height="20" viewBox="0 0 32 32" aria-hidden="true" class="mark"><rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)" fill="none" stroke="currentColor" stroke-width="2.2" /><circle cx="16" cy="16" r="3" fill="currentColor" /></svg><span>Vastu Studio</span></a>
         <nav class="foot-links" aria-label="Footer">
           <a href="../app/">Open the studio</a>
           <a href="https://github.com/Jatin-Dhir/vastu-studio/releases">All releases</a>
           <a href="./" aria-current="page">Privacy</a>
         </nav>
-        <p class="foot-fine">Plans and reports stay on your device. The server keeps your account and your seat, and sends the charts. © 2026 Vastu Studio.</p>
+      </div>
+      <div class="foot-bottom">
+        <p>Plans and reports stay on your device. The server keeps your account and your seat, and sends the charts. Made in India. © 2026 Vastu Studio.</p>
       </div>
     </footer>
   </div>

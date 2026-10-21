@@ -14,6 +14,18 @@ export const DOWNLOADS = {
 }
 export const ASSET_NAMES = { windows: 'VastuStudio-Setup-x64.exe', android: 'VastuStudio-android.apk' }
 
+/** What the visitor is on, so the page can offer their own download first. iPadOS reports
+ *  itself as a Mac, so a Mac with a touch screen counts as iOS. */
+export type Platform = 'windows' | 'android' | 'ios' | 'other'
+export function visitorPlatform(): Platform {
+  if (typeof navigator === 'undefined') return 'windows'
+  const ua = navigator.userAgent
+  if (/Android/i.test(ua)) return 'android'
+  if (/iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1)) return 'ios'
+  if (/Windows/i.test(ua)) return 'windows'
+  return 'other'
+}
+
 /** Shown until the live release feed answers (or when it can't). */
 export const FALLBACK_RELEASE = { version: '1.3.2', publishedAt: '2026-10-17', sizes: { windows: 7.5e6, android: 9.3e6 } }
 
