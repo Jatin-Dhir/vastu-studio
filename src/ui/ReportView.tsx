@@ -159,11 +159,17 @@ export function ReportView() {
   const titleId = useId()
   useModalFocus(rootRef, () => setReportOpen(false), { initial: titleRef, inertSiblings: true })
 
+  // the plan render that starts when the report opens, so Save as PDF can wait for it: tapped in
+  // the first second or two, it used to save a report without its plan
+  const planJob = useRef<Promise<{ blob: Blob; w: number; h: number } | null> | null>(null)
+
   useEffect(() => {
     let cancelled = false
     let url: string | null = null
     // the exporter (and its SVG serialiser) loads with the first report, not with the app
-    void import('../export').then((m) => m.makePlanPng()).then((out) => {
+    const job = import('../export').then((m) => m.makePlanPng())
+    planJob.current = job.catch(() => null)
+    void job.then((out) => {
       if (!out || cancelled) return
       url = URL.createObjectURL(out.blob)
       setImgBlob(out.blob)
@@ -266,8 +272,9 @@ export function ReportView() {
       // the export PNG is device-resolution (huge) — resample to a document-friendly
       // JPEG before embedding, or the PDF balloons past what email/WhatsApp accepts
       let plan: ReportPdfData['plan'] = null
-      if (imgBlob && imgDims) {
-        const url = URL.createObjectURL(imgBlob)
+      const src = imgBlob && imgDims ? { blob: imgBlob } : await planJob.current
+      if (src) {
+        const url = URL.createObjectURL(src.blob)
         try {
           const img = new Image()
           await new Promise<void>((resolve, reject) => {
