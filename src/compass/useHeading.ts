@@ -46,11 +46,15 @@ function cachedDeclination(lat: number, lon: number): Declination | null {
 async function fetchDeclination(lat: number, lon: number): Promise<Declination | null> {
   const hit = cachedDeclination(lat, lon)
   if (hit) return hit
+  // only a tenth of a degree (~11 km) leaves the phone: declination moves by hundredths of a
+  // degree over that distance, and the cache above reuses an answer within ~20 km anyway
+  lat = Math.round(lat * 10) / 10
+  lon = Math.round(lon * 10) / 10
   try {
     // AbortSignal.timeout is missing before Safari 16 and Chrome 103 — a plain controller works everywhere
     const ctl = new AbortController()
     const timer = setTimeout(() => ctl.abort(), 8000)
-    const res = await fetch(`${DECL_URL}?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`, { signal: ctl.signal }).finally(() => clearTimeout(timer))
+    const res = await fetch(`${DECL_URL}?lat=${lat.toFixed(1)}&lon=${lon.toFixed(1)}`, { signal: ctl.signal }).finally(() => clearTimeout(timer))
     if (!res.ok) return null
     const j = await res.json() as { declination_deg: number; model?: string; uncertainty_deg?: number }
     const d: Declination = { deg: j.declination_deg, model: j.model ?? 'WMM', uncertaintyDeg: j.uncertainty_deg ?? null, lat, lon, at: Date.now() }
