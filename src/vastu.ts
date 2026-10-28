@@ -314,5 +314,6 @@ export const COMPASS_META: { id: string; label: string; sub: string }[] = [
   { id: 'zones16', label: '16 Zones', sub: 'MahaVastu chakra' },
   { id: 'gates32', label: '32 Gates', sub: 'Entrance devtas' },
   { id: 'grid9',   label: 'Pada Grid', sub: '9×9 mandala' },
+  { id: 'marma',   label: 'Marma Sthan', sub: '6 vamshas · 9 marmas' },
   { id: 'custom',  label: 'Custom', sub: 'Your own PNG' },
 ]

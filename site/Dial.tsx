@@ -109,17 +109,19 @@ const ORIGIN = { x: 0, y: 0 }
 /** The mandala turns with north, so its square needs this much more room than it has sides. */
 const TILT = Math.abs(Math.cos((NORTH_DEG * Math.PI) / 180)) + Math.abs(Math.sin((NORTH_DEG * Math.PI) / 180))
 
-/** One part of the instrument on its own: the sixteen-zone ring, the thirty-two gates, or the
- *  nine-by-nine mandala. The zone ring lights the zone under the pointer (`onZone`). */
+/** One part of the instrument on its own: the sixteen-zone ring, the thirty-two gates, the
+ *  nine-by-nine mandala, or its marma points. The zone ring lights the zone under the pointer
+ *  (`onZone`). */
 export function Part({ id, highlight = null, onZone, label }: {
-  id: Extract<CompassId, 'zones16' | 'gates32' | 'grid9'>
+  id: Extract<CompassId, 'zones16' | 'gates32' | 'grid9' | 'marma'>
   highlight?: number | null
   onZone?: (zone: number | null) => void
   label: string
 }) {
-  const square = id === 'grid9'
+  const square = id === 'grid9' || id === 'marma'
   const r0 = PART_R * 1.16, r1 = PART_R * 1.27
-  const half = square ? PART_R * (1.02 * TILT + 0.04) : r1 * 1.02
+  // the marma sthan writes its vamshas' pada names outside the grid, so it needs a wider margin
+  const half = id === 'marma' ? PART_R * 1.5 : square ? PART_R * (1.02 * TILT + 0.04) : r1 * 1.02
   const box = { x: -half, y: -half, w: half * 2, h: half * 2 }
   const [ref, k] = useScale(box.w)
   const compass: CompassState = {

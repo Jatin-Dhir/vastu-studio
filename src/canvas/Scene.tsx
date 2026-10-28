@@ -3,6 +3,7 @@ import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, TextNote, Un
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { brahmasthanRadius, placementOf } from '../analysis'
+import { ATIMARMA, VAMSHAS, gridFrame, marmaRadius } from '../marma'
 import { formatArea, formatLen } from '../format'
 import { GATES32, GATE_QUALITY, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
 import { at } from './svgText'
@@ -93,21 +94,6 @@ function brahmaLabelY(c: Pt, brahmaR: number, k: number, avoid: Pt[]): number {
   const above = c.y - brahmaR - 9 / k
   const below = c.y + brahmaR + 19 / k
   return blocked(above - 4 / k) && !blocked(below - 4 / k) ? below : above
-}
-
-/** The pada grid's frame: the plot's bounding box in a frame turned by -north about c (the grid
- *  itself is drawn inside rotate(north, c)). Shared with the keep-outs. */
-function gridFrame(c: Pt, north: number, pts: Pt[]): { minX: number; minY: number; maxX: number; maxY: number } {
-  const rad = (-north * Math.PI) / 180
-  const cos = Math.cos(rad), sin = Math.sin(rad)
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
-  for (const p of pts) {
-    const x = c.x + (p.x - c.x) * cos - (p.y - c.y) * sin
-    const y = c.y + (p.x - c.x) * sin + (p.y - c.y) * cos
-    minX = Math.min(minX, x); maxX = Math.max(maxX, x)
-    minY = Math.min(minY, y); maxY = Math.max(maxY, y)
-  }
-  return { minX, minY, maxX, maxY }
 }
 
 /** Where the grid's central name sits, in its own (turned) frame: the upper part of Brahma's
@@ -800,6 +786,101 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
   )
 }
 
+/** A marma is a place to keep clear, so its ink is the app's 'avoid' red. */
+const MARMA_INK = GATE_AVOID
+
+/** Marma sthan (src/marma.ts): the pada grid drawn quietly, the six vamshas across it and the
+ *  nine atimarma where they cross, each at its own size, an eighth of a pada. */
+function Marma({ c, north, compass, k, vr, pts, closed, part = 'body' }: ChakraProps) {
+  const frame = useMemo(
+    () => (!closed || pts.length < 3 ? null : gridFrame(c, north, pts)),
+    [pts, closed, north, c.x, c.y],
+  )
+  if (!frame) return null
+  const { minX, minY, maxX, maxY } = frame
+  const cw = (maxX - minX) / 9, ch = (maxY - minY) / 9
+  const g = (u: number, v: number) => ({ x: minX + u * cw, y: minY + v * ch })
+  // drawn inside rotate(north) like the Pada Grid, so its type is counter-rotated to stay upright
+  const upr = -(north + vr)
+  const nx = (minX + maxX) / 2
+  const needleD = `M${nx} ${minY - ch * 0.95} L${nx + cw * 0.1} ${minY - ch * 0.58} L${nx - cw * 0.1} ${minY - ch * 0.58} Z`
+
+  if (part === 'labels') {
+    if (!compass.labels) return null
+    // each vamsha by the two padas the text names it for, written just outside the grid beside
+    // those padas: inside them the names sat on the lines and on whatever the plan holds there.
+    // The type stays upright, so how far out it must sit depends on how the grid is turned.
+    const size = Math.min(Math.min(cw, ch) * 0.22, 13 / k)
+    const turn = ((north + vr) * Math.PI) / 180
+    const reach = (w: number, ang: number) => Math.abs((w / 2) * Math.cos(ang)) + Math.abs((size / 2) * Math.sin(ang))
+    const names = size * k < 8 ? [] : VAMSHAS.flatMap((l, i) => l.ends.map(([row, col], j) => {
+      const name = mandalaCellName(row, col)
+      if (!name) return null
+      const w = textW(name, size), pad = size * 0.45
+      // corner padas take the top or bottom edge, like the rest of their row
+      const p = row === 0 ? { ...g(col + 0.5, 0), y: minY - reach(w, turn + Math.PI / 2) - pad }
+        : row === 8 ? { ...g(col + 0.5, 9), y: maxY + reach(w, turn + Math.PI / 2) + pad }
+          : col === 8 ? { ...g(9, row + 0.5), x: maxX + reach(w, turn) + pad }
+            : { ...g(0, row + 0.5), x: minX - reach(w, turn) - pad }
+      return (
+        <text key={`${i}-${j}`} {...at(p.x, p.y, upr, size)} fontSize={size} fontFamily={FONT} fontWeight={600}
+          fill="#EDE4CC" textAnchor="middle" dominantBaseline="central" opacity={0.92} {...haloProps(size * 0.22)}>
+          {name}
+        </text>
+      )
+    }))
+    const nSize = Math.min(cw, ch) * 0.42
+    return (
+      <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+        {names}
+        <text {...at(nx, minY - ch * 0.35, upr, nSize)} fontSize={nSize} fontFamily={FONT} fontWeight={800}
+          fill="#F26B57" textAnchor="middle" dominantBaseline="central" {...haloProps(Math.min(cw, ch) * 0.09)}>
+          N
+        </text>
+      </g>
+    )
+  }
+
+  // the padas underneath, quieter than the Pada Grid's own: here they are the ruler, not the subject
+  const lines = []
+  for (let i = 0; i <= 9; i++) {
+    const strong = i % 3 === 0
+    lines.push(<line key={`v${i}`} x1={minX + i * cw} y1={minY} x2={minX + i * cw} y2={maxY}
+      stroke={GOLD} strokeWidth={(strong ? 1.1 : 0.6) / k} opacity={strong ? 0.5 : 0.28} />)
+    lines.push(<line key={`h${i}`} x1={minX} y1={minY + i * ch} x2={maxX} y2={minY + i * ch}
+      stroke={GOLD} strokeWidth={(strong ? 1.1 : 0.6) / k} opacity={strong ? 0.5 : 0.28} />)
+  }
+  // at its true size, but never so small that it reads as a speck
+  const r = Math.max(marmaRadius(cw, ch), 5 / k)
+  return (
+    <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+      <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
+        fill="none" stroke={INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
+      <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
+        fill="none" stroke={GOLD} strokeWidth={2 / k} opacity={0.9} />
+      <rect x={minX + 3 * cw} y={minY + 3 * ch} width={3 * cw} height={3 * ch} fill={GOLD} fillOpacity={0.07} />
+      {lines}
+      {VAMSHAS.map((l, i) => {
+        const a = g(l.a[0], l.a[1]), b = g(l.b[0], l.b[1])
+        return <CasedLine key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} k={k} stroke={MARMA_INK}
+          width={(l.main ? 1.7 : 1.3) / k} opacity={0.85} />
+      })}
+      {ATIMARMA.map((m, i) => {
+        const p = g(m.at[0], m.at[1])
+        return (
+          <Fragment key={i}>
+            <circle cx={p.x} cy={p.y} r={r} fill={MARMA_INK} fillOpacity={0.24} />
+            <CasedCircle cx={p.x} cy={p.y} r={r} k={k} stroke={MARMA_INK} width={1.5 / k} opacity={0.95} />
+            <circle cx={p.x} cy={p.y} r={2.2 / k} fill={MARMA_INK} />
+          </Fragment>
+        )
+      })}
+      <path d={needleD} fill="#F26B57" stroke={INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
+      <path d={needleD} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
+    </g>
+  )
+}
+
 function CustomOverlay({ c, R, north, compass, part = 'body' }: ChakraProps) {
   if (part === 'labels' || !compass.customUrl) return null
   const aspect = compass.customAspect ?? 1
@@ -1034,6 +1115,7 @@ function CenterMarker(props: {
 const Zones16Layer = memo(Zones16)
 const Gates32Layer = memo(Gates32)
 const Grid9Layer = memo(Grid9)
+const MarmaLayer = memo(Marma)
 const CustomLayer = memo(CustomOverlay)
 
 export function Scene(props: SceneProps) {
@@ -1139,6 +1221,7 @@ export function Scene(props: SceneProps) {
         {drawn && drawn.compass.id === 'zones16' && <Zones16Layer {...drawn} />}
         {drawn && drawn.compass.id === 'gates32' && <Gates32Layer {...drawn} />}
         {drawn && drawn.compass.id === 'grid9' && <Grid9Layer {...drawn} />}
+        {drawn && drawn.compass.id === 'marma' && <MarmaLayer {...drawn} />}
       </g>
       {/* tapped zone from the analysis panel, lit on the plan itself */}
       {typeof props.highlightZone === 'number' && closed && center && R > 0 && (() => {
@@ -1163,6 +1246,7 @@ export function Scene(props: SceneProps) {
         {drawn && drawn.compass.id === 'zones16' && <Zones16Layer {...drawn} part="labels" />}
         {drawn && drawn.compass.id === 'gates32' && <Gates32Layer {...drawn} part="labels" />}
         {drawn && drawn.compass.id === 'grid9' && <Grid9Layer {...drawn} part="labels" />}
+        {drawn && drawn.compass.id === 'marma' && <MarmaLayer {...drawn} part="labels" />}
       </g>
       <StrokesLayer strokes={props.strokes ?? []} />
       <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} />

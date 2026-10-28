@@ -61,7 +61,7 @@ export interface ReportMeta {
   practitioner: string
   notes: string
 }
-export type CompassId = 'none' | 'zones16' | 'gates32' | 'grid9' | 'custom'
+export type CompassId = 'none' | 'zones16' | 'gates32' | 'grid9' | 'marma' | 'custom'
 export type BgKind = 'none' | 'raster' | 'dxf'
 export type ScaleSource = 'manual' | 'dxf' | 'map' | 'demo' | 'pdf' | null
 

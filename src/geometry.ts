@@ -265,6 +265,16 @@ export function simplifyPath(pts: Pt[], eps: number): Pt[] {
   return pts.filter((_, i) => keep[i])
 }
 
+/** Whether p lies inside the polygon (even–odd ray cast). */
+export function pointInPolygon(p: Pt, poly: Pt[]): boolean {
+  let inside = false
+  for (let i = 0, j = poly.length - 1; i < poly.length; j = i++) {
+    const a = poly[i], b = poly[j]
+    if ((a.y > p.y) !== (b.y > p.y) && p.x < ((b.x - a.x) * (p.y - a.y)) / (b.y - a.y) + a.x) inside = !inside
+  }
+  return inside
+}
+
 export function boundsOf(pts: Pt[]) {
   let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity
   for (const p of pts) {

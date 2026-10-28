@@ -79,6 +79,7 @@ const SECTIONS = [
   { id: 'zones', label: 'Sixteen zones' },
   { id: 'gates', label: 'Thirty-two gates' },
   { id: 'mandala', label: 'The centre' },
+  { id: 'marma', label: 'Marma points' },
   { id: 'verdicts', label: 'Verdicts' },
   { id: 'studio', label: 'In the studio' },
   { id: 'details', label: 'Technical details' },
@@ -112,6 +113,7 @@ const DETAILS: { h: string; rows: [string, ReactNode][] }[] = [
     ['Sixteen zones', '22.5° each, clipped to the plot, in the colours the practitioner sets'],
     ['Thirty-two gates', 'Entrance padas of 11.25° with their devtas'],
     ['Mandala', 'The nine-by-nine Vastu Purusha Mandala with all forty-five devtas'],
+    ['Marma sthan', 'The six vamshas of Brihat Samhita and the nine marma points where they cross, each an eighth of a pada'],
     ['Your own chakra', 'Load a chakra image, size and turn it over any plan'],
   ] },
   { h: 'North', rows: [
@@ -150,7 +152,7 @@ interface Faq { q: string; a: string; rich?: ReactNode }
 function faqs(contact: { whatsapp: string; mail: string }): Faq[] {
   const ask = contact.whatsapp || contact.mail
   return [
-    { q: 'Which system does it read?', a: 'The sixteen-zone reading with the thirty-two entrance gates and the 81-pada mandala. The charts that turn geometry into verdicts come with your seat and stay on the server; the studio downloads them when you sign in.' },
+    { q: 'Which system does it read?', a: 'The sixteen-zone reading with the thirty-two entrance gates, the 81-pada mandala and its marma points. The charts that turn geometry into verdicts come with your seat and stay on the server; the studio downloads them when you sign in.' },
     { q: 'What can I import?', a: 'A PDF, an AutoCAD DXF, a photo or scan of a blueprint, or a plot captured from satellite view. Scale comes from any known length, or from the drawing’s own units.' },
     { q: 'How is north set?', a: 'Tap the tail and tip of the drawing’s north arrow, type a bearing, or take it from the phone compass, which corrects the magnetic heading to true north for your location.' },
     { q: 'Does it work on site without signal?', a: 'Yes. Once loaded the studio works offline, and a seat stays valid for several days without reaching the server. Plans and reports never leave the device.' },
@@ -357,6 +359,11 @@ export function Site({ returning }: { returning: boolean }) {
         <Chapter id="mandala" eyebrow="Brahmasthan · 81-pada mandala" title="The centre, found by area."
           art={<Part id="grid9" label="The nine-by-nine Vastu Purusha Mandala with its forty-five devtas and the Brahmasthan at the centre." />}>
           <p>The Brahmasthan is found by area, and the nine-by-nine mandala is laid over the plot in its own orientation, with all forty-five devtas in place. That orientation is true north: from the drawing’s own arrow, a typed bearing, or the phone’s compass corrected for where you stand.</p>
+        </Chapter>
+
+        <Chapter id="marma" eyebrow="Marma sthan · six vamshas · nine points" title="Nine points to keep clear."
+          art={<Part id="marma" label="The marma sthan: the six vamsha lines of Brihat Samhita drawn across the nine-by-nine mandala, each named by its two end padas, and the nine marma points where they cross." />}>
+          <p>Brihat Samhita draws six lines across the mandala, each between two named padas: Roga to Agni, Pitra to Shikhi, and four more. Where they cross lie nine marma points, each an eighth of a pada, that no pillar, nail or toilet should touch. The studio draws them over the plan and flags anything that stands on one.</p>
         </Chapter>
 
         <Chapter id="verdicts" eyebrow="Rooms and verdicts" title="A verdict for every room."

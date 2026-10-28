@@ -12,6 +12,7 @@ import { processCompassImage } from '../imageTools'
 import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
+import { ATIMARMA, VAMSHAS } from '../marma'
 import type { CompassId, Marker, Pt, RoomShape, Tool } from '../types'
 import { hasPdfOpen } from '../importers/pdfState'
 import { useSettled } from '../canvas/gesture'
@@ -93,6 +94,23 @@ function preview(id: string) {
           )))}
         </svg>
       )
+    case 'marma': {
+      // the six vamshas over the grid's frame, and the nine points where they cross
+      const at = ([u, v]: [number, number]) => ({ x: 6 + (u * 28) / 9, y: 6 + (v * 28) / 9 })
+      return (
+        <svg viewBox="0 0 40 40">
+          <rect x={6} y={6} width={28} height={28} fill="none" stroke="#C9CFDD" strokeWidth="0.8" opacity="0.85" />
+          {VAMSHAS.map((l, i) => {
+            const a = at(l.a), b = at(l.b)
+            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#E0684F" strokeWidth="0.8" opacity="0.85" />
+          })}
+          {ATIMARMA.map((m, i) => {
+            const p = at(m.at)
+            return <circle key={i} cx={p.x} cy={p.y} r={1.5} fill="#E0684F" />
+          })}
+        </svg>
+      )
+    }
     default:
       return (
         <svg viewBox="0 0 40 40">

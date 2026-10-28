@@ -132,7 +132,7 @@ export function CanvasStage() {
   const canvasSummary = (() => {
     if (bg.kind === 'none' && pts.length === 0) return 'Plan canvas, empty — import a plan to begin'
     const parts = [closed ? `closed outline of ${pts.length} corners` : pts.length ? `outline in progress, ${pts.length} corners` : 'no outline yet']
-    if (closed && compass.id !== 'none') parts.push(`${compass.id === 'zones16' ? '16-zone' : compass.id === 'gates32' ? '32-gate' : compass.id === 'grid9' ? 'pada grid' : 'custom'} compass`)
+    if (closed && compass.id !== 'none') parts.push(`${compass.id === 'zones16' ? '16-zone' : compass.id === 'gates32' ? '32-gate' : compass.id === 'grid9' ? 'pada grid' : compass.id === 'marma' ? 'marma sthan' : 'custom'} compass`)
     parts.push(`north ${Math.round(northDeg)}°`)
     if (markers.length) parts.push(`${markers.length} marker${markers.length === 1 ? '' : 's'}`)
     if (roomShapes.length) parts.push(`${roomShapes.length} room${roomShapes.length === 1 ? '' : 's'}`)

@@ -1,8 +1,9 @@
 import { brahmasthanRadius, zoneRows } from './analysis'
-import { dist } from './geometry'
+import { dist, pointInPolygon } from './geometry'
 import { formatLen } from './format'
 import { ZONE_SHAPE_NOTES, type Verdict } from './vastu'
-import { assessAll, capFirst, moveSentence, type Assessment } from './assess'
+import { assessAll, capFirst, moveSentence, roomPolygon, type Assessment } from './assess'
+import { ATIMARMA, marmaPoints } from './marma'
 import type { Marker, Pt, RoomShape, Unit } from './types'
 
 export type Severity = 'good' | 'info' | 'warn' | 'bad'
@@ -36,9 +37,14 @@ export function roomShapeAnchor(r: RoomShape): Pt | null {
   return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
 }
 
+/** What may not stand on a marma point: the impurities the texts name, and the weight, pits
+ *  and pillars they keep off it. */
+const MARMA_IMPURE = ['toilet', 'septic', 'dustbin']
+const MARMA_HEAVY = ['water', 'staircase', 'store']
+
 /** The interpretive pass: every marker and room against the charts (areas by their real
- *  zone coverage), entrances against the 32 gates, plot-shape cuts/extensions, and
- *  Brahmasthan occupancy. */
+ *  zone coverage), entrances against the 32 gates, plot-shape cuts/extensions, Brahmasthan
+ *  occupancy, and what stands on a marma point. */
 export function evaluateVastu(args: {
   sampled: Pt[]
   center: Pt
@@ -94,6 +100,30 @@ export function evaluateVastu(args: {
         detail: heavy
           ? 'toilets, kitchens and water sources in the centre are among the gravest doshas'
           : 'the centre should stay light and open — avoid weight and activity here',
+      })
+    }
+  }
+
+  /* Marma sthan: the nine points where the six vamshas cross (src/marma.ts). A room is on one
+     when it covers the point, a marker when it sits within the point's own size. */
+  const marma = marmaPoints(center, northDeg, sampled)
+  if (marma) {
+    for (const a of assessments) {
+      if (a.gate) continue
+      const impure = MARMA_IMPURE.includes(a.kind)
+      if (!impure && !MARMA_HEAVY.includes(a.kind)) continue
+      const room = a.isArea ? roomShapes.find((r) => r.id === a.id) : undefined
+      const poly = room ? roomPolygon(room) : null
+      const hit = marma.points.findIndex((p) => (poly ? pointInPolygon(p, poly) : dist(a.anchor, p) <= marma.r))
+      if (hit < 0) continue
+      // the central marma is the Brahmasthan's own centre, and that finding already names it
+      if (hit === 0 && dist(a.anchor, center) < bR) continue
+      findings.push({
+        severity: impure ? 'bad' : 'warn', markerId: a.id,
+        title: `${a.label} stands on a marma point`,
+        detail: `${poly ? 'it covers' : 'it sits on'} ${ATIMARMA[hit].name}, where two vamshas cross — ${impure
+          ? 'the texts keep a marma free of anything impure'
+          : 'keep weight, pits and pillars off a marma'}`,
       })
     }
   }

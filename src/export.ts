@@ -103,9 +103,10 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     maxX = Math.max(maxX, center.x + R * 1.08)
     maxY = Math.max(maxY, center.y + R * 1.08)
   }
-  // the pada grid is the plot's north-aligned bounding square turned by north, with its needle
-  // and N above the top edge — its corners reach past the plot whenever north is not 0/90°
-  if (center && s.closed && s.compass.id === 'grid9' && sampled.length >= 3) {
+  // the pada grid (and the marma sthan, drawn on it) is the plot's north-aligned bounding square
+  // turned by north, with its needle and N above the top edge — its corners reach past the plot
+  // whenever north is not 0/90°
+  if (center && s.closed && (s.compass.id === 'grid9' || s.compass.id === 'marma') && sampled.length >= 3) {
     const rad = (-s.northDeg * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
     let gx0 = Infinity, gy0 = Infinity, gx1 = -Infinity, gy1 = -Infinity
@@ -115,11 +116,15 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
       gx0 = Math.min(gx0, x); gx1 = Math.max(gx1, x); gy0 = Math.min(gy0, y); gy1 = Math.max(gy1, y)
     }
     const ch = (gy1 - gy0) / 9
+    // the marma sthan writes its vamshas' pada names just outside the grid, the longest about
+    // 1.6 padas wide at their largest
+    const m = s.compass.id === 'marma' && s.compass.labels ? 1.6 * Math.min((gx1 - gx0) / 9, ch) : 0
     const back = (x: number, y: number) => ({
       x: center.x + (x - center.x) * cos + (y - center.y) * sin,
       y: center.y - (x - center.x) * sin + (y - center.y) * cos,
     })
-    for (const q of [back(gx0, gy0 - ch * 0.9), back(gx1, gy0 - ch * 0.9), back(gx0, gy1), back(gx1, gy1)]) {
+    const top = gy0 - Math.max(ch * 0.9, m)
+    for (const q of [back(gx0 - m, top), back(gx1 + m, top), back(gx0 - m, gy1 + m), back(gx1 + m, gy1 + m)]) {
       minX = Math.min(minX, q.x); minY = Math.min(minY, q.y)
       maxX = Math.max(maxX, q.x); maxY = Math.max(maxY, q.y)
     }
