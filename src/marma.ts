@@ -5,9 +5,9 @@ import type { Pt } from './types'
  * mandala between named padas: Roga–Anala and Pitra–Shikhi (the two diagonals), Vitatha–Shosha,
  * Mukhya–Bhrisha, Aditi–Sugriva and Jayanta–Bhringaraja. They cut one another in nine points,
  * the atimarma: vital points that no pillar, nail, peg or impurity should touch, each the size
- * of an eighth of a pada. Everything here lives in the pada grid's own frame (the plot's
- * bounding box turned to north), so the lines and points sit on the very grid the Pada Grid
- * compass draws. Grid units: u across from the west edge, v down from the north edge, 0–9. */
+ * of an eighth of a pada. The grid is a true square about the plot's centre, turned to north,
+ * and takes its size from the outer circle (marmaFrame), so the Size dial moves it with the
+ * wheel. Grid units: u across from the west edge, v down from the north edge, 0–9. */
 
 /** The pada grid's frame: the plot's bounding box in a frame turned by -north about c (the grid
  *  itself is drawn inside rotate(north, c)). */
@@ -22,6 +22,14 @@ export function gridFrame(c: Pt, north: number, pts: Pt[]): { minX: number; minY
     minY = Math.min(minY, y); maxY = Math.max(maxY, y)
   }
   return { minX, minY, maxX, maxY }
+}
+
+/** The marma sthan's square for an outer circle of radius R, in the same turned frame: the circle
+ *  sits inside it touching all four sides, so the square's side is the circle's diameter (the
+ *  owner's rule). Its centre is the plot's centre, and the Size dial moves both together. */
+export function marmaFrame(c: Pt, R: number): { minX: number; minY: number; maxX: number; maxY: number } {
+  const h = R
+  return { minX: c.x - h, minY: c.y - h, maxX: c.x + h, maxY: c.y + h }
 }
 
 /** One vamsha, edge to edge across the grid ([u, v] at each end), through the centres of the
@@ -56,13 +64,12 @@ export const ATIMARMA: { at: [number, number]; name: string }[] = [
 /** A marma point's radius for padas of cw × ch: a circle of an eighth of a pada's area. */
 export const marmaRadius = (cw: number, ch: number) => Math.sqrt((cw * ch) / (8 * Math.PI))
 
-/** The nine atimarma in plan coordinates (in ATIMARMA's order) and their radius, or null when
- *  there is no plot to fit the grid to. */
-export function marmaPoints(c: Pt, north: number, pts: Pt[]): { points: Pt[]; r: number } | null {
-  if (pts.length < 3) return null
-  const f = gridFrame(c, north, pts)
-  const cw = (f.maxX - f.minX) / 9, ch = (f.maxY - f.minY) / 9
-  if (!(cw > 0 && ch > 0)) return null
+/** The nine atimarma in plan coordinates (in ATIMARMA's order) and their radius, for an outer
+ *  circle of radius R, or null when there is no circle yet. */
+export function marmaPoints(c: Pt, north: number, R: number): { points: Pt[]; r: number } | null {
+  if (!(R > 0)) return null
+  const f = marmaFrame(c, R)
+  const cw = (f.maxX - f.minX) / 9, ch = cw
   const rad = (north * Math.PI) / 180
   const cos = Math.cos(rad), sin = Math.sin(rad)
   const toPlan = ([u, v]: [number, number]): Pt => {

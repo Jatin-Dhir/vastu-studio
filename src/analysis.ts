@@ -19,13 +19,17 @@ export function zoneRows(sampled: Pt[], center: Pt, northDeg: number): ZoneRow[]
   })
 }
 
-/** The plot's own Brahmasthan radius — a quarter of the compass's own radius (R,
- *  the equal-area wheel: πR² = plot area → R = √(A/π)), i.e. brahmaR = R/4.
- *  A property of the DRAWING; the compass Size% slider never affects it (that's
- *  a cosmetic display scale, not a measurement — see R's usage elsewhere). */
-export function brahmasthanRadius(sampled: Pt[]): number {
+/** The compass's own radius: the equal-area wheel, πR² = plot area. */
+export function wheelRadius(sampled: Pt[]): number {
   if (sampled.length < 3) return 0
-  return Math.sqrt(Math.abs(polygonArea(sampled)) / Math.PI) / 4
+  return Math.sqrt(Math.abs(polygonArea(sampled)) / Math.PI)
+}
+
+/** The plot's own Brahmasthan radius — a quarter of the wheel's, brahmaR = R/4.
+ *  A property of the DRAWING; the compass Size% slider never affects it, so a custom chakra can
+ *  be sized around a fixed centre. It has its own dial (compass.brahmaPct). */
+export function brahmasthanRadius(sampled: Pt[]): number {
+  return wheelRadius(sampled) / 4
 }
 
 export interface Placement {

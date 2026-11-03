@@ -112,7 +112,7 @@ export default function App() {
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     document.documentElement.dataset.accent = accent
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'paper' ? '#F3F1EA' : '#0B0C10')
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', theme === 'paper' ? '#F3F3F0' : '#0B0C10')
     void syncNativeChrome(theme)
   }, [theme, accent])
 
@@ -142,12 +142,14 @@ export default function App() {
     const reset = (e: Event) => {
       // the debounce may still hold the last edit — keep it in the library first. Not when the
       // plan on screen was just deleted: saving it would bring it straight back under its id
-      if (!(e as CustomEvent<{ discard?: boolean }>).detail?.discard) autosave()
+      const discard = (e as CustomEvent<{ discard?: boolean }>).detail?.discard
+      if (!discard) autosave()
       clearAutosave()
       const st = useStore.getState()
+      const kept = !discard && (st.bg.kind !== 'none' || st.pts.length > 0)
       st.loadProject({ ...EMPTY_PROJECT, unit: st.unit })
       st.setProjectMeta({ id: null, name: 'Untitled plan' })
-      st.toast('Cleared — start with a fresh import', 'ok')
+      st.toast(kept ? 'Cleared — the plan is still in Projects' : 'Cleared — start with a fresh import', 'ok')
     }
     window.addEventListener('vastu:open-file', open)
     window.addEventListener('vastu:reset', reset)
@@ -414,19 +416,16 @@ export default function App() {
       <TabStrip />
       <main className="stage-wrap" aria-label="Plan">
         <CanvasStage />
-        <QuickBar />
+        <QuickBar chips={<><CloseChip /><RoomCloseChip /><CalibrateBar /></>} />
         <RotateChip />
-        <CloseChip />
         <SelectionChips />
         <MarkerChips />
         <StrokeChips />
         <RoomShapeChips />
         <TextChips />
-        <RoomCloseChip />
         {hasContent && <RightPanel />}
         <ToolRail />
         {!hasContent && <EmptyState />}
-        <CalibrateBar />
         <StatusChip />
       </main>
       {/* fixed to the real viewport, like Toasts — .stage-wrap clips absolute children

@@ -120,8 +120,9 @@ export function Part({ id, highlight = null, onZone, label }: {
 }) {
   const square = id === 'grid9' || id === 'marma'
   const r0 = PART_R * 1.16, r1 = PART_R * 1.27
-  // the marma sthan writes its vamshas' pada names outside the grid, so it needs a wider margin
-  const half = id === 'marma' ? PART_R * 1.5 : square ? PART_R * (1.02 * TILT + 0.04) : r1 * 1.02
+  // the marma sthan writes its vamshas' pada names outside its grid, so its sheet runs wider
+  const sheet = PART_R * (id === 'marma' ? 1.24 : 1.02)
+  const half = square ? sheet * TILT + PART_R * 0.04 : r1 * 1.02
   const box = { x: -half, y: -half, w: half * 2, h: half * 2 }
   const [ref, k] = useScale(box.w)
   const compass: CompassState = {
@@ -154,7 +155,7 @@ export function Part({ id, highlight = null, onZone, label }: {
         onPointerMove={onZone ? pick : undefined} onPointerDown={onZone ? pick : undefined}
         onPointerLeave={onZone ? () => onZone(null) : undefined}>
         {!square && <circle cx={0} cy={0} r={r0} fill="#FBFAF6" />}
-        {square && <rect x={-PART_R * 1.02} y={-PART_R * 1.02} width={PART_R * 2.04} height={PART_R * 2.04} fill="#FBFAF6" transform={`rotate(${NORTH_DEG})`} />}
+        {square && <rect x={-sheet} y={-sheet} width={sheet * 2} height={sheet * 2} fill="#FBFAF6" transform={`rotate(${NORTH_DEG})`} />}
         <Scene bg={NO_BG} dxf={null} pts={CIRCLE} bulges={CIRCLE.map(() => 0)} closed center={ORIGIN} R={PART_R}
           northDeg={NORTH_DEG} compass={compass} metersPerPx={null} unit="ft" k={k} showEdgeLabels={false}
           wallOpacity={0} highlightZone={highlight} paper idPrefix={`part-${id}`} />

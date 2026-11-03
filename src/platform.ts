@@ -7,3 +7,8 @@ export const MOD = IS_MAC ? '⌘' : 'Ctrl'
 
 /** A shortcut written for the current platform: mod('Z') → "⌘Z" or "Ctrl+Z". */
 export const mod = (key: string) => (IS_MAC ? `⌘${key}` : `Ctrl+${key}`)
+
+/** A finger on the screen, not a mouse: the words on screen follow the device in hand. */
+export const COARSE = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches
+export const press = COARSE ? 'tap' : 'click'
+export const Press = COARSE ? 'Tap' : 'Click'

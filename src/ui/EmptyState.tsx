@@ -17,12 +17,12 @@ export function EmptyState() {
       <div className="empty-card">
         {/* one slow turn, then still — an endless spin is motion beside the text that nothing can stop */}
         <svg className="empty-mark" width="64" height="64" viewBox="0 0 64 64" aria-hidden style={{ animationIterationCount: 1 }}>
-          <circle cx="32" cy="32" r="29" fill="none" stroke="#D9B45B" strokeWidth="1" opacity="0.35" />
+          <circle cx="32" cy="32" r="29" fill="none" stroke="currentColor" strokeWidth="1" opacity="0.35" />
           <rect x="15.5" y="15.5" width="33" height="33" rx="2" transform="rotate(45 32 32)"
-            fill="none" stroke="#D9B45B" strokeWidth="1.8" />
+            fill="none" stroke="currentColor" strokeWidth="1.8" />
           <rect x="22.5" y="22.5" width="19" height="19" rx="1.5"
-            fill="none" stroke="#D9B45B" strokeWidth="1" opacity="0.55" />
-          <circle cx="32" cy="32" r="3.4" fill="#D9B45B" />
+            fill="none" stroke="currentColor" strokeWidth="1" opacity="0.55" />
+          <circle cx="32" cy="32" r="3.4" fill="currentColor" />
         </svg>
         <h1>Vastu Studio</h1>
         <p className="empty-tag">

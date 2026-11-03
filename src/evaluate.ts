@@ -1,4 +1,4 @@
-import { brahmasthanRadius, zoneRows } from './analysis'
+import { brahmasthanRadius, wheelRadius, zoneRows } from './analysis'
 import { dist, pointInPolygon } from './geometry'
 import { formatLen } from './format'
 import { ZONE_SHAPE_NOTES, type Verdict } from './vastu'
@@ -55,6 +55,8 @@ export function evaluateVastu(args: {
   unit?: Unit
   /** manual Brahmasthan size in % of the drawing-derived radius (default 100) */
   brahmaPct?: number
+  /** the compass Size dial, in %: the marma points follow the outer circle (default 100) */
+  scalePct?: number
 }): Evaluation {
   const { sampled, center, northDeg, markers } = args
   const roomShapes = args.roomShapes ?? []
@@ -68,7 +70,7 @@ export function evaluateVastu(args: {
       const tail = g.verdict === 'avoid' ? ' — the charts advise remedies or an alternative entry'
         : g.verdict === 'caution' ? ' — classical texts advise remedies or an alternative entry' : ''
       const better = g.better.length > 0 && (g.verdict === 'avoid' || g.verdict === 'caution')
-        ? ` Favourable gates on this wall: ${g.better.slice(0, 2).map((b) => `${b.code} ${b.devta}`).join(', ')}.` : ''
+        ? `. Favourable gates on this wall: ${g.better.slice(0, 2).map((b) => `${b.code} ${b.devta}`).join(', ')}` : ''
       findings.push({
         severity: SEV_OF[g.verdict], markerId: a.id,
         title: `${a.label}: ${a.headline}`,
@@ -106,7 +108,7 @@ export function evaluateVastu(args: {
 
   /* Marma sthan: the nine points where the six vamshas cross (src/marma.ts). A room is on one
      when it covers the point, a marker when it sits within the point's own size. */
-  const marma = marmaPoints(center, northDeg, sampled)
+  const marma = marmaPoints(center, northDeg, wheelRadius(sampled) * ((args.scalePct ?? 100) / 100))
   if (marma) {
     for (const a of assessments) {
       if (a.gate) continue
@@ -149,6 +151,7 @@ export function evaluateVastu(args: {
     })
   }
 
+  for (const f of findings) f.detail = capFirst(f.detail)
   findings.sort((a, b) => SEV_ORDER[a.severity] - SEV_ORDER[b.severity])
   return {
     findings,

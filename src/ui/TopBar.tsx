@@ -5,7 +5,7 @@ import {
 import { APP_VERSION, canUpdate, checkForUpdates } from '../updater'
 import { useStore } from '../store'
 import { requestFit } from '../canvas/fit'
-import { mod } from '../platform'
+import { mod, press } from '../platform'
 import { requireAnalysis, requireLicense } from '../auth/gate'
 import { signOut } from '../auth/session'
 import { saveProjectFile } from '../importers/project'
@@ -116,7 +116,13 @@ export function TopBar() {
     {
       icon: Image, label: 'Remove background image', disabled: !hasBg,
       sub: 'Keeps your outline, scale, markers and drawings',
-      onTap: () => useStore.getState().clearBackground(),
+      onTap: () => {
+        // the background is not in the undo history, so this toast is the way back
+        const s = useStore.getState()
+        const prev = s.bg
+        s.clearBackground()
+        if (useStore.getState().bg.kind === 'none') s.toast('Background removed', 'ok', 'Undo', () => useStore.getState().setBg(prev))
+      },
     },
     {
       icon: MapPin, label: 'Remove all markers', disabled: !hasMarkers,
@@ -152,7 +158,8 @@ export function TopBar() {
     {
       icon: locked ? Lock : LockOpen,
       label: locked ? 'Unlock editing' : 'Lock the plan',
-      sub: locked ? 'Outline, scale and centre are frozen' : 'Freeze outline, scale & centre against stray taps',
+      sub: locked ? 'Outline, scale and centre are frozen' : `Freeze outline, scale & centre against stray ${press}s`,
+      fold: true,
       onTap: () => setLocked(!locked),
     },
     {
@@ -160,23 +167,24 @@ export function TopBar() {
       label: 'Units',
       sub: unit === 'ft' ? 'Feet & inches' : 'Metres',
       keepOpen: true,
+      fold: true,
       onTap: () => setUnit(unit === 'ft' ? 'm' : 'ft'),
       right: <UnitSeg className="seg" unit={unit} setUnit={setUnit} onClick={(e) => e.stopPropagation()} />,
     },
     { icon: Palette, label: 'Appearance', sub: 'Theme and accent colour', onTap: () => setAppearanceOpen(true) },
-    { icon: Maximize2, label: 'Fit to screen', sub: 'Bring the whole plan into view', onTap: requestFit },
-    { icon: Upload, label: 'Import a plan', sub: 'PDF · DXF · photo · .vastu project', onTap: () => window.dispatchEvent(new CustomEvent('vastu:open-file')) },
-    { icon: MapIcon, label: 'From Maps', sub: 'Capture the plot from satellite view', onTap: () => useStore.getState().setMapOpen(true) },
+    { icon: Maximize2, label: 'Fit to screen', sub: 'Bring the whole plan into view', fold: true, onTap: requestFit },
+    { icon: Upload, label: 'Import a plan', sub: 'PDF · DXF · photo · .vastu project', fold: true, onTap: () => window.dispatchEvent(new CustomEvent('vastu:open-file')) },
+    { icon: MapIcon, label: 'From Maps', sub: 'Capture the plot from satellite view', fold: true, onTap: () => useStore.getState().setMapOpen(true) },
     { icon: Wand2, label: 'Auto-detect rooms', sub: 'Find labelled rooms on this plan', onTap: () => void runDetect() },
-    { icon: FolderOpen, label: 'Projects', sub: 'Open, rename, back up', onTap: () => useStore.getState().setProjectsOpen(true) },
-    { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', onTap: savePortable },
+    { icon: FolderOpen, label: 'Projects', sub: 'Open, rename, back up', fold: true, onTap: () => useStore.getState().setProjectsOpen(true) },
+    { icon: Save, label: 'Save project file', sub: 'A portable .vastu file of everything', fold: true, onTap: savePortable },
     ...(auth.status === 'ok' ? [
       {
         icon: UserRound,
         label: auth.user.name || auth.user.phone,
         sub: auth.user.expiresAt
-          ? `Access until ${new Date(auth.user.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · tap to sign out`
-          : 'Signed in · tap to sign out',
+          ? `Access until ${new Date(auth.user.expiresAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })} · ${press} to sign out`
+          : `Signed in · ${press} to sign out`,
         onTap: () => { void signOut() },
       },
       ...(auth.user.role === 'admin' ? [{
@@ -184,7 +192,7 @@ export function TopBar() {
         onTap: () => { location.hash = '#/admin' },
       }] : []),
     ] : []),
-    { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', onTap: () => useStore.getState().setShortcutsOpen(true) },
+    { icon: HelpCircle, label: 'Help & gestures', sub: 'How the whole flow works', fold: true, onTap: () => useStore.getState().setShortcutsOpen(true) },
     ...(canUpdate() ? [{ icon: RefreshCw, label: 'Check for updates', sub: `This is version ${APP_VERSION}`, onTap: () => { void checkForUpdates(true) } }] : []),
     { icon: Eraser, label: 'Clear…', sub: 'Remove just the background, markers, drawings or outline', onTap: () => setClearOpen(true) },
   ]
@@ -193,10 +201,10 @@ export function TopBar() {
     <>
     <header className="topbar">
       <div className="brand">
-        <svg width="26" height="26" viewBox="0 0 32 32" aria-hidden>
+        <svg className="brand-mark" width="26" height="26" viewBox="0 0 32 32" aria-hidden>
           <rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)"
-            fill="none" stroke="#D9B45B" strokeWidth="2" />
-          <circle cx="16" cy="16" r="2.6" fill="#D9B45B" />
+            fill="none" stroke="currentColor" strokeWidth="2" />
+          <circle cx="16" cy="16" r="2.6" fill="currentColor" />
         </svg>
         <span className="brand-name hide-mobile">Vastu <em>Studio</em></span>
       </div>
@@ -271,7 +279,9 @@ export function TopBar() {
           data-tip={closed ? 'Client report — print / share' : 'Close the outline to build a report'}>
           <FileText size={16} />
         </button>
-        <button className="btn-primary" aria-label="Export PNG" onClick={() => { if (requireLicense()) void import('../export').then((m) => m.exportPng()) }}>
+        <button className="btn-primary" aria-label="Export PNG" disabled={!hasBg && !hasOutline}
+          data-tip={!hasBg && !hasOutline ? 'Import a plan to export it' : undefined}
+          onClick={() => { if (requireLicense()) void import('../export').then((m) => m.exportPng()) }}>
           <Download size={15} /> <span className="hide-mobile">Export PNG</span>
         </button>
         <button className="icon-btn" aria-label="More" onClick={() => setMoreOpen(true)}>
@@ -279,10 +289,7 @@ export function TopBar() {
         </button>
       </div>
     </header>
-    {/* rendered OUTSIDE the header: .topbar's backdrop-filter creates a containing
-        block for position:fixed descendants, which was confining this sheet's
-        scrim to the 54px topbar strip instead of the real viewport */}
-    <ActionSheet open={moreOpen} title="Vastu Studio" rows={moreRows} onClose={() => setMoreOpen(false)} />
+    <ActionSheet open={moreOpen} title="More" rows={moreRows} onClose={() => setMoreOpen(false)} />
     <ActionSheet open={clearOpen} title="Clear…" rows={clearRows} onClose={() => setClearOpen(false)} />
     <AppearanceSheet open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
     </>

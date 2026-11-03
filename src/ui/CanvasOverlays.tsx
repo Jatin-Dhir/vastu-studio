@@ -6,7 +6,8 @@ import { M_PER_FT, formatArea, formatLen } from '../format'
 import { placementOf, zoneRows } from '../analysis'
 import { NorthDial } from './NorthDial'
 import { KindPicker } from './KindPicker'
-import { assessItem, roomPolygon, sharesLine, verdictWord } from '../assess'
+import { assessItem, capFirst, roomPolygon, sharesLine, verdictWord } from '../assess'
+import { COARSE, Press, press } from '../platform'
 import type { Pt, ViewState } from '../types'
 
 /** World → screen, the same transform the stage applies to #world. */
@@ -145,40 +146,40 @@ function ToolHint() {
   let text: string | null = null
   if (tool === 'calibrate') {
     if (bgHint === 'map-screenshot') {
-      text = !calA ? "Tap ONE END of the screenshot's scale bar"
-        : !calB ? 'Now tap the OTHER end of the scale bar'
+      text = !calA ? `${Press} ONE END of the screenshot's scale bar`
+        : !calB ? `Now ${press} the OTHER end of the scale bar`
           : 'Enter the printed distance — e.g. 20 m'
     } else {
-      text = !calA ? 'Scale — tap the FIRST end of a length you know (a wall, a printed dimension)'
-        : !calB ? 'Now tap the OTHER end of that length'
-          : 'Drag the pins to fine-tune, then tap “Enter length”'
+      text = !calA ? `Scale — ${press} the FIRST end of a length you know (a wall, a printed dimension)`
+        : !calB ? `Now ${press} the OTHER end of that length`
+          : `Drag the pins to fine-tune, then ${press} “Enter length”`
     }
   } else if (tool === 'trace') {
     text = closed
-      ? 'Outline is closed — tap on an edge to add a point there'
-      : pts === 0 ? 'Trace — tap the first corner of the plot'
-        : pts < 3 ? `Tap the next corner · ${pts} placed`
-          : `Tap corners, then the ✓ to close · ${pts} placed`
+      ? `Outline is closed — ${press} on an edge to add a point there`
+      : pts === 0 ? `Trace — ${press} the first corner of the plot`
+        : pts < 3 ? `${Press} the next corner · ${pts} placed`
+          : `${Press} corners, then the ✓ to close · ${pts} placed`
   } else if (tool === 'center') {
-    text = 'Tap or drag to pin the centre — reset in the panel'
+    text = `${Press} or drag to pin the centre — reset in the panel`
   } else if (tool === 'north') {
-    text = !northA ? 'Tap the TAIL of the plan’s north arrow' : 'Now tap the TIP of the arrow'
+    text = !northA ? `${Press} the TAIL of the plan’s north arrow` : `Now ${press} the TIP of the arrow`
   } else if (tool === 'marker') {
-    text = 'Pick a type, then tap the plan to mark it'
+    text = `Pick a type, then ${press} the plan to mark it`
   } else if (tool === 'draw') {
     text = drawMode === 'line' ? 'Drag a straight line — ends snap to your outline’s corners & edges'
       : drawMode === 'arrow' ? 'Drag an arrow, tail to tip — ends snap to corners & edges'
         : drawMode === 'rect' ? 'Drag a rectangle — hold Shift for a square'
           : drawMode === 'ellipse' ? 'Drag a circle — hold Shift for a perfect circle'
-            : drawMode === 'text' ? 'Tap the plan to place a note'
-              : drawMode === 'erase' ? 'Tap or swipe across a drawing or note to remove it'
-                : 'Draw freely on the plan — pan with two fingers'
+            : drawMode === 'text' ? `${Press} the plan to place a note`
+              : drawMode === 'erase' ? `${Press} or ${COARSE ? 'swipe' : 'drag'} across a drawing or note to remove it`
+                : COARSE ? 'Draw freely on the plan — pan with two fingers' : 'Draw freely on the plan'
   } else if (tool === 'room') {
     text = roomDrawMode === 'ellipse' ? 'Drag out a circle — then drag it to move, or pull its handles to resize'
       : roomDrawMode === 'polygon'
-        ? (draftLen === 0 ? 'Trace the area — tap its first corner'
-          : draftLen < 3 ? `Tap the next corner · ${draftLen} placed`
-            : `Tap corners, then the first one (or the ✓) to close · ${draftLen} placed`)
+        ? (draftLen === 0 ? `Trace the area — ${press} its first corner`
+          : draftLen < 3 ? `${Press} the next corner · ${draftLen} placed`
+            : `${Press} corners, then the first one (or the ✓) to close · ${draftLen} placed`)
         : 'Drag out a room — then drag it to move, or pull its corners to resize'
   }
   if (!text) return null
@@ -378,8 +379,7 @@ export function RoomShapeChips() {
       const xs = poly.map((q) => q.x), ys = poly.map((q) => q.y)
       const anchor = { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: (Math.min(...ys) + Math.max(...ys)) / 2 }
       const a = assessItem({ id: r.id, kind: r.kind, label: r.label, anchor, poly, center: c, northDeg })
-      const mark = a.verdict === 'ideal' || a.verdict === 'good' ? '✓ ' : a.verdict === 'avoid' ? '✕ ' : a.verdict === 'caution' ? '! ' : ''
-      place = `${mark}${verdictWord(a.verdict)} · ${sharesLine(a)}`
+      place = `${capFirst(verdictWord(a.verdict))} · ${sharesLine(a)}`
     }
   }
   return (
@@ -592,7 +592,7 @@ function MarkerKindRow() {
  * in the side panel/sheet now: a row of terse number pills (16/32/8/Grid/Dial)
  * floating over the drawing read as unexplained clutter, not a control.
  */
-export function QuickBar() {
+export function QuickBar({ chips }: { chips?: ReactNode }) {
   const closed = useStore((s) => s.closed)
   const hasBg = useStore((s) => s.bg.kind !== 'none')
   const tool = useStore((s) => s.tool)
@@ -621,7 +621,7 @@ export function QuickBar() {
   const onKeyDown = usePopoverFocus(degOpen && closed, () => setDegOpen(false), degPopRef, degBtnRef)
 
   const armed = tool === 'calibrate' || tool === 'trace' || tool === 'center' || tool === 'north' || tool === 'marker' || tool === 'draw' || tool === 'room'
-  if (!hasBg || (!closed && !armed)) return null
+  if (!hasBg || (!closed && !armed)) return chips ? <div className="quickbar"><div className="quickbar-foot">{chips}</div></div> : null
 
   return (
     <div className="quickbar" ref={popRef} onKeyDown={onKeyDown}>
@@ -643,7 +643,10 @@ export function QuickBar() {
       {tool === 'marker' && !locked && <MarkerKindRow />}
       {tool === 'draw' && !locked && <DrawOptionsRow />}
       {tool === 'room' && !locked && <RoomOptionsRow />}
-      <ToolHint />
+      <div className="quickbar-foot">
+        <ToolHint />
+        {chips}
+      </div>
 
       {degOpen && closed && (
         <div className="deg-pop" ref={degPopRef} id={degPopId} role="dialog" aria-label="Plan north">
@@ -704,7 +707,7 @@ export function RotateChip() {
   return (
     <div className="rotate-chip" ref={ref} onKeyDown={onKeyDown}>
       <button ref={btnRef} className={`qpill ${shown !== 0 ? 'on' : ''}`} onClick={() => setOpen(!open)}
-        title="Rotate the view (or twist with two fingers)" aria-label={`Rotate view, currently ${shown}°`}
+        title={COARSE ? 'Rotate the view (or twist with two fingers)' : 'Rotate the view'} aria-label={`Rotate view, currently ${shown}°`}
         aria-expanded={open} aria-haspopup="dialog" aria-controls={open ? popId : undefined}>
         <RotateCcw size={12} /> {shown}°
       </button>
@@ -759,14 +762,12 @@ export function MarkerChips() {
     const pl = placementOf(m.p, c, northDeg)
     if (m.kind === 'entrance') {
       const q = GATE_QUALITY[pl.pada.code]
-      const mark = q?.v === 'good' ? '✓ ' : q?.v === 'avoid' ? '✕ ' : q?.v === 'caution' ? '! ' : ''
-      place = `${mark}${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
+      place = `${q?.v ? `${capFirst(verdictWord(q.v))} · ` : ''}${pl.pada.code} ${pl.pada.devta} · ${pl.bearing.toFixed(1)}°`
     } else if (m.kind === 'custom') {
       place = `${pl.zone.key} — ${pl.zone.name}`
     } else {
       const a = assessItem({ id: m.id, kind: m.kind, label: m.label, anchor: m.p, center: c, northDeg })
-      const mark = a.verdict === 'ideal' || a.verdict === 'good' ? '✓ ' : a.verdict === 'avoid' ? '✕ ' : a.verdict === 'caution' ? '! ' : ''
-      place = `${mark}${verdictWord(a.verdict)} · ${pl.zone.key} — ${pl.zone.name}`
+      place = `${capFirst(verdictWord(a.verdict))} · ${pl.zone.key} — ${pl.zone.name}`
     }
   }
 
@@ -776,7 +777,7 @@ export function MarkerChips() {
   const sy = view.ty + view.k * (m.p.x * sin + m.p.y * cos)
 
   return (
-    <Chips left={sx - 60} top={Math.max(60, sy - 58)}>
+    <Chips left={sx - 60} top={sy - 58 < 60 ? sy + 34 : sy - 58}>
       {place && <span className="chip place">{place}</span>}
       {!locked && (
         <>
@@ -854,7 +855,7 @@ export function SelectionChips() {
           <button className="len-unit len-dir" onPointerDown={(e) => e.preventDefault()}
             onClick={() => setMoveFar(!moveFar)}
             aria-label={moveFar ? 'The far corner moves. Switch to the near corner' : 'The near corner moves. Switch to the far corner'}
-            title="The arrow points at the corner that moves — tap to flip">
+            title={`The arrow points at the corner that moves — ${press} to flip`}>
             <ArrowRight size={12} style={{ transform: `rotate(${arrowDeg}deg)` }} />
           </button>
         </LengthChip>

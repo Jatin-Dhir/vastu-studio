@@ -63,34 +63,31 @@ export function NorthDial({ size = 64 }: { size?: number }) {
       onPointerMove={(e) => { if (e.buttons & 1) fromEvent(e) }}
     >
       <svg viewBox="0 0 64 64">
-        <circle cx="32" cy="32" r="29" fill="rgba(255,255,255,0.03)" stroke="rgba(255,255,255,0.14)" strokeWidth="1" />
-        {Array.from({ length: 8 }, (_, i) => {
-          const a = (i * 45 * Math.PI) / 180
-          return <line key={i} x1={32 + Math.sin(a) * 24} y1={32 - Math.cos(a) * 24}
-            x2={32 + Math.sin(a) * 28} y2={32 - Math.cos(a) * 28}
-            stroke="rgba(255,255,255,0.35)" strokeWidth="1.4" />
+        {/* the fixed bezel: a tick every 15°, longer every 45° */}
+        <circle cx="32" cy="32" r="30.5" fill="none" stroke="currentColor" strokeOpacity="0.22" strokeWidth="1" />
+        {Array.from({ length: 24 }, (_, i) => {
+          const a = (i * 15 * Math.PI) / 180
+          const long = i % 3 === 0
+          return <line key={i} x1={32 + Math.sin(a) * (long ? 25.5 : 27.5)} y1={32 - Math.cos(a) * (long ? 25.5 : 27.5)}
+            x2={32 + Math.sin(a) * 29.5} y2={32 - Math.cos(a) * 29.5}
+            stroke="currentColor" strokeOpacity={long ? 0.55 : 0.28} strokeWidth="1" />
         })}
-        {CARDINALS.map(({ key, deg }) => {
-          const a = (deg * Math.PI) / 180
-          const x = 32 + Math.sin(a) * 20.5, y = 32 - Math.cos(a) * 20.5
-          return (
-            <text key={key} x={x} y={y} fontSize="6.5" fontWeight={700} textAnchor="middle"
-              dominantBaseline="central" fill={deg === 0 ? '#F26B57' : 'rgba(255,255,255,0.55)'}>
-              {key}
-            </text>
-          )
-        })}
+        {/* the card turns, as on a real compass: the pointer always reads as north */}
         <g transform={`rotate(${northDeg} 32 32)`}>
-          <path d="M32 8 l5.5 13 h-11 Z" fill="#F26B57" />
-          <text x="32" y="19.5" fontSize="6" fontWeight={800} textAnchor="middle"
-            dominantBaseline="central" fill="#FFFDF4">N</text>
-          <path d="M32 56 l5.5 -13 h-11 Z" fill="rgba(255,255,255,0.28)" />
+          {CARDINALS.slice(1).map(({ key, deg }) => {
+            const a = (deg * Math.PI) / 180
+            return (
+              <text key={key} x={32 + Math.sin(a) * 18.5} y={32 - Math.cos(a) * 18.5} fontSize="7" fontWeight={650} textAnchor="middle"
+                dominantBaseline="central" fill="currentColor" fillOpacity="0.62">
+                {key}
+              </text>
+            )
+          })}
+          <path d="M32 7.5 l5.5 15.5 h-11 Z" fill="#E0543F" />
+          <text x="32" y="18.2" fontSize="6.5" fontWeight={800} textAnchor="middle"
+            dominantBaseline="central" fill="#FFFFFF">N</text>
         </g>
-        <circle cx="32" cy="32" r="9" fill="#14151A" stroke="#D9B45B" strokeWidth="1" />
-        <text className="north-dial-readout" x="32" y="32.5" fontSize="7.5" fontWeight={700}
-          textAnchor="middle" dominantBaseline="central" fill="#F3E5C0">
-          {Math.round(readout)}°
-        </text>
+        <circle cx="32" cy="32" r="2.6" fill="currentColor" />
       </svg>
     </div>
   )

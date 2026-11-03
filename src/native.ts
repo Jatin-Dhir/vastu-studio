@@ -19,7 +19,7 @@ export async function syncNativeChrome(theme: ThemeMode): Promise<void> {
   try {
     const { StatusBar, Style } = await import('@capacitor/status-bar')
     await StatusBar.setStyle({ style: theme === 'paper' ? Style.Light : Style.Dark })
-    await StatusBar.setBackgroundColor({ color: theme === 'paper' ? '#F3F1EA' : '#0B0C10' }).catch(() => { /* iOS has no bg */ })
+    await StatusBar.setBackgroundColor({ color: theme === 'paper' ? '#F3F3F0' : '#0B0C10' }).catch(() => { /* iOS has no bg */ })
   } catch { /* plugin missing */ }
 }
 

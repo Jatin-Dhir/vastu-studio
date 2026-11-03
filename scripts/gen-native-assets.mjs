@@ -22,7 +22,7 @@ if (existsSync(res)) {
   }
   writeFileSync(
     join(res, 'values', 'ic_launcher_background.xml'),
-    `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#0B0C10</color>\n</resources>\n`
+    `<?xml version="1.0" encoding="utf-8"?>\n<resources>\n    <color name="ic_launcher_background">#1E3A66</color>\n</resources>\n`
   )
   let splashes = 0
   for (const dir of readdirSync(res)) {

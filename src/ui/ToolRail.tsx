@@ -2,6 +2,7 @@ import { Fragment, useRef, useState } from 'react'
 import { Crosshair, Map as MapIcon, MapPin, MousePointer2, Navigation, Pencil, PenLine, Ruler, Square, Trash2, Upload } from 'lucide-react'
 import { useStore } from '../store'
 import type { Tool } from '../types'
+import { press } from '../platform'
 
 interface ToolDef { id: Tool; icon: typeof MousePointer2; label: string; short: string; kbd: string }
 
@@ -13,7 +14,7 @@ const GROUPS: ToolDef[][] = [
   [
     { id: 'trace', icon: PenLine, label: 'Trace outline', short: 'Trace', kbd: 'T' },
     { id: 'calibrate', icon: Ruler, label: 'Set scale', short: 'Scale', kbd: 'C' },
-    { id: 'north', icon: Navigation, label: 'Align north — tap the plan arrow, tail then tip', short: 'North', kbd: 'N' },
+    { id: 'north', icon: Navigation, label: `Align north — ${press} the plan arrow, tail then tip`, short: 'North', kbd: 'N' },
   ],
   [
     { id: 'room', icon: Square, label: 'Draw a room or area — rectangle, circle', short: 'Room', kbd: 'R' },

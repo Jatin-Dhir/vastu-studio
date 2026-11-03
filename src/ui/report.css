@@ -33,7 +33,7 @@
 .report-page p, .report-verdict, .report-note, .report-assess-item, .report-finding-ctx { text-wrap: pretty; }
 
 /* the form's hints: WebKit's default placeholder grey measured 2.3:1 on the field; this is 4.8 */
-.report-meta input::placeholder, .report-notes::placeholder { color: #6A7180; opacity: 1; }
+.report-meta input::placeholder, .report-notes::placeholder { color: #6B6B70; opacity: 1; }
 
 /* zone/room tables scroll sideways inside their own box — the report page
    (and print page) never gets a horizontal scrollbar because of a table */
@@ -66,9 +66,9 @@
   gap: 4px 18px;
   margin-top: 7px;
   font-size: 12px;
-  color: #444C5C;
+  color: #48484C;
 }
-.report-coverline b { color: #1E2430; margin-right: 3px; }
+.report-coverline b { color: #1B1B1D; margin-right: 3px; }
 
 
 /* at-a-glance verdict scoreboard */
@@ -85,18 +85,18 @@
   gap: 2px;
   padding: 10px 6px;
   border-radius: 8px;
-  background: #F4F2EA;
-  border: 1px solid #E8E4D8;
+  background: #F6F6F3;
+  border: 1px solid #E8E8E4;
 }
 /* lining figures: the serif's default old-style ones made 0 read as a lowercase o and dropped
    3, 4 and 5 below the line */
-.report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1E2430; font-variant-numeric: lining-nums tabular-nums; }
-.report-stat-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: #5E6777; }
+.report-stat-num { font-family: var(--serif); font-size: 22px; line-height: 1; color: #1B1B1D; font-variant-numeric: lining-nums tabular-nums; }
+.report-stat-label { font-size: 11.5px; color: #5F5F66; }
 .report-stat-good .report-stat-num { color: #2E7040; }
 .report-stat-warn .report-stat-num { color: #8A5A0E; }
 .report-stat-bad .report-stat-num { color: #B23A2E; }
 .report-stat-info .report-stat-num { color: #3D6A80; }
-.report-verdict { margin: 6px 0 0; color: #444C5C; }
+.report-verdict { margin: 6px 0 0; color: #48484C; }
 
 /* small colour-coded verdict badges — reused for markers, gates and zone status */
 .report-pill {
@@ -119,7 +119,7 @@
 .report-pill-info { background: rgba(74,124,148,0.14); color: #3D6A80; }
 
 /* muted zone/pada context appended after a finding's own title+detail */
-.report-finding-ctx { color: #6A7280; }
+.report-finding-ctx { color: #6B6B70; }
 
 .report-entrance-head { display: flex; align-items: center; flex-wrap: wrap; gap: 2px; margin-bottom: 2px; }
 .report-entrance-head .report-pill { margin-left: 0; }
@@ -131,23 +131,21 @@
 .report-rulekey {
   margin-top: 10px;
   padding: 8px 10px;
-  background: #F9F7F0;
+  background: #F6F6F3;
   border-radius: 8px;
   font-size: 11.5px;
-  color: #56606E;
+  color: #56565C;
 }
 .report-rulekey-title {
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: 10px;
-  color: #667080;
+  font-weight: 650;
+  font-size: 11.5px;
+  color: #1B1B1D;
   margin-bottom: 4px;
 }
 .report-rulekey-row { padding: 2px 0; }
-.report-rulekey-row b { color: #1E2430; }
+.report-rulekey-row b { color: #1B1B1D; }
 
-.lbl-balanced { color: #667080; font-style: italic; }
+.lbl-balanced { color: #5F5F66; font-style: italic; }
 
 /* ----- phone layout, <=760px (matches the app's existing mobile breakpoint) ----- */
 
@@ -240,22 +238,20 @@
   margin: 4px 0 12px;
   font-size: 13px;
   line-height: 1.6;
-  color: #2A2F3B;
+  color: #2A2A2E;
 }
 .report-assess-h {
-  margin: 12px 0 6px;
-  font-size: 10.5px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  margin: 14px 0 6px;
+  font-size: 12.5px;
+  font-weight: 650;
 }
 .report-assess-h.good { color: #2E7040; }
-.report-assess-h.info { color: #5A6478; }
+.report-assess-h.info { color: #48484C; }
 .report-assess-list { display: flex; flex-direction: column; gap: 8px; }
 .report-assess-item {
   font-size: 12px;
   line-height: 1.55;
-  color: #444C5C;
+  color: #48484C;
   padding-left: 14px;
   position: relative;
 }
@@ -265,9 +261,9 @@
   left: 0; top: 7px;
   width: 5px; height: 5px;
   border-radius: 50%;
-  background: #B8963E;
+  background: #1B1B1D;
 }
-.report-assess-item b { color: #1E2430; }
+.report-assess-item b { color: #1B1B1D; }
 
 /* ----- print-time safety net, purely additive to index.css's @media print ----- */
 
@@ -324,7 +320,7 @@
     line-height: 1.45;
   }
   .report-page h1 { font-size: 21px; margin-bottom: 2px; }
-  .report-page h2 { font-size: 13px; margin: 12px 0 6px; }
+  .report-page h2 { font-size: 16px; margin: 12px 0 6px; }
   .report-page section { margin: 0 0 10px; }
   .report-coverline { margin-top: 4px; font-size: 10px; }
   .report-scoreboard { gap: 6px; margin: 6px 0; }

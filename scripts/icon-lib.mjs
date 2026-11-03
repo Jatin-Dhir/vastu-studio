@@ -1,5 +1,5 @@
 // Shared zero-dependency PNG writer + the Vastu Studio mark renderer:
-// dark rounded square, gold diamond band, faint inner diamond, cream centre dot.
+// navy rounded square, white diamond band, faint inner diamond, white centre dot.
 import { deflateSync } from 'node:zlib'
 
 function crc32(buf) {
@@ -40,9 +40,9 @@ export function encodePng(w, h, rgba) {
   ])
 }
 
-export const INK = [11, 12, 16]
-export const GOLD = [217, 180, 91]
-export const CREAM = [243, 229, 192]
+export const NAVY = [30, 58, 102]
+export const WHITE = [255, 255, 255]
+const NAVY_SOFT = [86, 112, 156]
 
 /**
  * Render the mark.
@@ -73,27 +73,27 @@ export function renderIcon(size, { shape = 'rounded', inset = 0 } = {}) {
         const dRect = Math.min(Math.max(qx, qy), 0) + Math.hypot(Math.max(qx, 0), Math.max(qy, 0)) - corner
         aBg = smooth(dRect)
         if (aBg <= 0) continue
-        put(i, INK, aBg)
+        put(i, NAVY, aBg)
       } else if (shape === 'square') {
-        put(i, INK, 1)
+        put(i, NAVY, 1)
       }
       // the mark, scaled about the centre by k
       const mx = (x - S / 2) / k + S / 2
       const my = (y - S / 2) / k + S / 2
       const m = Math.abs(mx - S / 2) + Math.abs(my - S / 2)
       const dBand = (Math.abs(m - S * 0.34) - S * 0.028) * k
-      put(i, GOLD, smooth(dBand) * aBg)
+      put(i, WHITE, smooth(dBand) * aBg)
       const dBand2 = (Math.abs(m - S * 0.21) - S * 0.012) * k
-      put(i, [140, 118, 66], smooth(dBand2) * aBg)
+      put(i, NAVY_SOFT, smooth(dBand2) * aBg)
       const dDot = (Math.hypot(mx - S / 2, my - S / 2) - S * 0.055) * k
-      put(i, CREAM, smooth(dDot) * aBg)
+      put(i, WHITE, smooth(dDot) * aBg)
     }
   }
   return encodePng(S, S, img)
 }
 
-/** A solid ink square (splash grounds stretch cleanly at any ratio). */
-export function solidPng(size = 64, color = INK) {
+/** A solid paper square (splash grounds stretch cleanly at any ratio). */
+export function solidPng(size = 64, color = PAPER) {
   const rgba = Buffer.alloc(size * size * 4)
   for (let i = 0; i < size * size; i++) {
     rgba[i * 4] = color[0]; rgba[i * 4 + 1] = color[1]; rgba[i * 4 + 2] = color[2]; rgba[i * 4 + 3] = 255
@@ -103,9 +103,8 @@ export function solidPng(size = 64, color = INK) {
 
 /** Splash with the mark centred at a modest size on solid ink. */
 // the splash matches the app's default Paper ground, so launch → first screen has no flash;
-// the launcher icon keeps its dark plate (that is the mark's identity on a home screen)
-const PAPER = [243, 241, 234]
-const GOLD_DEEP = [169, 120, 46]
+// the launcher icon keeps its navy plate (that is the mark's identity on a home screen)
+const PAPER = [243, 243, 240]
 export function renderSplash(size) {
   const img = Buffer.alloc(size * size * 4)
   for (let i = 0; i < size * size; i++) {
@@ -128,9 +127,9 @@ export function renderSplash(size) {
       const my = (y - S / 2) / k + S / 2
       const m = Math.abs(mx - S / 2) + Math.abs(my - S / 2)
       const dBand = (Math.abs(m - S * 0.34) - S * 0.028) * k
-      put(i, GOLD_DEEP, smooth(dBand))
+      put(i, NAVY, smooth(dBand))
       const dDot = (Math.hypot(mx - S / 2, my - S / 2) - S * 0.055) * k
-      put(i, GOLD_DEEP, smooth(dDot))
+      put(i, NAVY, smooth(dDot))
     }
   }
   return encodePng(S, S, img)

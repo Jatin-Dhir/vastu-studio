@@ -3,7 +3,7 @@ import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, TextNote, Un
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
 import { brahmasthanRadius, placementOf } from '../analysis'
-import { ATIMARMA, VAMSHAS, gridFrame, marmaRadius } from '../marma'
+import { ATIMARMA, VAMSHAS, gridFrame, marmaFrame, marmaRadius } from '../marma'
 import { formatArea, formatLen } from '../format'
 import { GATES32, GATE_QUALITY, GATE_START_DEG, MANDALA_INNER, ZONES16, mandalaCellName, markerKindMeta } from '../vastu'
 import { at } from './svgText'
@@ -11,9 +11,20 @@ import { at } from './svgText'
 export const FONT = "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
 export const GOLD = '#D9B45B'
 const INKHALO = 'rgba(9,10,14,0.78)'
+/** On a light drawing a label is set as print: dark letters on a paper halo, the quiet tier in
+ *  brown and the two accents deepened, instead of light letters in a dark outline. */
+const PAPERHALO = 'rgba(255,253,246,0.94)'
+const PAPER_GOLD = '#A9812F'
+const PRINT_INK: Record<string, string> = {
+  '#F26B57': '#C43B28', // north
+  '#D9B45B': '#8F6A1F', // Brahma
+  '#D9CCA6': '#6E5A33', '#EDE4CC': '#6E5A33', '#C9BE9D': '#6E5A33', '#D8C989': '#6E5A33', '#B8A26B': '#6E5A33',
+}
 /** The ground of the canvas's small tags (room names, the area): light text on it reads over
- *  any drawing, light or dark, which a halo alone did not. */
+ *  any drawing, light or dark, which a halo alone did not. On paper the tag is a white label. */
 const TAG_INK = '#101116'
+const TAG_PAPER = '#FFFFFF'
+const TAG_PAPER_TEXT = '#1B1B1D'
 /** Muted gold-brown — the design system's secondary-line ink (design language spec). */
 const MUTED = '#8C7642'
 /** Gate verdict colours, the same ladder as every other verdict in the app: auspicious green
@@ -208,7 +219,7 @@ export function StrokesLayer({ strokes }: { strokes: Stroke[] }) {
 }
 
 /** Text notes pinned to the plan — world-sized, so they zoom with the drawing. */
-function TextsLayer({ texts, selected, k, vr }: { texts: TextNote[]; selected?: string | null; k: number; vr: number }) {
+function TextsLayer({ texts, selected, k, vr, paper }: { texts: TextNote[]; selected?: string | null; k: number; vr: number; paper?: boolean }) {
   if (texts.length === 0) return null
   return (
     <g>
@@ -226,7 +237,7 @@ function TextsLayer({ texts, selected, k, vr }: { texts: TextNote[]; selected?: 
                 fill="none" stroke={GOLD} strokeWidth={1.4 / k} strokeDasharray={`${6 / k} ${4 / k}`} rx={3 / k} opacity={0.95} />
             )}
             <text {...place} fontSize={t.size} fontFamily={FONT} fontWeight={650}
-              fill={t.color} {...haloProps(t.size * 0.22)}>
+              fill={ink(t.color, paper)} {...haloProps(t.size * 0.22, paper)}>
               {lines.map((l, i) => (
                 <tspan key={i} x={place.x} dy={i === 0 ? 0 : t.size * 1.25}>{l}</tspan>
               ))}
@@ -238,8 +249,12 @@ function TextsLayer({ texts, selected, k, vr }: { texts: TextNote[]; selected?: 
   )
 }
 
-const haloProps = (w: number) => ({
-  stroke: INKHALO,
+/** A label's letters on this ground: anything too pale to read on paper goes dark. */
+const ink = (fill: string, paper?: boolean) =>
+  (!paper ? fill : PRINT_INK[fill] ?? (fill.startsWith('#') && relLuminance(fill) > 0.6 ? '#2A2723' : fill))
+
+const haloProps = (w: number, paper?: boolean) => ({
+  stroke: paper ? PAPERHALO : INKHALO,
   strokeWidth: w,
   paintOrder: 'stroke' as const,
   strokeLinejoin: 'round' as const,
@@ -248,11 +263,12 @@ const haloProps = (w: number) => ({
 export function RingLabel(props: {
   c: Pt; deg: number; r: number; size: number; text: string
   fill?: string; weight?: number; opacity?: number; halo?: number; spacing?: number; vr?: number
+  paper?: boolean
   /** Compass-rose convention: keep the glyph screen-upright instead of tangent to the ring.
    *  Use for single-letter cardinals (N/E/S/W); leave multi-letter runs tangential. */
   upright?: boolean
 }) {
-  const { c, deg, r, size, text, fill = '#EDEFF4', weight = 600, opacity = 1, halo = 0, spacing, vr = 0, upright = false } = props
+  const { c, deg, r, size, text, fill = '#EDEFF4', weight = 600, opacity = 1, halo = 0, spacing, vr = 0, upright = false, paper } = props
   const norm = (((deg + vr) % 360) + 360) % 360
   const flip = norm > 90 && norm < 270
   const p = polar(c, deg, r)
@@ -262,9 +278,9 @@ export function RingLabel(props: {
       {...at(p.x, p.y, rot, size)}
       textAnchor="middle" dominantBaseline="central"
       fontSize={size} fontWeight={weight} fontFamily={FONT}
-      fill={fill} opacity={opacity}
+      fill={ink(fill, paper)} opacity={opacity}
       letterSpacing={spacing}
-      {...(halo > 0 ? haloProps(halo) : {})}
+      {...(halo > 0 ? haloProps(halo, paper) : {})}
     >
       {text}
     </text>
@@ -287,14 +303,14 @@ function ringSectorPath(c: Pt, r0: number, r1: number, a0: number, a1: number): 
  *  not just the dark default ground. Same two-pass technique the tick/label halos already use. */
 function CasedCircle(props: {
   cx: number; cy: number; r: number; k: number; stroke?: string; width: number
-  opacity?: number; dash?: string
+  opacity?: number; dash?: string; paper?: boolean
 }) {
-  const { cx, cy, r, k, stroke = GOLD, width, opacity = 0.9, dash } = props
+  const { cx, cy, r, k, stroke = GOLD, width, opacity = 0.9, dash, paper } = props
   return (
     <>
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={INKHALO}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={paper ? PAPERHALO : INKHALO}
         strokeWidth={width + 1.8 / k} opacity={Math.min(0.55, opacity)} strokeDasharray={dash} />
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke={stroke}
+      <circle cx={cx} cy={cy} r={r} fill="none" stroke={paper && stroke === GOLD ? PAPER_GOLD : stroke}
         strokeWidth={width} opacity={opacity} strokeDasharray={dash} />
     </>
   )
@@ -303,14 +319,14 @@ function CasedCircle(props: {
 /** Same casing technique as CasedCircle, for straight axis/spoke lines. */
 function CasedLine(props: {
   x1: number; y1: number; x2: number; y2: number; k: number; stroke?: string; width: number
-  opacity?: number; dash?: string
+  opacity?: number; dash?: string; paper?: boolean
 }) {
-  const { x1, y1, x2, y2, k, stroke = GOLD, width, opacity = 0.7, dash } = props
+  const { x1, y1, x2, y2, k, stroke = GOLD, width, opacity = 0.7, dash, paper } = props
   return (
     <>
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={INKHALO}
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={paper ? PAPERHALO : INKHALO}
         strokeWidth={width + 1.8 / k} opacity={Math.min(0.55, opacity + 0.05)} strokeDasharray={dash} />
-      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={stroke}
+      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={paper && stroke === GOLD ? PAPER_GOLD : stroke}
         strokeWidth={width} opacity={opacity} strokeDasharray={dash} />
     </>
   )
@@ -379,6 +395,7 @@ function Outline(props: {
   wallColor?: string; wallWidthM?: number; wallOpacity?: number
   /** labels that outrank the wall lengths: the wheel's letters, markers and their captions */
   keepouts?: Keepout[]
+  paper?: boolean
 }) {
   const {
     pts, bulges, closed, k, metersPerPx, unit, showEdgeLabels, center, vr = 0,
@@ -446,8 +463,8 @@ function Outline(props: {
             taken.push(cap)
             return (
               <text key={i} {...at(p.x, p.y, rot, size)} fontSize={size} fontWeight={600} fontFamily={FONT}
-                fill="#F3E9CF" textAnchor="middle" dominantBaseline="central"
-                {...haloProps(3 / k)}>
+                fill={ink('#F3E9CF', props.paper)} textAnchor="middle" dominantBaseline="central"
+                {...haloProps(3 / k, props.paper)}>
                 {text}
               </text>
             )
@@ -475,8 +492,8 @@ interface ChakraProps {
   part?: 'body' | 'labels'
 }
 
-function DegreeTicks({ c, R, north, numbers, k, vr = 0, part = 'body' }: {
-  c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number; part?: 'body' | 'labels'
+function DegreeTicks({ c, R, north, numbers, k, vr = 0, part = 'body', paper }: {
+  c: Pt; R: number; north: number; numbers: boolean; k: number; vr?: number; part?: 'body' | 'labels'; paper?: boolean
 }) {
   if (part === 'labels') {
     if (!numbers) return null
@@ -485,7 +502,7 @@ function DegreeTicks({ c, R, north, numbers, k, vr = 0, part = 'body' }: {
     return (
       <g>
         {[45, 90, 135, 180, 225, 270, 315].map((d) => (
-          <RingLabel key={d} c={c} deg={north + d} r={R * 0.905} size={size}
+          <RingLabel key={d} paper={paper} c={c} deg={north + d} r={R * 0.905} size={size}
             text={`${d}°`} fill="#CBD2DF" weight={600} opacity={0.92} halo={size * 0.26} vr={vr} />
         ))}
       </g>
@@ -518,17 +535,17 @@ function DegreeTicks({ c, R, north, numbers, k, vr = 0, part = 'body' }: {
   return <g>{ticks}</g>
 }
 
-function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, part = 'body' }: ChakraProps) {
+function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, paper, part = 'body' }: ChakraProps) {
   if (part === 'labels') {
     return (
       <g>
-        {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={R * k > 300} k={k} vr={vr} part="labels" />}
+        {compass.degreeRing && <DegreeTicks paper={paper} c={c} R={R} north={north} numbers={R * k > 300} k={k} vr={vr} part="labels" />}
         {compass.labels && ZONES16.map((z, i) => {
           const size = zoneLabelSize(i, R, k)
           if (size == null) return null
           const cardinal = i % 4 === 0
           return (
-            <RingLabel key={z.key} c={c} deg={north + i * 22.5} r={R * 1.065}
+            <RingLabel key={z.key} paper={paper} c={c} deg={north + i * 22.5} r={R * 1.065}
               size={size}
               text={z.key} weight={cardinal ? 800 : 600}
               fill={i === 0 ? '#F26B57' : cardinal ? '#F5EBD3' : '#D8DCE6'}
@@ -577,9 +594,9 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, pa
           </Fragment>
         )
       })}
-      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
+      <CasedCircle paper={paper} cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
       <circle cx={c.x} cy={c.y} r={R * 1.001} fill="none" stroke="#FFF6DF" strokeWidth={0.5 / k} opacity={0.4} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
+      {compass.degreeRing && <DegreeTicks paper={paper} c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
       <NorthNeedle c={c} R={R} north={north} k={k} />
     </g>
   )
@@ -602,9 +619,9 @@ function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraPr
           const nameSize = Math.min(R * 0.033, (R * 0.16) / (g.devta.length * 0.58))
           return (
             <Fragment key={g.code}>
-              <RingLabel c={c} deg={mid} r={R * stagger} size={nameSize} text={g.devta}
+              <RingLabel paper={paper} c={c} deg={mid} r={R * stagger} size={nameSize} text={g.devta}
                 fill="#EFE7D2" weight={600} halo={R * 0.01} vr={vr} />
-              <RingLabel c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
+              <RingLabel paper={paper} c={c} deg={mid} r={R * 0.845} size={R * 0.027} text={g.code}
                 fill="#B8A26B" weight={700} spacing={R * 0.002} halo={R * 0.008} vr={vr} />
             </Fragment>
           )
@@ -612,12 +629,12 @@ function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraPr
         {nameFloorPx < 8 && R * k >= 150 && GATES32.map((g, i) => {
           const mid = north + GATE_START_DEG + (i + 0.5) * 11.25
           return (
-            <RingLabel key={g.code} c={c} deg={mid} r={R * 0.9} size={codeSize} text={g.code}
+            <RingLabel key={g.code} paper={paper} c={c} deg={mid} r={R * 0.9} size={codeSize} text={g.code}
               fill="#D9CCA6" weight={700} halo={codeSize * 0.26} vr={vr} />
           )
         })}
         {['N', 'E', 'S', 'W'].map((t, i) => (
-          <RingLabel key={t} c={c} deg={north + i * 90} r={R * 1.07}
+          <RingLabel key={t} paper={paper} c={c} deg={north + i * 90} r={R * 1.07}
             size={Math.min(Math.max(R * 0.055, 10 / k), R * 0.1)}
             text={t} weight={800} fill={i === 0 ? '#F26B57' : '#F5EBD3'} halo={R * 0.014} vr={vr} upright />
         ))}
@@ -651,16 +668,16 @@ function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraPr
       })}
       {[45, 135, 225, 315].map((d) => {
         const p = polar(c, north + d, R)
-        return <CasedLine key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k} width={1.2 / k} opacity={0.65} />
+        return <CasedLine paper={paper} key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k} width={1.2 / k} opacity={0.65} />
       })}
       {[0, 90, 180, 270].map((d) => {
         const p = polar(c, north + d, R)
-        return <CasedLine key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
+        return <CasedLine paper={paper} key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
           stroke="#F2E6C4" width={1.1 / k} opacity={0.5} dash={`${8 / k} ${6 / k}`} />
       })}
-      <CasedCircle cx={c.x} cy={c.y} r={R} k={k} width={1.7 / k} opacity={0.92} />
-      <CasedCircle cx={c.x} cy={c.y} r={r0} k={k} width={1 / k} opacity={0.55} />
-      {compass.degreeRing && <DegreeTicks c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
+      <CasedCircle paper={paper} cx={c.x} cy={c.y} r={R} k={k} width={1.7 / k} opacity={0.92} />
+      <CasedCircle paper={paper} cx={c.x} cy={c.y} r={r0} k={k} width={1 / k} opacity={0.55} />
+      {compass.degreeRing && <DegreeTicks paper={paper} c={c} R={R} north={north} numbers={false} k={k} vr={vr} />}
       <NorthNeedle c={c} R={R} north={north} k={k} />
     </g>
   )
@@ -703,9 +720,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
         const tx = x + cw / 2, ty = y + ch / 2
         cellNames.push(
           <text key={`n${row}-${col}`} {...at(tx, ty, upr, size)}
-            fontSize={size} fontFamily={FONT} fontWeight={600} fill="#EDE4CC"
+            fontSize={size} fontFamily={FONT} fontWeight={600} fill={ink('#EDE4CC', paper)}
             textAnchor="middle" dominantBaseline="central" opacity={0.92}
-            {...haloProps(size * 0.22)}>
+            {...haloProps(size * 0.22, paper)}>
             {name}
           </text>,
         )
@@ -721,9 +738,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
     const tx = minX + colC * cw, ty = minY + rowC * ch
     return (
       <text {...at(tx, ty, upr, size)} fontSize={size} fontFamily={FONT}
-        fontWeight={big ? 700 : 600} fill={big ? GOLD : '#C9BE9D'}
+        fontWeight={big ? 700 : 600} fill={ink(big ? GOLD : '#C9BE9D', paper)}
         textAnchor="middle" dominantBaseline="central" opacity={big ? 0.95 : 0.8}
-        {...haloProps(size * 0.2)}>
+        {...haloProps(size * 0.2, paper)}>
         {text}
       </text>
     )
@@ -753,9 +770,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
         )}
         {compass.labels && (
           <text {...at(nx, minY - ch * 0.35, upr, Math.min(cw, ch) * 0.42)} fontSize={Math.min(cw, ch) * 0.42}
-            fontFamily={FONT} fontWeight={800} fill="#F26B57" textAnchor="middle"
+            fontFamily={FONT} fontWeight={800} fill={ink('#F26B57', paper)} textAnchor="middle"
             dominantBaseline="central"
-            {...haloProps(Math.min(cw, ch) * 0.09)}>
+            {...haloProps(Math.min(cw, ch) * 0.09, paper)}>
             N
           </text>
         )}
@@ -767,21 +784,21 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
   for (let i = 0; i <= 9; i++) {
     const strong = i % 3 === 0
     lines.push(<line key={`v${i}`} x1={minX + i * cw} y1={minY} x2={minX + i * cw} y2={maxY}
-      stroke={GOLD} strokeWidth={(strong ? 1.5 : 0.7) / k} opacity={strong ? 0.8 : 0.45} />)
+      stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(strong ? 1.5 : 0.7) / k} opacity={strong ? 0.8 : 0.45} />)
     lines.push(<line key={`h${i}`} x1={minX} y1={minY + i * ch} x2={maxX} y2={minY + i * ch}
-      stroke={GOLD} strokeWidth={(strong ? 1.5 : 0.7) / k} opacity={strong ? 0.8 : 0.45} />)
+      stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(strong ? 1.5 : 0.7) / k} opacity={strong ? 0.8 : 0.45} />)
   }
 
   return (
     <g transform={`rotate(${north} ${c.x} ${c.y})`}>
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
-        fill="none" stroke={INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
+        fill="none" stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
-        fill="none" stroke={GOLD} strokeWidth={2 / k} opacity={0.9} />
+        fill="none" stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(paper ? 1.5 : 2) / k} opacity={0.9} />
       {cellRects}
       {lines}
-      <path d={needleD} fill="#F26B57" stroke={INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
-      <path d={needleD} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
+      <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke={paper ? PAPERHALO : INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
+      <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
     </g>
   )
 }
@@ -789,16 +806,12 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
 /** A marma is a place to keep clear, so its ink is the app's 'avoid' red. */
 const MARMA_INK = GATE_AVOID
 
-/** Marma sthan (src/marma.ts): the pada grid drawn quietly, the six vamshas across it and the
- *  nine atimarma where they cross, each at its own size, an eighth of a pada. */
-function Marma({ c, north, compass, k, vr, pts, closed, part = 'body' }: ChakraProps) {
-  const frame = useMemo(
-    () => (!closed || pts.length < 3 ? null : gridFrame(c, north, pts)),
-    [pts, closed, north, c.x, c.y],
-  )
-  if (!frame) return null
-  const { minX, minY, maxX, maxY } = frame
-  const cw = (maxX - minX) / 9, ch = (maxY - minY) / 9
+/** Marma sthan (src/marma.ts): the outer circle, a quiet pada grid sized from it, the six vamshas
+ *  across that and the nine atimarma where they cross, each at its own size, an eighth of a pada.
+ *  R is the wheel's radius with the Size dial applied, so all of it moves with that dial. */
+function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProps) {
+  const { minX, minY, maxX, maxY } = marmaFrame(c, R)
+  const cw = (maxX - minX) / 9, ch = cw
   const g = (u: number, v: number) => ({ x: minX + u * cw, y: minY + v * ch })
   // drawn inside rotate(north) like the Pada Grid, so its type is counter-rotated to stay upright
   const upr = -(north + vr)
@@ -824,7 +837,7 @@ function Marma({ c, north, compass, k, vr, pts, closed, part = 'body' }: ChakraP
             : { ...g(0, row + 0.5), x: minX - reach(w, turn) - pad }
       return (
         <text key={`${i}-${j}`} {...at(p.x, p.y, upr, size)} fontSize={size} fontFamily={FONT} fontWeight={600}
-          fill="#EDE4CC" textAnchor="middle" dominantBaseline="central" opacity={0.92} {...haloProps(size * 0.22)}>
+          fill={ink('#EDE4CC', paper)} textAnchor="middle" dominantBaseline="central" opacity={0.92} {...haloProps(size * 0.22, paper)}>
           {name}
         </text>
       )
@@ -834,7 +847,7 @@ function Marma({ c, north, compass, k, vr, pts, closed, part = 'body' }: ChakraP
       <g transform={`rotate(${north} ${c.x} ${c.y})`}>
         {names}
         <text {...at(nx, minY - ch * 0.35, upr, nSize)} fontSize={nSize} fontFamily={FONT} fontWeight={800}
-          fill="#F26B57" textAnchor="middle" dominantBaseline="central" {...haloProps(Math.min(cw, ch) * 0.09)}>
+          fill={ink('#F26B57', paper)} textAnchor="middle" dominantBaseline="central" {...haloProps(Math.min(cw, ch) * 0.09, paper)}>
           N
         </text>
       </g>
@@ -846,23 +859,24 @@ function Marma({ c, north, compass, k, vr, pts, closed, part = 'body' }: ChakraP
   for (let i = 0; i <= 9; i++) {
     const strong = i % 3 === 0
     lines.push(<line key={`v${i}`} x1={minX + i * cw} y1={minY} x2={minX + i * cw} y2={maxY}
-      stroke={GOLD} strokeWidth={(strong ? 1.1 : 0.6) / k} opacity={strong ? 0.5 : 0.28} />)
+      stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(strong ? 1.1 : 0.6) / k} opacity={strong ? 0.5 : 0.28} />)
     lines.push(<line key={`h${i}`} x1={minX} y1={minY + i * ch} x2={maxX} y2={minY + i * ch}
-      stroke={GOLD} strokeWidth={(strong ? 1.1 : 0.6) / k} opacity={strong ? 0.5 : 0.28} />)
+      stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(strong ? 1.1 : 0.6) / k} opacity={strong ? 0.5 : 0.28} />)
   }
   // at its true size, but never so small that it reads as a speck
   const r = Math.max(marmaRadius(cw, ch), 5 / k)
   return (
     <g transform={`rotate(${north} ${c.x} ${c.y})`}>
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
-        fill="none" stroke={INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
+        fill="none" stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
-        fill="none" stroke={GOLD} strokeWidth={2 / k} opacity={0.9} />
-      <rect x={minX + 3 * cw} y={minY + 3 * ch} width={3 * cw} height={3 * ch} fill={GOLD} fillOpacity={0.07} />
+        fill="none" stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(paper ? 1.5 : 2) / k} opacity={0.9} />
+      <rect x={minX + 3 * cw} y={minY + 3 * ch} width={3 * cw} height={3 * ch} fill={GOLD} fillOpacity={paper ? 0.1 : 0.07} />
       {lines}
+      <CasedCircle paper={paper} cx={c.x} cy={c.y} r={R} k={k} width={1.1 / k} opacity={0.7} />
       {VAMSHAS.map((l, i) => {
         const a = g(l.a[0], l.a[1]), b = g(l.b[0], l.b[1])
-        return <CasedLine key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} k={k} stroke={MARMA_INK}
+        return <CasedLine paper={paper} key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} k={k} stroke={MARMA_INK}
           width={(l.main ? 1.7 : 1.3) / k} opacity={0.85} />
       })}
       {ATIMARMA.map((m, i) => {
@@ -870,13 +884,13 @@ function Marma({ c, north, compass, k, vr, pts, closed, part = 'body' }: ChakraP
         return (
           <Fragment key={i}>
             <circle cx={p.x} cy={p.y} r={r} fill={MARMA_INK} fillOpacity={0.24} />
-            <CasedCircle cx={p.x} cy={p.y} r={r} k={k} stroke={MARMA_INK} width={1.5 / k} opacity={0.95} />
+            <CasedCircle paper={paper} cx={p.x} cy={p.y} r={r} k={k} stroke={MARMA_INK} width={1.5 / k} opacity={0.95} />
             <circle cx={p.x} cy={p.y} r={2.2 / k} fill={MARMA_INK} />
           </Fragment>
         )
       })}
-      <path d={needleD} fill="#F26B57" stroke={INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
-      <path d={needleD} fill="#F26B57" stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
+      <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke={paper ? PAPERHALO : INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
+      <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
     </g>
   )
 }
@@ -900,10 +914,11 @@ function CustomOverlay({ c, R, north, compass, part = 'body' }: ChakraProps) {
 
 /** Drawn room/area outlines — rect, ellipse, or polygon. Same MarkerKind vocabulary
  *  and colour as point markers, so a room and a pin of the same kind read as one system. */
-function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
+function RoomShapesLayer({ shapes, selected, k, vr, keepouts, paper }: {
   shapes: RoomShape[]; selected?: string | null; k: number; vr: number
   /** markers, captions and the centre's labels, which a tag must not sit on */
   keepouts?: Keepout[]
+  paper?: boolean
 }) {
   if (shapes.length === 0) return null
   const taken: Keepout[] = [...(keepouts ?? [])]
@@ -961,16 +976,16 @@ function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
         return (
           <g key={r.id}>
             {cloneElement(shapeEl, { fill: meta.color, fillOpacity: on ? 0.28 : 0.16 })}
-            {cloneElement(shapeEl, { fill: 'none', stroke: INKHALO, strokeWidth: (on ? 4.4 : 3) / k, opacity: 0.55 })}
+            {cloneElement(shapeEl, { fill: 'none', stroke: paper ? PAPERHALO : INKHALO, strokeWidth: (on ? 4.4 : 3) / k, opacity: 0.55 })}
             {cloneElement(shapeEl, {
               fill: 'none', stroke: meta.color, strokeWidth: (on ? 2.6 : 1.8) / k,
               strokeDasharray: on ? undefined : `${9 / k} ${5 / k}`, opacity: 0.95,
             })}
             {pick && <g transform={vr ? `rotate(${-vr} ${ax} ${ay})` : undefined}>
               <rect x={ax - tagW / 2} y={ay - tagH / 2} width={tagW} height={tagH} rx={4.5 / k}
-                fill={TAG_INK} fillOpacity={0.8} stroke={meta.color} strokeWidth={(on ? 1.6 : 1.1) / k} />
-              <text {...at(ax, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
-                fill="#F5EFDD" textAnchor="middle" dominantBaseline="central">
+                fill={paper ? TAG_PAPER : TAG_INK} fillOpacity={paper ? 0.96 : 0.8} stroke={meta.color} strokeWidth={(on ? 1.6 : 1.1) / k} />
+              <text {...at(ax, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={paper ? 650 : 700}
+                fill={paper ? TAG_PAPER_TEXT : '#F5EFDD'} textAnchor="middle" dominantBaseline="central">
                 {r.label}
               </text>
             </g>}
@@ -982,9 +997,9 @@ function RoomShapesLayer({ shapes, selected, k, vr, keepouts }: {
 }
 
 function MarkersLayer(props: {
-  markers: Marker[]; k: number; vr: number; center: Pt | null; north: number; R: number
+  markers: Marker[]; k: number; vr: number; center: Pt | null; north: number; R: number; paper?: boolean
 }) {
-  const { markers, k, vr, center, north, R } = props
+  const { markers, k, vr, center, north, R, paper } = props
   if (markers.length === 0) return null
   return (
     <g>
@@ -1007,12 +1022,12 @@ function MarkersLayer(props: {
                     fill={qColor} fillOpacity={0.16} />
                   {/* a radial tie: centre through the marker (they're collinear by construction) to the rim */}
                   <line x1={center.x} y1={center.y} x2={rim.x} y2={rim.y}
-                    stroke={INKHALO} strokeWidth={3 / k} opacity={0.4} strokeDasharray={`${7 / k} ${6 / k}`} />
+                    stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3 / k} opacity={0.4} strokeDasharray={`${7 / k} ${6 / k}`} />
                   <line x1={center.x} y1={center.y} x2={rim.x} y2={rim.y}
-                    stroke="#F26B57" strokeWidth={1.3 / k} opacity={0.65} strokeDasharray={`${7 / k} ${6 / k}`} />
+                    stroke={paper ? '#C43B28' : '#F26B57'} strokeWidth={1.3 / k} opacity={paper ? 0.8 : 0.65} strokeDasharray={`${7 / k} ${6 / k}`} />
                   <circle cx={rim.x} cy={rim.y} r={3.2 / k} fill={qColor} stroke={INKHALO} strokeWidth={1.4 / k} />
                   {R * k > 100 && (
-                    <RingLabel c={center} deg={north + pl.bearing} r={R + 14 / k} size={9.5 / k}
+                    <RingLabel paper={paper} c={center} deg={north + pl.bearing} r={R + 14 / k} size={9.5 / k}
                       text={pl.pada.code} fill={qColor} weight={800} halo={2.6 / k} vr={vr} />
                   )}
                 </Fragment>
@@ -1029,8 +1044,8 @@ function MarkersLayer(props: {
               {meta.glyph}
             </text>
             <text {...at(m.p.x, m.p.y + 20 / k, -vr, 9.5 / k)} fontSize={9.5 / k} fontFamily={FONT} fontWeight={650}
-              fill="#F0EBDD" textAnchor="middle"
-              {...haloProps(2.8 / k)}>
+              fill={ink('#F0EBDD', paper)} textAnchor="middle"
+              {...haloProps(2.8 / k, paper)}>
               {m.label}
             </text>
           </g>
@@ -1049,8 +1064,9 @@ function CenterMarker(props: {
   areaText: string | null; overridden: boolean; vr?: number; north: number
   /** markers and their captions: the Brahmasthan label steps below its circle to clear them */
   avoid?: Pt[]
+  paper?: boolean
 }) {
-  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0 } = props
+  const { c, brahmaR, k, brahmasthan, closed, areaText, overridden, vr = 0, paper } = props
   const bY = brahmaLabelY(c, brahmaR, k, props.avoid ?? [])
   return (
     <g>
@@ -1059,32 +1075,32 @@ function CenterMarker(props: {
           {/* the Brahmasthan circle — a quarter of the compass's own radius, per
               analysis.ts's brahmasthanRadius */}
           <circle cx={c.x} cy={c.y} r={brahmaR}
-            fill={GOLD} fillOpacity={0.055} stroke="none" />
+            fill={GOLD} fillOpacity={paper ? 0.1 : 0.055} stroke="none" />
           <circle cx={c.x} cy={c.y} r={brahmaR}
-            fill="none" stroke={INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
+            fill="none" stroke={paper ? PAPERHALO : INKHALO} strokeWidth={2.6 / k} opacity={0.5} />
           <circle cx={c.x} cy={c.y} r={brahmaR}
-            fill="none" stroke={GOLD} strokeWidth={1.1 / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={0.85} />
+            fill="none" stroke={paper ? PAPER_GOLD : GOLD} strokeWidth={(paper ? 1.3 : 1.1) / k} strokeDasharray={`${7 / k} ${5 / k}`} opacity={paper ? 1 : 0.85} />
           {brahmaR * k >= BRAHMA_LABEL_MIN_PX && <text {...at(c.x, bY, -vr, 10.5 / k)} fontSize={10.5 / k} fontFamily={FONT}
-            fontWeight={600} fill="#D8C989" textAnchor="middle" opacity={0.9}
-            {...haloProps(2.8 / k)}>
+            fontWeight={600} fill={ink('#D8C989', paper)} textAnchor="middle" opacity={0.9}
+            {...haloProps(2.8 / k, paper)}>
             Brahmasthan
           </text>}
         </g>
       )}
       <line x1={c.x - 15 / k} y1={c.y} x2={c.x + 15 / k} y2={c.y}
-        stroke={INKHALO} strokeWidth={3.4 / k} opacity={0.7} />
+        stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.4 / k} opacity={0.7} />
       <line x1={c.x} y1={c.y - 15 / k} x2={c.x} y2={c.y + 15 / k}
-        stroke={INKHALO} strokeWidth={3.4 / k} opacity={0.7} />
+        stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.4 / k} opacity={0.7} />
       <line x1={c.x - 15 / k} y1={c.y} x2={c.x + 15 / k} y2={c.y}
-        stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.95} />
+        stroke={paper ? TAG_PAPER_TEXT : '#F5EBD3'} strokeWidth={1.2 / k} opacity={0.95} />
       <line x1={c.x} y1={c.y - 15 / k} x2={c.x} y2={c.y + 15 / k}
-        stroke="#F5EBD3" strokeWidth={1.2 / k} opacity={0.95} />
-      <circle cx={c.x} cy={c.y} r={4.2 / k} fill={overridden ? '#F2A65A' : GOLD}
+        stroke={paper ? TAG_PAPER_TEXT : '#F5EBD3'} strokeWidth={1.2 / k} opacity={0.95} />
+      <circle cx={c.x} cy={c.y} r={4.2 / k} fill={overridden ? '#F2A65A' : paper ? PAPER_GOLD : GOLD}
         stroke="#FFFDF4" strokeWidth={1.4 / k} />
       {overridden && (
         <text {...at(c.x, c.y + 16 / k, -vr, 9.5 / k)} fontSize={9.5 / k} fontFamily={FONT} fontWeight={700}
-          fill="#F2A65A" textAnchor="middle"
-          {...haloProps(2.6 / k)}>
+          fill={ink('#F2A65A', paper)} textAnchor="middle"
+          {...haloProps(2.6 / k, paper)}>
           centre pinned
         </text>
       )}
@@ -1096,9 +1112,11 @@ function CenterMarker(props: {
         const ay = c.y + 28 / k
         return (
           <g transform={vr ? `rotate(${-vr} ${c.x} ${ay})` : undefined}>
-            <rect x={c.x - w / 2} y={ay - h / 2} width={w} height={h} rx={5 / k} fill={TAG_INK} fillOpacity={0.72} />
-            <text {...at(c.x, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={700}
-              fill="#F3E9CF" textAnchor="middle" dominantBaseline="central">
+            <rect x={c.x - w / 2} y={ay - h / 2} width={w} height={h} rx={5 / k}
+              fill={paper ? TAG_PAPER : TAG_INK} fillOpacity={paper ? 0.96 : 0.72}
+              stroke={paper ? 'rgba(27,27,29,0.28)' : 'none'} strokeWidth={1 / k} />
+            <text {...at(c.x, ay, 0, size)} fontSize={size} fontFamily={FONT} fontWeight={paper ? 650 : 700}
+              fill={paper ? TAG_PAPER_TEXT : '#F3E9CF'} textAnchor="middle" dominantBaseline="central">
               {areaText}
             </text>
           </g>
@@ -1239,7 +1257,7 @@ export function Scene(props: SceneProps) {
       <g id={`${idPrefix}-outline`}><Outline pts={pts} bulges={bulges} closed={closed} k={k} metersPerPx={metersPerPx} unit={unit}
         showEdgeLabels={showEdgeLabels} center={center} vr={vr}
         wallColor={props.wallColor} wallWidthM={props.wallWidthM} wallOpacity={props.wallOpacity}
-        keepouts={keepouts} /></g>
+        keepouts={keepouts} paper={props.paper} /></g>
       {/* the wheel's lettering, above the walls that used to cut it */}
       <g key={`${drawn?.compass.id ?? compass.id}-labels`} className="compass-enter" opacity={(drawn?.compass ?? compass).opacity}
         display={props.compassHidden ? 'none' : undefined}>
@@ -1249,15 +1267,15 @@ export function Scene(props: SceneProps) {
         {drawn && drawn.compass.id === 'marma' && <MarmaLayer {...drawn} part="labels" />}
       </g>
       <StrokesLayer strokes={props.strokes ?? []} />
-      <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} />
-      <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} keepouts={tagKeepouts} />
-      <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} />
+      <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} paper={props.paper} />
+      <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} keepouts={tagKeepouts} paper={props.paper} />
+      <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} paper={props.paper} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}
           brahmaR={brahmaR}
           k={k} brahmasthan={compass.brahmasthan}
           closed={closed} areaText={areaText} overridden={props.centerOverridden ?? false} vr={vr} north={northDeg}
-          avoid={avoid} />
+          avoid={avoid} paper={props.paper} />
       )}
     </g>
   )

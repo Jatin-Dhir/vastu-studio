@@ -1,84 +1,135 @@
 /* Appearance: theme (Ink/Paper) and accent overrides for the UI chrome — panels,
    sheets, dialogs, text. Every rule here just redefines the :root custom
    properties index.css already uses everywhere, so nothing else needs to change.
-   The canvas/compass drawing itself (src/canvas/Scene.tsx) stays ink-dark: it's a
-   pure SVG component also used to rasterise the PNG export, so its colours are
-   plain hex constants, not CSS variables — a light "paper" plan render is a
-   separate, larger piece of work, not a CSS toggle. */
+   The canvas/compass drawing itself (src/canvas/Scene.tsx) is a pure SVG component also used
+   to rasterise the PNG export, so its colours are plain hex constants switched by its `paper`
+   prop, not CSS variables. */
 
 :root[data-theme='paper'] {
   color-scheme: light;
-  --bg: #F3F1EA;
-  --bg-2: #ECE8DE;
-  --panel: rgba(255, 253, 248, 0.86);
-  --panel-solid: #FFFDF8;
-  --panel-raised: #FFFDF8;
-  --bar-bg: linear-gradient(180deg, rgba(255, 253, 248, 0.92), rgba(243, 241, 234, 0.88));
-  --sheet: rgba(255, 253, 248, 0.97);
-  --sheet-2: #F3F1EA;
-  --stroke: rgba(24, 22, 14, 0.09);
-  --stroke-2: rgba(24, 22, 14, 0.16);
-  --fill-1: rgba(24, 22, 14, 0.08);
-  --fill-2: rgba(24, 22, 14, 0.16);
-  --tick: rgba(24, 22, 14, 0.45);
-  --knob: #6E6C5D;
-  --text: #26251E;
-  --muted: #6E6C5D;
-  /* text roles measured on the paper panel (#FDFBF6) and page (#F3F1EA): every one holds
-     4.5:1 — dim 5.4, ok 5.8, warn 5.7, danger text 6.5. Same hues, lower lightness; the
-     old values read 3.3–4.6 (ok and warn badges near 3.2) */
-  --dim: #6A6856;
+  /* a white sheet on a pale table, near-black ink, hairlines: the same materials as the website.
+     The only colour on the screen is the plan's own zones. */
+  --bg: #F3F3F0;
+  --bg-2: #EBEBE7;
+  --panel: #FFFFFF;
+  --panel-solid: #FFFFFF;
+  --panel-solid-rgb: 255 255 255;
+  --panel-raised: #FFFFFF;
+  --bar-bg: #FFFFFF;
+  --sheet: #FFFFFF;
+  --sheet-2: #F3F3F0;
+  --stroke: rgba(27, 27, 29, 0.11);
+  --stroke-2: rgba(27, 27, 29, 0.2);
+  --fill-1: rgba(27, 27, 29, 0.055);
+  --fill-2: rgba(27, 27, 29, 0.14);
+  --tick: rgba(27, 27, 29, 0.42);
+  --knob: #6B6B70;
+  --knob-on: #FFFFFF;
+  --text: #1B1B1D;
+  --muted: #48484C;
+  /* measured on white and on the table: dim 5.2 and 4.7, ok 6.1, warn 5.9, danger text 6.6 */
+  --dim: #6B6B70;
   --teal: #2E7E84;
   --danger: #C23B2E;
   --danger-fg: #A8301F;
-  --scroll-shade: rgba(60, 48, 24, 0.16);
+  --scroll-shade: rgba(27, 27, 29, 0.14);
   --warn: #8A5A0E;
-  --ok: #2E7040;
-  /* light ground needs whisper-weight elevation — heavy dark blur reads as grime on paper */
-  --shadow: 0 2px 6px rgba(24, 22, 14, 0.08), 0 12px 30px rgba(24, 22, 14, 0.1);
-  --shadow-up: 0 -6px 22px rgba(24, 22, 14, 0.12);
-  --shadow-pop: 0 14px 40px rgba(24, 22, 14, 0.18);
-  /* on Ink, control chrome lifts off the dark ground as a translucent white tint —
-     the same tint on Paper is nearly invisible against an already-light page, so
-     ghost buttons/toggles/hints/rows/cards/badges read as real white surfaces here
-     instead. surface-1 and surface-2 collapse to the same white on Paper (the Ink
-     opacity tiers don't matter once it's opaque) — where a resting surface and its
-     own :hover state would otherwise both be that same flat white, the box-shadow
-     rule below gives the hover its lift instead. */
+  --ok: #2A7043;
+  --mark: #1E3A66;
+  --scrim: rgba(27, 27, 29, 0.32);
+  --scrim-blur: 0px;
+  --report-bg: #E8E8E4;
+  --radius: 12px;
+  /* floating things only; docked columns have hairlines instead */
+  --shadow: 0 1px 2px rgba(27, 27, 29, 0.06), 0 6px 20px rgba(27, 27, 29, 0.09);
+  --shadow-up: 0 -6px 22px rgba(27, 27, 29, 0.1);
+  --shadow-pop: 0 2px 6px rgba(27, 27, 29, 0.06), 0 18px 48px rgba(27, 27, 29, 0.14);
+  /* control chrome: white resting, a real tint on hover (white-on-white has no hover otherwise) */
   --surface-1: #FFFFFF;
-  --surface-1-hover: #FFFFFF;
+  --surface-1-hover: rgba(27, 27, 29, 0.05);
   --surface-2: #FFFFFF;
-  --surface-2-hover: #FFFFFF;
-  --thumb-ring: #FFFDF8;
+  --surface-2-hover: rgba(27, 27, 29, 0.05);
+  --thumb-ring: #FFFFFF;
+  --thumb-bg: #FFFFFF;
+  --thumb-bd: #1B1B1D;
+  --track-fill: #1B1B1D;
+  /* a control's own edge holds 3:1 against the white it sits on */
+  --track: rgba(27, 27, 29, 0.47);
+  --primary-bg: #1B1B1D;
+  --primary-bg-hover: #000000;
+  --primary-shadow: none;
+  --h-font: var(--font);
+  --h-size: 13px;
+  --h-weight: 650;
+  --h-color: #1B1B1D;
+  --h-track: 0;
+  --display: var(--font);
+  --display-weight: 700;
+  --display-track: -0.02em;
+  --login-h: 23px;
+  --m-h1: 24px;
+  --m-h2: 16px;
+  --m-h3: 17px;
 }
 
-/* white-on-white needs its lift from elevation, not fill contrast */
-:root[data-theme='paper'] .btn-ghost:hover:not(:disabled),
-:root[data-theme='paper'] .toggle:hover,
-:root[data-theme='paper'] .icon-btn:hover:not(:disabled),
-:root[data-theme='paper'] .compass-card:hover,
-:root[data-theme='paper'] .chip:hover,
-:root[data-theme='paper'] .finding-row:hover {
-  box-shadow: 0 1px 5px rgba(24, 22, 14, 0.14);
+/* the armed tool is unmistakable: one solid square in the rail */
+:root[data-theme='paper'] .rail-btn.on { background: var(--gold); color: var(--gold-ink); box-shadow: none; }
+:root[data-theme='paper'] .rail-btn:not(.on):hover { background: var(--fill-1); }
+/* small labels in sentence case: the ink carries the hierarchy, not capitals */
+:root[data-theme='paper'] .subhead,
+:root[data-theme='paper'] .appearance-label,
+:root[data-theme='paper'] .zone-card-sec,
+:root[data-theme='paper'] .kind-head,
+:root[data-theme='paper'] .entrance-title {
+  font-size: 12.5px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--text);
 }
+:root[data-theme='paper'] .asheet-head {
+  padding-inline: 10px;
+  font-size: 16px; font-weight: 650; letter-spacing: 0; text-transform: none; color: var(--text);
+}
+:root[data-theme='paper'] .vbadge {
+  min-width: 56px; text-align: center;
+  font-size: 11px; font-weight: 650; letter-spacing: 0; text-transform: capitalize;
+}
+:root[data-theme='paper'] .proj-foot .zone-note { font-size: 12px; color: var(--muted); }
+
+/* on and off read at a glance: off is an outline, on is solid; fields and the unit switch hold their edge */
+:root[data-theme='paper'] .toggle:not(.on) .knob { background: none; box-shadow: inset 0 0 0 1.5px var(--dim); }
+:root[data-theme='paper'] .seg button.on { box-shadow: inset 0 0 0 1px var(--gold); }
+:root[data-theme='paper'] :is(.num-wrap, .login-field, .marker-note, .map-search, .kind-search, .cal-row input[type='number'], .cal-row input[type='text']) { border-color: var(--track); }
+:root[data-theme='paper'] ::-webkit-scrollbar-thumb { background-color: rgba(27, 27, 29, 0.3); }
+
+/* one filled action on a screen: the guide's next step or a dialog's own. Export stays one click
+   away without competing with it */
+:root[data-theme='paper'] .topbar .btn-primary {
+  background: var(--surface-1); color: var(--text);
+  box-shadow: inset 0 0 0 1px var(--stroke-2);
+}
+:root[data-theme='paper'] .topbar .btn-primary:hover:not(:disabled) { background: var(--surface-1-hover); }
+
+/* what is not available yet stays readable; the steps ahead say what is coming */
+:root[data-theme='paper'] .step:disabled { opacity: 1; }
+:root[data-theme='paper'] .icon-btn:disabled,
+:root[data-theme='paper'] .rail-btn:disabled { opacity: 1; color: var(--tick); }
+:root[data-theme='paper'] .btn-primary:disabled { opacity: 1; background: var(--fill-1); color: var(--dim); box-shadow: none; }
 
 :root[data-theme='paper'] .stage-wrap {
   background:
-    radial-gradient(1200px 700px at 55% 42%, rgba(169,120,46,0.05), transparent 60%),
-    radial-gradient(circle at 0 0, rgba(20,18,10,0.05) 1px, transparent 1.4px),
+    radial-gradient(circle at 0 0, rgba(27, 27, 29, 0.055) 1px, transparent 1.4px),
     var(--bg);
-  background-size: auto, 26px 26px, auto;
+  background-size: 24px 24px, auto;
 }
 
 /* accents — every mode gets its own gold-role triad, tuned for contrast on both grounds */
 :root[data-accent='gold'] { --gold: #D9B45B; --gold-2: #E8C56B; --gold-soft: rgba(217,180,91,0.14); }
-:root[data-theme='paper'][data-accent='gold'] { --gold: #A9782E; --gold-2: #8F631F; --gold-soft: rgba(169,120,46,0.14); --gold-ink: #FFFDF8; --gold-text: #8F631F; --gold-solid: #9A6B25; }
+/* Paper's own default accent is the studio's navy, the colour of its logo */
+:root[data-theme='paper'][data-accent='gold'] { --gold: #1E3A66; --gold-2: #1E3A66; --gold-soft: rgba(30,58,102,0.10); --gold-ink: #FFFFFF; --gold-text: #172E52; --gold-solid: #1E3A66; --primary-bg: #1E3A66; --primary-bg-hover: #172E52; --track-fill: #1E3A66; --thumb-bd: #1E3A66; }
 
 :root[data-accent='teal'] { --gold: #5FB8C9; --gold-2: #7ECBDA; --gold-soft: rgba(95,184,201,0.14); }
-:root[data-theme='paper'][data-accent='teal'] { --gold: #1F7A8C; --gold-2: #166370; --gold-soft: rgba(31,122,140,0.14); --gold-ink: #FFFDF8; --gold-text: #166370; }
+:root[data-theme='paper'][data-accent='teal'] { --primary-bg: #166370; --primary-bg-hover: #166370; --track-fill: #166370; --thumb-bd: #166370; --h-color: #1B1B1D; --gold: #1F7A8C; --gold-2: #166370; --gold-soft: rgba(31,122,140,0.14); --gold-ink: #FFFDF8; --gold-text: #166370; }
 
 :root[data-accent='rose'] { --gold: #D98BA0; --gold-2: #E8A3B5; --gold-soft: rgba(217,139,160,0.14); }
-:root[data-theme='paper'][data-accent='rose'] { --gold: #B0506B; --gold-2: #954059; --gold-soft: rgba(176,80,107,0.14); --gold-ink: #FFFDF8; --gold-text: #954059; }
+:root[data-theme='paper'][data-accent='rose'] { --primary-bg: #954059; --primary-bg-hover: #954059; --track-fill: #954059; --thumb-bd: #954059; --h-color: #1B1B1D; --gold: #B0506B; --gold-2: #954059; --gold-soft: rgba(176,80,107,0.14); --gold-ink: #FFFDF8; --gold-text: #954059; }
 
 :root[data-accent='sage'] { --gold: #93B587; --gold-2: #A9C89E; --gold-soft: rgba(147,181,135,0.14); }
-:root[data-theme='paper'][data-accent='sage'] { --gold: #5C7D50; --gold-2: #4C6942; --gold-soft: rgba(92,125,80,0.14); --gold-ink: #FFFDF8; --gold-text: #4C6942; }
+:root[data-theme='paper'][data-accent='sage'] { --primary-bg: #4C6942; --primary-bg-hover: #4C6942; --track-fill: #4C6942; --thumb-bd: #4C6942; --h-color: #1B1B1D; --gold: #5C7D50; --gold-2: #4C6942; --gold-soft: rgba(92,125,80,0.14); --gold-ink: #FFFDF8; --gold-text: #4C6942; }

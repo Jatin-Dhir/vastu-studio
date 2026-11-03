@@ -12,6 +12,7 @@ import { evaluateVastu } from '../evaluate'
 import { centroid, sampledPolygon } from '../geometry'
 import { analysisAllowed } from '../auth/gate'
 import { COMPASS_META } from '../vastu'
+import { CentredDial } from '../ui/CentredDial'
 import { formatArea } from '../format'
 import { polygonArea } from '../geometry'
 import { haptic } from '../native'
@@ -253,12 +254,13 @@ function AnalysisBody() {
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
   const brahmaPct = useStore((s) => s.compass.brahmaPct)
+  const scalePct = useStore((s) => s.compass.scalePct)
   const ok = analysisAllowed(useStore((s) => s.auth), useStore((s) => s.chartsReady))
   const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
   const center = useMemo(() => (closed && pts.length >= 3 ? centerOverride ?? centroid(sampled) : null), [closed, pts.length, centerOverride, sampled])
   if (!closed || !center) return <p className="m-dialog-text">Close the outline first — the zones are drawn from the boundary.</p>
   if (!ok) return <p className="m-dialog-text">The reading needs your account's charts. Sign in on the Account tab.</p>
-  const ev = evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct })
+  const ev = evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct, scalePct })
   return (
     <div className="m-analysis">
       {markers.length + roomShapes.length === 0
@@ -278,6 +280,15 @@ function AnalysisBody() {
   )
 }
 
+/** The compass's switches, each only where it does something. */
+const COMPASS_TOGGLES: { key: 'labels' | 'clip' | 'brahmasthan' | 'degreeRing' | 'devtas'; label: string; only?: CompassId[] }[] = [
+  { key: 'labels', label: 'Labels' },
+  { key: 'clip', label: 'Clip to plot', only: ['zones16'] },
+  { key: 'degreeRing', label: 'Degrees', only: ['zones16', 'gates32'] },
+  { key: 'devtas', label: 'Devtas', only: ['grid9'] },
+  { key: 'brahmasthan', label: 'Brahmasthan' },
+]
+
 /** Compass overlay settings, the few that matter on a phone. */
 function CompassBody() {
   const compass = useStore((s) => s.compass)
@@ -292,15 +303,24 @@ function CompassBody() {
           </button>
         ))}
       </div>
-      <label className="m-range"><span>Size <b>{compass.scalePct}%</b></span>
-        <input type="range" min={40} max={400} step={5} value={compass.scalePct} onChange={(e) => setCompass({ scalePct: Number(e.target.value) })} /></label>
-      <label className="m-range"><span>Zone fill <b>{compass.fillPct}%</b></span>
-        <input type="range" min={0} max={100} step={2} value={compass.fillPct} onChange={(e) => setCompass({ fillPct: Number(e.target.value) })} /></label>
+      {compass.id !== 'grid9' && (
+        <CentredDial label="Size" value={compass.scalePct} ratio={4} onChange={(v) => setCompass({ scalePct: v })} />
+      )}
+      {compass.id === 'zones16' && (
+        <label className="m-range"><span>Zone fill <b>{compass.fillPct}%</b></span>
+          <input type="range" min={0} max={70} step={2} value={compass.fillPct} style={{ '--b': `${(compass.fillPct / 70) * 100}%` } as React.CSSProperties}
+            onChange={(e) => setCompass({ fillPct: Number(e.target.value) })} /></label>
+      )}
       <div className="m-toggles">
-        {([['labels', 'Labels'], ['clip', 'Clip to plot'], ['brahmasthan', 'Brahmasthan'], ['degreeRing', 'Degrees'], ['devtas', 'Devtas']] as const).map(([k, label]) => (
-          <button key={k} className={`m-toggle ${compass[k] ? 'on' : ''}`} aria-pressed={compass[k]} onClick={() => setCompass({ [k]: !compass[k] })}>{label}</button>
+        {COMPASS_TOGGLES.filter((t) => !t.only || t.only.includes(compass.id)).map(({ key, label }) => (
+          <button key={key} className={`m-toggle ${compass[key] ? 'on' : ''}`} aria-pressed={compass[key]} onClick={() => setCompass({ [key]: !compass[key] })}>{label}</button>
         ))}
       </div>
+      {compass.brahmasthan && (
+        <CentredDial label="Brahmasthan size" value={compass.brahmaPct} ratio={2}
+          fmt={(v) => (v === 100 ? 'From the drawing' : `${Math.round(v)}%`)}
+          onChange={(v) => setCompass({ brahmaPct: v })} />
+      )}
     </div>
   )
 }

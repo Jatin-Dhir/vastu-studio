@@ -204,9 +204,9 @@ export function ReportView() {
   )
   const chartsV = useChartsVersion()
   const ev = useMemo(
-    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct }) : null),
+    () => (closed && center ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct, scalePct: compass.scalePct }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [closed, center, sampled, northDeg, markers, roomShapes, metersPerPx, unit, compass.brahmaPct, chartsV],
+    [closed, center, sampled, northDeg, markers, roomShapes, metersPerPx, unit, compass.brahmaPct, compass.scalePct, chartsV],
   )
   const fmtDistance = (px: number) => (metersPerPx ? formatLen(px * metersPerPx, unit) : null)
   const sevCounts = useMemo<Record<Severity, number>>(() => {
@@ -227,7 +227,7 @@ export function ReportView() {
         warn > 0 ? `${plural(warn, 'point')} of caution` : null,
         good > 0 ? plural(good, 'favourable point') : null,
       ].filter(Boolean).join(' and ')
-      return `${plural(bad, 'finding')} flagged to address${extras ? `, plus ${extras} noted` : ''}.`
+      return `${plural(bad, 'finding')} flagged to address${extras ? `, plus ${extras}` : ''}.`
     }
     if (warn > 0) return `No serious doshas flagged — ${plural(warn, 'point')} of caution noted${good > 0 ? ` alongside ${plural(good, 'favourable point')}` : ''}.`
     if (good > 0) return `A favourable layout overall — ${plural(good, 'favourable point')} noted, nothing flagged for concern.`
@@ -437,8 +437,8 @@ export function ReportView() {
           </div>
           <svg width="44" height="44" viewBox="0 0 32 32" aria-hidden>
             <rect x="8.2" y="8.2" width="15.6" height="15.6" rx="1.5" transform="rotate(45 16 16)"
-              fill="none" stroke="#B8963E" strokeWidth="2" />
-            <circle cx="16" cy="16" r="2.6" fill="#B8963E" />
+              fill="none" stroke="#1E3A66" strokeWidth="2" />
+            <circle cx="16" cy="16" r="2.6" fill="#1E3A66" />
           </svg>
         </div>
 

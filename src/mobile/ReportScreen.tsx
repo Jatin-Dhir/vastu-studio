@@ -21,6 +21,7 @@ export function ReportScreen() {
   const metersPerPx = useStore((s) => s.metersPerPx)
   const unit = useStore((s) => s.unit)
   const brahmaPct = useStore((s) => s.compass.brahmaPct)
+  const scalePct = useStore((s) => s.compass.scalePct)
   const projectName = useStore((s) => s.projectName)
   const setTab = useStore((s) => s.setMobileTab)
   const ok = analysisAllowed(useStore((s) => s.auth), useStore((s) => s.chartsReady))
@@ -28,9 +29,9 @@ export function ReportScreen() {
   const sampled = useMemo(() => sampledPolygon(pts, bulges, closed), [pts, bulges, closed])
   const center = useMemo(() => (closed && pts.length >= 3 ? centerOverride ?? centroid(sampled) : null), [closed, pts.length, centerOverride, sampled])
   const ev = useMemo(
-    () => (center && ok ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct }) : null),
+    () => (center && ok ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct, scalePct }) : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [center, ok, sampled, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct, chartsV],
+    [center, ok, sampled, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct, scalePct, chartsV],
   )
 
   if (!closed || !center) {

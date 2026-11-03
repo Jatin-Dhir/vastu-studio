@@ -1,4 +1,4 @@
-// Generates PWA icons (PNG, no deps) — dark rounded square, gold diamond, centre dot.
+// Generates PWA icons (PNG, no deps) — navy rounded square, white diamond, centre dot.
 import { deflateSync } from 'node:zlib'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -49,7 +49,7 @@ function encodePng(w, h, rgba) {
     into the 80% safe zone, per the maskable-icon spec. */
 function renderIcon(size, maskable = false) {
   const img = Buffer.alloc(size * size * 4)
-  const bg = [11, 12, 16], gold = [217, 180, 91], cream = [243, 229, 192]
+  const bg = [30, 58, 102], mark = [255, 255, 255]
   const put = (i, c, a) => {
     const A = a, IA = 1 - a
     img[i] = Math.round(img[i] * IA + c[0] * A)
@@ -76,13 +76,13 @@ function renderIcon(size, maskable = false) {
       const m = Math.abs(x - S / 2) + Math.abs(y - S / 2)
       const rOuter = S * 0.34 * g, band = S * 0.028 * g
       const dBand = Math.abs(m - rOuter) - band
-      put(i, gold, smooth(dBand) * aBg)
+      put(i, mark, smooth(dBand) * aBg)
       // inner diamond, faint
       const dBand2 = Math.abs(m - S * 0.21 * g) - S * 0.012 * g
-      put(i, [140, 118, 66], smooth(dBand2) * aBg)
+      put(i, [86, 112, 156], smooth(dBand2) * aBg)
       // centre dot
       const dDot = Math.hypot(x - S / 2, y - S / 2) - S * 0.055 * g
-      put(i, cream, smooth(dDot) * aBg)
+      put(i, mark, smooth(dDot) * aBg)
     }
   }
   return encodePng(S, S, img)

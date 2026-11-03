@@ -12,6 +12,7 @@ import { requestFit } from '../canvas/fit'
 import { importMapsScreenshot } from '../importFile'
 import { prepareForNewContent } from '../importers/project'
 import { M_PER_FT } from '../format'
+import { press } from '../platform'
 
 const SAT = {
   url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
@@ -716,7 +717,7 @@ export function MapModal() {
           </button>
           <span className="lbl dim">Scale &amp; north are set automatically from the capture.</span>
           <button className="btn-ghost" onClick={() => shotRef.current?.click()}
-            title="Screenshot your plot in Google/Apple Maps, keep it north-up and include the scale bar, then tap the two ends of the scale bar and type the printed distance">
+            title={`Screenshot your plot in Google/Apple Maps, keep it north-up and include the scale bar, then ${press} the two ends of the scale bar and type the printed distance`}>
             <ImagePlus size={15} /> Import screenshot
           </button>
           <button className={`btn-primary${!capturing && !sh.good ? ' muted' : ''}`} onClick={() => attemptCapture()} disabled={capturing}>
@@ -732,7 +733,7 @@ export function MapModal() {
           Prefer Google-quality imagery? Screenshot your plot in Google/Apple Maps (keep it north-up,
           include the scale bar), then
           <button className="linkish" onClick={() => shotRef.current?.click()}> import the screenshot</button> —
-          tap the two ends of its scale bar and type the printed distance.
+          {press} the two ends of its scale bar and type the printed distance.
           <input ref={shotRef} type="file" accept="image/*" hidden
             onChange={(e) => {
               const f = e.target.files?.[0]

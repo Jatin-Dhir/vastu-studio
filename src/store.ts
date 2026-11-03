@@ -5,6 +5,7 @@ import type { BgState, CompassState, Marker, MarkerKind, NorthSource, Pt, Projec
 import type { DetectedRoom } from './roomDetect'
 import { markerKindMeta } from './vastu'
 import { uid } from './uid'
+import { press } from './platform'
 
 /** Every coordinate that enters the store must be a real number: one NaN point (a zero-
  *  distance pinch once made them) crashes the placement lookups and autosaves itself. */
@@ -304,7 +305,7 @@ export const useStore = create<VastuStore>()((set, get) => {
   // a locked plan refuses every structural edit, whichever control asked for it
   const lockedNow = () => {
     if (!get().locked) return false
-    get().toast('Plan is locked — tap the padlock to edit', 'warn')
+    get().toast(`Plan is locked — ${press} the padlock to edit`, 'warn')
     return true
   }
 
@@ -519,7 +520,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     // entering a pick-two-points tool always starts a fresh pair
     setTool: (tool) => {
       if (get().locked && tool !== 'select') {
-        get().toast('Plan is locked — tap the padlock to edit', 'warn')
+        get().toast(`Plan is locked — ${press} the padlock to edit`, 'warn')
         return
       }
       set({
@@ -731,7 +732,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     undo: () => {
       const { undoStack, pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride } = get()
       if (undoStack.length === 0) return
-      if (get().locked) { get().toast('Plan is locked — tap the padlock to edit', 'warn'); return }
+      if (get().locked) { get().toast(`Plan is locked — ${press} the padlock to edit`, 'warn'); return }
       const prev = undoStack[undoStack.length - 1]
       set((s) => ({
         pts: prev.pts,
@@ -756,7 +757,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     redo: () => {
       const { redoStack, pts, closed, bulges, markers, strokes, roomShapes, texts, centerOverride } = get()
       if (redoStack.length === 0) return
-      if (get().locked) { get().toast('Plan is locked — tap the padlock to edit', 'warn'); return }
+      if (get().locked) { get().toast(`Plan is locked — ${press} the padlock to edit`, 'warn'); return }
       const next = redoStack[redoStack.length - 1]
       set((s) => ({
         pts: next.pts,

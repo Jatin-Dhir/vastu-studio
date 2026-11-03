@@ -18,7 +18,10 @@ import { hasPdfOpen } from '../importers/pdfState'
 import { useSettled } from '../canvas/gesture'
 import { blobToDataUrl, loadImage } from '../importers/raster'
 import { NorthDial } from './NorthDial'
+import { CentredDial } from './CentredDial'
 import { uid } from '../uid'
+import { Press } from '../platform'
+import { requestFit } from '../canvas/fit'
 
 const WALL_COLORS = ['#C9C6BC', '#FFFFFF', '#4A4A4A', '#8FA3B3', '#C98B6B', '#B7C9A8']
 const WALL_COLOR_NAMES: Record<string, string> = {
@@ -32,13 +35,15 @@ function Slider(props: {
   onChange: (v: number) => void; fmt?: (v: number) => string
 }) {
   const { label, value, min, max, step = 1, onChange, fmt } = props
+  // the track fills up to the thumb
+  const fill = { '--b': `${((value - min) / (max - min)) * 100}%` } as React.CSSProperties
   return (
     <label className="slider">
       <span className="slider-head">
         <span>{label}</span>
         <b>{fmt ? fmt(value) : `${Math.round(value)}%`}</b>
       </span>
-      <input type="range" min={min} max={max} step={step} value={value}
+      <input type="range" min={min} max={max} step={step} value={value} style={fill}
         onChange={(e) => onChange(Number(e.target.value))} />
     </label>
   )
@@ -50,6 +55,39 @@ function Toggle(props: { label: string; on: boolean; onChange: (v: boolean) => v
       <span className="knob" />
       {props.label}
     </button>
+  )
+}
+
+/* ---------- inspector sections: fold from the title, and stay as you left them ---------- */
+
+const SECTIONS_KEY = 'vastu-studio.sections.v1'
+const readSections = (): Record<string, boolean> => {
+  try { return JSON.parse(localStorage.getItem(SECTIONS_KEY) || '{}') } catch { return {} }
+}
+
+/** Until it is folded or opened by hand, a section follows `auto`. */
+function Section({ id, title, aside, auto = true, children }: {
+  id: string; title: string; aside?: React.ReactNode; auto?: boolean; children: React.ReactNode
+}) {
+  const [chosen, setChosen] = useState<boolean | undefined>(() => readSections()[id])
+  const open = chosen ?? auto
+  const toggle = () => {
+    setChosen(!open)
+    try { localStorage.setItem(SECTIONS_KEY, JSON.stringify({ ...readSections(), [id]: !open })) } catch { /* private mode */ }
+  }
+  return (
+    <section className={`card ${open ? '' : 'closed'}`}>
+      <header className="card-head">
+        <h2>
+          <button type="button" className="card-toggle" aria-expanded={open} onClick={toggle}>
+            <ChevronRight className="card-chev" size={14} aria-hidden="true" />
+            {title}
+          </button>
+        </h2>
+        {aside != null && <span className="file-chip" title={typeof aside === 'string' ? aside : undefined}>{aside}</span>}
+      </header>
+      {open && children}
+    </section>
   )
 }
 
@@ -69,18 +107,18 @@ function preview(id: string) {
           {ZONES16.map((z, i) => (
             <path key={z.key} d={wedge(-11.25 + i * 22.5, 11.25 + i * 22.5, R)} fill={z.color} opacity={0.85} />
           ))}
-          <circle cx={c} cy={c} r={R} fill="none" stroke="#D9B45B" strokeWidth="1" />
+          <circle cx={c} cy={c} r={R} fill="none" stroke="currentColor" strokeWidth="1" />
         </svg>
       )
     case 'gates32':
       return (
         <svg viewBox="0 0 40 40">
-          <circle cx={c} cy={c} r={R} fill="none" stroke="#D9B45B" strokeWidth="1.2" />
-          <circle cx={c} cy={c} r={R * 0.62} fill="none" stroke="#D9B45B" strokeWidth="0.7" opacity="0.6" />
+          <circle cx={c} cy={c} r={R} fill="none" stroke="currentColor" strokeWidth="1.2" />
+          <circle cx={c} cy={c} r={R * 0.62} fill="none" stroke="currentColor" strokeWidth="0.7" opacity="0.6" />
           {Array.from({ length: 32 }, (_, i) => {
             const a = (i * 11.25 * Math.PI) / 180
             return <line key={i} x1={c + Math.sin(a) * R * 0.62} y1={c - Math.cos(a) * R * 0.62}
-              x2={c + Math.sin(a) * R} y2={c - Math.cos(a) * R} stroke="#C9CFDD" strokeWidth="0.7" opacity="0.8" />
+              x2={c + Math.sin(a) * R} y2={c - Math.cos(a) * R} stroke="currentColor" strokeWidth="0.7" opacity="0.7" />
           })}
         </svg>
       )
@@ -89,8 +127,8 @@ function preview(id: string) {
         <svg viewBox="0 0 40 40">
           {[0, 1, 2].map((r) => [0, 1, 2].map((col) => (
             <rect key={`${r}${col}`} x={7 + col * 9} y={7 + r * 9} width={8} height={8}
-              fill={r === 1 && col === 1 ? '#D9B45B' : 'none'}
-              fillOpacity={0.5} stroke="#C9CFDD" strokeWidth="0.8" opacity="0.85" />
+              fill={r === 1 && col === 1 ? 'currentColor' : 'none'}
+              fillOpacity={0.35} stroke="currentColor" strokeWidth="0.8" opacity="0.85" />
           )))}
         </svg>
       )
@@ -99,7 +137,7 @@ function preview(id: string) {
       const at = ([u, v]: [number, number]) => ({ x: 6 + (u * 28) / 9, y: 6 + (v * 28) / 9 })
       return (
         <svg viewBox="0 0 40 40">
-          <rect x={6} y={6} width={28} height={28} fill="none" stroke="#C9CFDD" strokeWidth="0.8" opacity="0.85" />
+          <rect x={6} y={6} width={28} height={28} fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.85" />
           {VAMSHAS.map((l, i) => {
             const a = at(l.a), b = at(l.b)
             return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#E0684F" strokeWidth="0.8" opacity="0.85" />
@@ -114,8 +152,8 @@ function preview(id: string) {
     default:
       return (
         <svg viewBox="0 0 40 40">
-          <circle cx={c} cy={c} r={R} fill="none" stroke="#C9CFDD" strokeWidth="1" strokeDasharray="3 3" />
-          <path d="M20 13v10m0 0l-4-4m4 4l4-4" stroke="#C9CFDD" strokeWidth="1.6" fill="none"
+          <circle cx={c} cy={c} r={R} fill="none" stroke="currentColor" strokeWidth="1" strokeDasharray="3 3" />
+          <path d="M20 13v10m0 0l-4-4m4 4l4-4" stroke="currentColor" strokeWidth="1.6" fill="none"
             strokeLinecap="round" strokeLinejoin="round" transform="rotate(180 20 18)" />
         </svg>
       )
@@ -124,15 +162,14 @@ function preview(id: string) {
 
 function NorthSourceLine() {
   const src = useStore((s) => s.northSource)
-  const deg = useStore((s) => s.northDeg)
   const label =
-    src === 'map' ? 'auto · from map'
-      : src === 'plan' ? 'from plan arrow'
-        : src === 'manual' ? 'set manually' : 'assumed up'
+    src === 'map' ? 'The map'
+      : src === 'plan' ? 'The plan’s arrow'
+        : src === 'manual' ? 'Set by hand' : 'Assumed: up is north'
   return (
     <div className="row-between">
-      <span className="lbl">North {deg}°</span>
-      <span className="badge">{label}</span>
+      <span className="lbl">North comes from</span>
+      <span className="scale-val">{label}</span>
     </div>
   )
 }
@@ -211,11 +248,7 @@ export function ItemsCard({ markers, roomShapes, center, northDeg }: {
   ].filter(Boolean).join(' · ') || 'all neutral'
   if (list.length === 0) return null
   return (
-    <section className="card">
-      <header className="card-head">
-        <h2>Rooms & objects</h2>
-        <span className="file-chip">{tally}</span>
-      </header>
+    <Section id="rooms" title="Rooms & objects" aside={tally}>
       <div className="item-list">
         {list.map((a) => {
           const isOpen = openId === a.id
@@ -236,7 +269,7 @@ export function ItemsCard({ markers, roomShapes, center, northDeg }: {
                 <div className="item-body">
                   {a.gate ? (
                     <>
-                      <p className="item-why"><b>{a.gate.code} · {a.gate.devta}</b>{a.gate.note ? ` — ${a.gate.note}` : ''}</p>
+                      <p className="item-why"><b>{a.gate.code}</b> {a.gate.note ?? a.gate.devta}</p>
                       {(a.gate.verdict === 'avoid' || a.gate.verdict === 'caution') && a.gate.better.length > 0 && (
                         <p className="item-move"><MoveRight size={12} /> Favourable gates on this wall: {a.gate.better.slice(0, 3).map((b) => `${b.code} ${b.devta}`).join(', ')}.</p>
                       )}
@@ -246,7 +279,7 @@ export function ItemsCard({ markers, roomShapes, center, northDeg }: {
                       <div className="share-list">
                         {a.shares.map((s) => (
                           <div key={s.key} className="share-row" title={s.text ?? undefined}>
-                            <span className="share-key" style={{ color: s.color }}>{s.key}</span>
+                            <span className="share-key">{s.key}</span>
                             <span className="share-bar"><i style={{ width: `${s.pct}%`, background: s.color }} /></span>
                             <span className="share-pct">{fmtPct(s.pct)}</span>
                             <span className={`share-v v-${s.verdict}`}>{verdictWord(s.verdict)}</span>
@@ -269,7 +302,7 @@ export function ItemsCard({ markers, roomShapes, center, northDeg }: {
           )
         })}
       </div>
-    </section>
+    </Section>
   )
 }
 
@@ -306,7 +339,6 @@ function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg:
                 useStore.getState().setSheetPos('half')
               }
             }}>
-              <span className="zone-chip" style={{ background: r.color }} />
               <span className="zone-key">{r.key}</span>
               <span className="zone-track">
                 <span className="zone-even" style={{ left: `${evenX}%` }} />
@@ -334,10 +366,10 @@ function ZoneChart({ pts, center, northDeg }: { pts: Pt[]; center: Pt; northDeg:
         )
       })}
       <div className="zone-summary">
-        <span>Strongest <b style={{ color: strongest.color }}>{strongest.key}</b> {strongest.pct.toFixed(1)}%</span>
-        <span>Weakest <b style={{ color: weakest.color }}>{weakest.key}</b> {weakest.pct.toFixed(1)}%</span>
+        <span>Strongest <b>{strongest.key}</b> {strongest.pct.toFixed(1)}%</span>
+        <span>Weakest <b>{weakest.key}</b> {weakest.pct.toFixed(1)}%</span>
       </div>
-      <div className="zone-note">Tap a zone to see it highlighted on the plan. Tick = even share (6.25%).</div>
+      <div className="zone-note">{Press} a zone to see it highlighted on the plan. Tick = even share (6.25%).</div>
     </div>
   )
 }
@@ -400,10 +432,10 @@ export function RightPanel() {
   // once per settled change of the plan, not on every render of the panel
   const ev = useMemo(
     () => (analysisOk && closed && center && pts.length >= 3
-      ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct })
+      ? evaluateVastu({ sampled, center, northDeg, markers, roomShapes, metersPerPx, unit, brahmaPct: compass.brahmaPct, scalePct: compass.scalePct })
       : null),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [analysisOk, closed, center, pts.length, sampled, northDeg, markers, roomShapes, metersPerPx, unit, compass.brahmaPct, chartsVersion],
+    [analysisOk, closed, center, pts.length, sampled, northDeg, markers, roomShapes, metersPerPx, unit, compass.brahmaPct, compass.scalePct, chartsVersion],
   )
   const areaM2 = useMemo(() => {
     if (!closed || pts.length < 3 || !metersPerPx) return null
@@ -595,12 +627,8 @@ export function RightPanel() {
           the sheet only peeks, so Tab can't reach controls hidden below the fold */}
       <div id={bodyId} style={{ display: 'contents' }} inert={sheetMode && sheetPos === 'peek'}>
       {/* -------- Plan -------- */}
-      <section className="card">
-        <header className="card-head">
-          <h2>Plan</h2>
-          {bg.name && <span className="file-chip" title={bg.name}>{bg.name}</span>}
-        </header>
-
+      <Section id="plan" title="Plan" auto={!(closed && metersPerPx)}
+        aside={areaM2 != null ? formatArea(areaM2, unit) : bg.name || null}>
         {bg.kind !== 'none' && (
           <>
             <Slider label="Background" value={bg.opacity * 100} min={10} max={100}
@@ -662,6 +690,8 @@ export function RightPanel() {
           }} />
         </div>
 
+        <details className="more-row">
+          <summary><ChevronRight className="card-chev" size={14} aria-hidden="true" /> Wall style</summary>
         <div className="wall-style">
           <div className="row-between">
             <span className="lbl">Wall colour</span>
@@ -681,6 +711,7 @@ export function RightPanel() {
           <Slider label="Wall opacity" value={wallOpacity * 100} min={20} max={100} step={5}
             onChange={(v) => setWallOpacity(v / 100)} />
         </div>
+        </details>
 
         <div className="btn-row">
           {closed ? (
@@ -692,12 +723,10 @@ export function RightPanel() {
           <button className="btn-ghost danger" disabled={pts.length === 0}
             onClick={() => useStore.getState().clearOutline()}>Clear</button>
         </div>
-      </section>
+      </Section>
 
       {/* -------- Compass -------- */}
-      <section className="card">
-        <header className="card-head"><h2>Vastu compass</h2></header>
-
+      <Section id="compass" title="Vastu compass">
         {!closed && (
           <p className="hint">Close the outline to unlock the compasses — the centre and size are
             worked out from your boundary.</p>
@@ -713,7 +742,10 @@ export function RightPanel() {
               onClick={() => {
                 if (!requireAnalysis()) return
                 if (m.id === 'custom' && !compass.customUrl) customFileRef.current?.click()
-                else setCompass({ id: compass.id === m.id ? 'none' : (m.id as CompassId) })
+                else {
+                  setCompass({ id: compass.id === m.id ? 'none' : (m.id as CompassId) })
+                  if (compass.id === 'none') requestAnimationFrame(requestFit)
+                }
               }}
               title={m.sub}
             >
@@ -749,8 +781,11 @@ export function RightPanel() {
 
         {analysisOk && closed && compass.id !== 'none' && (
           <>
-            <Slider label="Size" value={compass.scalePct} min={40} max={400}
-              onChange={(v) => setCompass({ scalePct: v })} />
+            {/* the pada grid fits the plot itself, so a Size dial would do nothing there */}
+            {compass.id !== 'grid9' && (
+              <CentredDial label="Size" value={compass.scalePct} ratio={4}
+                onChange={(v) => setCompass({ scalePct: v })} />
+            )}
             <Slider label="Opacity" value={compass.opacity * 100} min={15} max={100}
               onChange={(v) => setCompass({ opacity: v / 100 })} />
             {compass.id === 'zones16' && (
@@ -773,8 +808,8 @@ export function RightPanel() {
               )}
             </div>
             {compass.brahmasthan && (
-              <Slider label="Brahmasthan size" value={compass.brahmaPct} min={50} max={200}
-                fmt={(v) => (v === 100 ? 'from drawing' : `${Math.round(v)}%`)}
+              <CentredDial label="Brahmasthan size" value={compass.brahmaPct} ratio={2}
+                fmt={(v) => (v === 100 ? 'From the drawing' : `${Math.round(v)}%`)}
                 onChange={(v) => setCompass({ brahmaPct: v })} />
             )}
             {compass.id === 'custom' && (
@@ -798,7 +833,7 @@ export function RightPanel() {
         <NorthRow />
         <NorthSourceLine />
         <button className="btn-ghost wide" onClick={() => {
-          if (armTool('north')) useStore.getState().toast('Tap the TAIL of the plan’s north arrow, then its TIP', 'info')
+          if (armTool('north')) useStore.getState().toast(`${Press} the TAIL of the plan’s north arrow, then its TIP`, 'info')
         }}>
           <Navigation size={14} /> Align north from plan arrow
         </button>
@@ -806,16 +841,16 @@ export function RightPanel() {
         <div className="row-between">
           <span className="lbl">Centre</span>
           <span className="scale-val">
-            {centerOverride ? 'pinned manually' : 'auto · centroid'}
+            {centerOverride ? 'Pinned by hand' : 'Automatic'}
             {centerOverride && (
               <button className="chip" style={{ marginLeft: 8 }}
                 onClick={() => useStore.getState().setCenterOverride(null)}>
-                <LocateFixed size={11} /> reset
+                <LocateFixed size={11} /> Reset
               </button>
             )}
           </span>
         </div>
-      </section>
+      </Section>
 
       {/* -------- Rooms & objects: each item read where it actually sits -------- */}
       {analysisOk && (markers.length > 0 || roomShapes.length > 0) && center && closed && (
@@ -825,11 +860,8 @@ export function RightPanel() {
       {/* -------- Vastu analysis -------- */}
       {ev && center && (() => {
         return (
-          <section className="card">
-            <header className="card-head">
-              <h2>Vastu analysis</h2>
-              <span className="file-chip">{ev.favourable} ✓ · {ev.attention} !</span>
-            </header>
+          <Section id="findings" title="Vastu analysis"
+            aside={ev.attention ? `${ev.attention} to address` : ev.favourable ? `${ev.favourable} favourable` : null}>
             {ev.findings.length === 0 && (
               <p className="hint">Nothing to read yet — use the <b>Mark</b> tool to pin the entrance,
                 kitchen, toilets and beds, and the analysis writes itself.</p>
@@ -855,18 +887,15 @@ export function RightPanel() {
                 </button>
               ))}
             </div>
-          </section>
+          </Section>
         )
       })()}
 
       {/* -------- Zone balance -------- */}
       {analysisOk && closed && center && pts.length >= 3 && (
-        <section className="card">
-          <header className="card-head">
-            <h2>Zone balance</h2>
-          </header>
+        <Section id="zones" title="Zone balance">
           <ZoneChart pts={sampled} center={center} northDeg={northDeg} />
-        </section>
+        </Section>
       )}
       </div>
     </aside>

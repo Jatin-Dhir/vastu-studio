@@ -11,8 +11,8 @@ import type { Assessment } from './reportText'
  * the finished file into the share sheet on the native shells.
  *
  * Typographic system (A4, points):
- *   margins 48 · body 9.5/14 · section heads Cormorant 17 · numerals Cormorant 26
- *   hairlines 0.5 in RULE · one accent (GOLD) for eyebrows, numbers and the move lines
+ *   margins 48 · body 9.5/14 · section heads Cormorant 17 · numerals Inter 22
+ *   hairlines 0.5 in RULE · the logo's navy for the masthead and section marks; colour otherwise only for verdicts
  */
 
 export interface ReportPdfData {
@@ -42,12 +42,11 @@ export interface ReportPdfData {
 type RGB = [number, number, number]
 
 /* Paper theme, verbatim from theme.css */
-const INK: RGB = [38, 37, 30]
-const MUTED: RGB = [110, 108, 93]
-const GOLD: RGB = [169, 120, 46]
-const GOLD_DEEP: RGB = [143, 99, 31]
-const RULE: RGB = [221, 216, 204]
-const TINT: RGB = [246, 242, 234]
+const INK: RGB = [27, 27, 29]
+const BRAND: RGB = [30, 58, 102]
+const MUTED: RGB = [95, 95, 102]
+const RULE: RGB = [228, 228, 224]
+const TINT: RGB = [244, 244, 241]
 const SEV: Record<Severity, RGB> = {
   good: [62, 142, 82],
   warn: [176, 122, 30],
@@ -247,9 +246,9 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     ensure(64 + keepWith)
     y += 18
     section += 1
-    stroke(GOLD, 1.1); doc.line(M, y, M + 22, y)
+    stroke(BRAND, 1.1); doc.line(M, y, M + 22, y)
     y += 15
-    font(SANS, 7, true); color(GOLD); doc.setCharSpace(0.7)
+    font(SANS, 7, true); color(BRAND); doc.setCharSpace(0.7)
     doc.text(String(section).padStart(2, '0'), M, y)
     doc.setCharSpace(0)
     font(SERIF, 17); color(INK)
@@ -264,7 +263,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
   }
 
   /* ================================================================ header */
-  label('Vastu Studio  ·  Analysis report', M, y, GOLD, 7)
+  label('Vastu Studio  ·  Analysis report', M, y, BRAND, 7)
   font(SANS, 8.5); color(MUTED)
   doc.text(clean(data.date), M + CW, y, { align: 'right' })
   y += 24
@@ -302,7 +301,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     const cw = 62
     counters.forEach(([sev, n], i) => {
       const x = M + i * cw
-      font(SERIF, 26); color(n > 0 ? SEV[sev] : mix(MUTED, 0.45))
+      font(SANS, 22, true); color(n > 0 ? SEV[sev] : mix(MUTED, 0.45))
       doc.text(String(n), x, y + 8)
       label(SEV_LABEL[sev], x, y + 20, n > 0 ? SEV[sev] : mix(MUTED, 0.6), 6.2)
     })
@@ -370,7 +369,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
         const titleH = measure(it.title, 9.5, CW - 22, true, SANS, 13)
         const detailH = measure(it.detail, 9, CW - 22, false, SANS, 13)
         ensure(Math.min(titleH + detailH + 8, 60))
-        font(SERIF, 14); color(c)
+        font(SANS, 9.5, true); color(c)
         doc.text(String(i + 1).padStart(2, '0'), M, y)
         text(it.title, { size: 9.5, bold: true, x: M + 22, lh: 13 })
         text(it.detail, { size: 9, color: MUTED, x: M + 22, lh: 13, gap: 7 })
@@ -378,7 +377,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     }
     if (data.assessment.improvable.length) {
       subhead('Can be improved', SEV.good)
-      numbered(data.assessment.improvable, GOLD)
+      numbered(data.assessment.improvable, INK)
     }
     if (data.assessment.structural.length) {
       subhead('Fixed characteristics — plan around these', SEV.info)
@@ -453,7 +452,7 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
       pill(r.verdict, r.verdictSev, xs[4], y)
       y += 20
       if (r.why) text(r.why, { size: 8.5, color: MUTED, x: M + 12, lh: 12 })
-      if (r.move) text(r.move, { size: 8.5, color: GOLD_DEEP, x: M + 12, lh: 12 })
+      if (r.move) text(r.move, { size: 8.5, color: INK, x: M + 12, lh: 12 })
       if (r.note) text(r.note, { size: 8.5, color: MUTED, x: M + 12, lh: 12 })
       y += 6
       hairline(M, M + CW)

@@ -4,6 +4,7 @@ import { flushSync } from 'react-dom'
 import { Scene } from './canvas/Scene'
 import { importDxf } from './importers/dxf'
 import { centroid, circumradius, perimeter, polygonArea, sampledPolygon } from './geometry'
+import { gridFrame, marmaFrame } from './marma'
 import { formatArea, formatLen, formatScale, M_PER_FT } from './format'
 import { useStore } from './store'
 import { downloadBlob } from './importers/project'
@@ -103,18 +104,14 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     maxX = Math.max(maxX, center.x + R * 1.08)
     maxY = Math.max(maxY, center.y + R * 1.08)
   }
-  // the pada grid (and the marma sthan, drawn on it) is the plot's north-aligned bounding square
-  // turned by north, with its needle and N above the top edge — its corners reach past the plot
-  // whenever north is not 0/90°
+  // the pada grid is the plot's north-aligned bounding square, and the marma sthan a square sized
+  // from the outer circle, both turned by north with a needle and N above the top edge: their
+  // corners reach past the plot whenever north is not 0/90°
   if (center && s.closed && (s.compass.id === 'grid9' || s.compass.id === 'marma') && sampled.length >= 3) {
     const rad = (-s.northDeg * Math.PI) / 180
     const cos = Math.cos(rad), sin = Math.sin(rad)
-    let gx0 = Infinity, gy0 = Infinity, gx1 = -Infinity, gy1 = -Infinity
-    for (const p of sampled) {
-      const x = center.x + (p.x - center.x) * cos - (p.y - center.y) * sin
-      const y = center.y + (p.x - center.x) * sin + (p.y - center.y) * cos
-      gx0 = Math.min(gx0, x); gx1 = Math.max(gx1, x); gy0 = Math.min(gy0, y); gy1 = Math.max(gy1, y)
-    }
+    const f = s.compass.id === 'marma' ? marmaFrame(center, RS) : gridFrame(center, s.northDeg, sampled)
+    const gx0 = f.minX, gx1 = f.maxX, gy0 = f.minY, gy1 = f.maxY
     const ch = (gy1 - gy0) / 9
     // the marma sthan writes its vamshas' pada names just outside the grid, the longest about
     // 1.6 padas wide at their largest
@@ -228,7 +225,7 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
       'svg',
       { xmlns: 'http://www.w3.org/2000/svg', width: outW, height: outH, viewBox: `${minX} ${minY} ${w} ${h}` },
       createElement('style', null, faces),
-      createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#F3F1EA' }),
+      createElement('rect', { x: minX, y: minY, width: w, height: h, fill: '#FFFFFF' }),
       scene,
       furniture,
     ),

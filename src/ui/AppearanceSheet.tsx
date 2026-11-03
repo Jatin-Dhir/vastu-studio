@@ -5,10 +5,11 @@ import { useModalFocus } from './useModalFocus'
 
 const THEMES: { id: ThemeMode; label: string; sub: string; bg: string; fg: string }[] = [
   { id: 'ink', label: 'Ink', sub: 'Dark — easy on the eyes on site', bg: '#0B0C10', fg: '#E9EBF1' },
-  { id: 'paper', label: 'Paper', sub: 'Light — the default; matches the printed report', bg: '#F3F1EA', fg: '#26251E' },
+  { id: 'paper', label: 'Paper', sub: 'Light — matches the printed report', bg: '#F3F3F0', fg: '#26251E' },
 ]
 
 const ACCENTS: { id: AccentId; label: string; swatch: string }[] = [
+  // Paper's default accent is the studio's navy; on Ink the same setting is gold
   { id: 'gold', label: 'Gold', swatch: '#D9B45B' },
   { id: 'teal', label: 'Teal', swatch: '#5FB8C9' },
   { id: 'rose', label: 'Rose', swatch: '#D98BA0' },
@@ -57,20 +58,20 @@ export function AppearanceSheet({ open, onClose }: { open: boolean; onClose: () 
         <div className="appearance-section">
           <span className="appearance-label">Accent</span>
           <div className="appearance-accents" role="group" aria-label="Accent">
-            {ACCENTS.map((a) => (
-              <button key={a.id} className={`accent-swatch ${accent === a.id ? 'on' : ''}`}
-                aria-label={a.label} title={a.label} aria-pressed={accent === a.id}
-                style={{ background: a.swatch }}
-                onClick={() => setAccent(a.id)}>
-                {accent === a.id && <Check size={13} strokeWidth={3} color="#14151A" />}
-              </button>
-            ))}
+            {ACCENTS.map((a) => {
+              const navy = a.id === 'gold' && theme === 'paper'
+              const label = navy ? 'Navy' : a.label
+              return (
+                <button key={a.id} className={`accent-swatch ${accent === a.id ? 'on' : ''}`}
+                  aria-label={label} title={label} aria-pressed={accent === a.id}
+                  style={{ background: navy ? '#1E3A66' : a.swatch }}
+                  onClick={() => setAccent(a.id)}>
+                  {accent === a.id && <Check size={13} strokeWidth={3} color={navy ? '#FFFFFF' : '#14151A'} />}
+                </button>
+              )
+            })}
           </div>
         </div>
-
-        <p className="appearance-note">
-          Paper draws the plan on light paper, the way the report prints it; Ink keeps the dark drawing plate.
-        </p>
 
         <button className="btn-primary appearance-done" onClick={onClose}>Done</button>
       </div>

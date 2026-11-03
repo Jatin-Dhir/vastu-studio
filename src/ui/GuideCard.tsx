@@ -3,6 +3,8 @@ import { ArrowRight, Check, Compass, MapPin, MousePointerClick, X } from 'lucide
 import { useStore } from '../store'
 import { requireAnalysis } from '../auth/gate'
 import { formatScale } from '../format'
+import { requestFit } from '../canvas/fit'
+import { COARSE, Press, press } from '../platform'
 import { goToStep, useGuide } from './steps'
 
 const HIDE_KEY = 'vastu.guide.hidden'
@@ -49,7 +51,7 @@ export function GuideCard() {
   let actions: { label: string; icon?: typeof Check; primary?: boolean; onTap: () => void }[] = []
 
   if (step === 'outline') {
-    hint = 'Trace the boundary: tap each corner, then the tick to close it. Two fingers pan and zoom.'
+    hint = `Trace the boundary: ${press} each corner, then the tick to close it.${COARSE ? ' Two fingers pan and zoom.' : ''}`
     actions = [{ label: 'Start tracing', icon: MousePointerClick, primary: true, onTap: () => goToStep('outline') }]
   } else if (step === 'scale') {
     hint = suggestion
@@ -73,7 +75,7 @@ export function GuideCard() {
           { label: 'Skip for now', onTap: () => s.setScaleSkipped(true) },
         ]
   } else if (step === 'north') {
-    hint = 'Which way is north? Tap the tail then the tip of the plan’s north arrow — or confirm that up is north.'
+    hint = `Which way is north? ${Press} the tail then the tip of the plan’s north arrow — or confirm that up is north.`
     actions = [
       { label: 'Point at the arrow', primary: true, onTap: () => goToStep('north') },
       {
@@ -95,6 +97,7 @@ export function GuideCard() {
         if (!requireAnalysis()) return
         s.setCompass({ id: 'zones16' })
         if (window.innerWidth <= 760) s.setSheetPos('half')
+        requestAnimationFrame(requestFit)
       },
     }]
   } else if (step === 'mark') {

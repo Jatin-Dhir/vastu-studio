@@ -183,7 +183,7 @@ export function AutoDetectDialog() {
               </div>
               {(zone || lowConf || rectFor(row, metersPerPx)) && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 7, paddingLeft: 41 }}>
-                  {zone && <span className="marker-zone" style={{ color: zone.color }}>{zone.key}</span>}
+                  {zone && <span className="marker-zone">{zone.key}</span>}
                   {rectFor(row, metersPerPx) && (
                     <span className="lbl dim">
                       {asAreas && row.kind !== 'entrance'

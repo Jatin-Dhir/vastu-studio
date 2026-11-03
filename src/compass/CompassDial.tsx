@@ -76,14 +76,14 @@ export function CompassDial({ headingDeg, size = 320, paper }: { headingDeg: num
   const c = 160
   const shown = normalizeDeg(display.current)
   const zone = ZONES8[activeZone.current]
-  const ink = paper ? '#26251E' : '#E9EBF1'
-  const muted = paper ? '#6E6C5D' : '#99A1B3'
-  const dim = paper ? 'rgba(24,22,14,0.45)' : 'rgba(255,255,255,0.35)'
+  const ink = paper ? '#1B1B1D' : '#E9EBF1'
+  const muted = paper ? '#48484C' : '#99A1B3'
+  const dim = paper ? 'rgba(27,27,29,0.42)' : 'rgba(255,255,255,0.35)'
   const gold = paper ? '#A9782E' : '#D9B45B'
   const goldBright = paper ? '#C48F3A' : '#E8C56B'
-  const face = paper ? '#FFFDF8' : '#14161d'
-  const faceEdge = paper ? 'rgba(24,22,14,0.16)' : 'rgba(255,255,255,0.13)'
-  const centre = paper ? '#F3F1EA' : '#1d2029'
+  const face = paper ? '#FFFFFF' : '#14161d'
+  const faceEdge = paper ? 'rgba(27,27,29,0.18)' : 'rgba(255,255,255,0.13)'
+  const centre = paper ? '#F3F3F0' : '#1d2029'
 
   const polar = (deg: number, rad: number) => ({ x: c + rad * Math.sin((deg * Math.PI) / 180), y: c - rad * Math.cos((deg * Math.PI) / 180) })
   const arcPath = (deg: number, rad: number, halfSpan: number) => {

@@ -14,6 +14,8 @@ export interface SheetRow {
   right?: ReactNode
   /** keep the sheet open after onTap — for toggles whose new state shows in the row */
   keepOpen?: boolean
+  /** already in the top bar or the rail wherever those show it, so the sheet need not repeat it */
+  fold?: boolean
   onTap?: () => void
 }
 
@@ -67,12 +69,12 @@ export function ActionSheet({
           // a row carrying its own control can't itself be a button (a button inside a button
           // is invalid) — that control is the keyboard path; a tap elsewhere on the row still works
           return r.right ? (
-            <div key={r.label} className={`asheet-row ${r.danger ? 'danger' : ''}`} onClick={tap}
+            <div key={r.label} className={`asheet-row ${r.danger ? 'danger' : ''} ${r.fold ? 'fold' : ''}`} onClick={tap}
               style={r.onTap ? { cursor: 'pointer', userSelect: 'none', touchAction: 'manipulation' } : undefined}>
               {body}
             </div>
           ) : (
-            <button key={r.label} className={`asheet-row ${r.danger ? 'danger' : ''}`} disabled={r.disabled} onClick={tap}>
+            <button key={r.label} className={`asheet-row ${r.danger ? 'danger' : ''} ${r.fold ? 'fold' : ''}`} disabled={r.disabled} onClick={tap}>
               {body}
             </button>
           )

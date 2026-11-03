@@ -5,7 +5,7 @@ const config: CapacitorConfig = {
   appName: 'Vastu Studio',
   webDir: 'dist',
   android: {
-    backgroundColor: '#F3F1EA',
+    backgroundColor: '#F3F3F0',
     // the web bundle targets Chrome 99; an older, never-updated WebView would load it and fail
     // to parse it — show webview-update.html instead
     minWebViewVersion: 99,
@@ -14,7 +14,7 @@ const config: CapacitorConfig = {
     errorPath: 'webview-update.html',
   },
   ios: {
-    backgroundColor: '#F3F1EA',
+    backgroundColor: '#F3F3F0',
     contentInset: 'never',
   },
 }

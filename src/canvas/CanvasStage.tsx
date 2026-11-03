@@ -11,6 +11,7 @@ import { at } from './svgText'
 import { ZONES16, markerKindMeta } from '../vastu'
 import type { Pt, ViewState } from '../types'
 import { uid } from '../uid'
+import { Press, press } from '../platform'
 
 /** Finger-sized targets and slop while the last press was a finger. It starts from the primary
  *  pointer, then follows the pointer actually in use: a Windows touch laptop, a Surface with its
@@ -327,14 +328,16 @@ export function CanvasStage() {
     // stacked along the bottom right now (dock, sheet, guide card, calibrate bar) instead
     // of guessing — the guide card alone can claim ~350px of a phone screen. Capped at
     // half the stage so a fully-raised sheet still leaves a sane fit, not a sliver.
-    let padB = mobile ? 150 : 28
+    // desktop: the band along the bottom holds the zoom read-out and the tool's hint and close chip,
+    // and the south wall's length sits below the wall
+    let padB = mobile ? 150 : 62
     const overlays = mobile ? ['.guide-card', '.cal-bar', '.tool-rail', '.panel'] : ['.guide-card', '.cal-bar']
     for (const sel of overlays) {
       const el = document.querySelector(sel)
       if (!el) continue
       const r = el.getBoundingClientRect()
       if (r.height > 0 && r.width > 0 && r.top < rect.bottom) {
-        padB = Math.max(padB, rect.bottom - r.top + 12)
+        padB = Math.max(padB, rect.bottom - r.top + (mobile ? 12 : 32))
       }
     }
     padB = Math.min(padB, rect.height * 0.5)
@@ -360,7 +363,7 @@ export function CanvasStage() {
     const ring = ringRef.current
     const soft = {
       l: mobile ? 8 : railR + 14, r: mobile ? rect.width - 8 : panelL - 14,
-      t: mobile ? 56 : 62, b: rect.height - (mobile ? padB : 8),
+      t: mobile ? 56 : 62, b: rect.height - (mobile ? padB : 40),
     }
     let u: { minX: number; minY: number; maxX: number; maxY: number } | null = null
     if (ring) {
@@ -1081,11 +1084,11 @@ export function CanvasStage() {
             s.toast('Point added — drag it to shape the wall', 'ok')
           } else if (Date.now() - lastClosedHintAt > 5000) {
             lastClosedHintAt = Date.now()
-            s.toast('Outline is closed — tap on an edge to add a point there', 'info', 'Reopen to extend', () => {
+            s.toast(`Outline is closed — ${press} on an edge to add a point there`, 'info', 'Reopen to extend', () => {
               const s2 = useStore.getState()
               s2.reopenPolygon()
               s2.setTool('trace')
-              s2.toast('Outline reopened — new points continue from the last corner. Tap the ✓ to close again', 'info')
+              s2.toast(`Outline reopened — new points continue from the last corner. ${Press} the ✓ to close again`, 'info')
             })
           }
           break
@@ -1137,7 +1140,7 @@ export function CanvasStage() {
           s.setTool('select')
           s.toast(`North aligned to the plan — ${deg}°`, 'ok')
         } else {
-          s.toast('Too close to the first tap — tap the arrow TIP further away', 'warn')
+          s.toast(`Too close to the first ${press} — ${press} the arrow TIP further away`, 'warn')
         }
         break
       }
@@ -1197,8 +1200,9 @@ export function CanvasStage() {
     ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
     : compass), [analysisOk, compass])
   useLayoutEffect(() => {
+    // the marma sthan's square reaches past its circle at the corners
     ringRef.current = closed && center && sceneCompass.id !== 'none' && R > 0
-      ? { c: center, R: Math.min(R * ((sceneCompass.scalePct ?? 100) / 100), R * 1.5) }
+      ? { c: center, R: Math.min(R * ((sceneCompass.scalePct ?? 100) / 100), R * 1.5) * (sceneCompass.id === 'marma' ? 1.3 : 1) }
       : null
   })
   const tracing = tool === 'trace' && !closed

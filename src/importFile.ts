@@ -8,6 +8,7 @@ import { isLibraryFile, restoreLibrary, restoreSummary } from './library'
 import { isPhone } from './mobile/phone'
 import { requestFit } from './canvas/fit'
 import { formatLen, formatScale } from './format'
+import { Press, press } from './platform'
 
 /** What the file pickers accept. Desktop browsers get the real filter; on iOS, Android and in
  *  the native shells an extension list greys out or silently drops .dxf, .dwg and .vastu (a
@@ -211,7 +212,7 @@ export function loadDemo() {
   )
   s.setTool('trace')
   requestFit()
-  s.toast('Sample plan loaded — scale preset. Tap corners to trace the boundary', 'ok')
+  s.toast(`Sample plan loaded — scale preset. ${Press} corners to trace the boundary`, 'ok')
 }
 
 /**
@@ -255,7 +256,7 @@ export async function importMapsScreenshot(file: File) {
     s.setNorth(0, 'manual')
     s.setBgHint('map-screenshot') // the calibrate hint walks the scale-bar steps
     s.setTool('calibrate')
-    s.toast('North assumed straight up — now tap BOTH ENDS of the screenshot’s scale bar, then enter its printed distance', 'info')
+    s.toast(`North assumed straight up — now ${press} BOTH ENDS of the screenshot’s scale bar, then enter its printed distance`, 'info')
   }
 }
 
