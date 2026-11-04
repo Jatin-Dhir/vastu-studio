@@ -1,9 +1,9 @@
 import { brahmasthanRadius, wheelRadius, zoneRows } from './analysis'
 import { dist, pointInPolygon } from './geometry'
 import { formatLen } from './format'
-import { ZONE_SHAPE_NOTES, type Verdict } from './vastu'
+import { ZONES16, ZONE_SHAPE_NOTES, type Verdict } from './vastu'
 import { assessAll, capFirst, moveSentence, roomPolygon, type Assessment } from './assess'
-import { ATIMARMA, marmaPoints } from './marma'
+import { MARMA_POINTS, marmaPoints, type MarmaKind } from './marma'
 import type { Marker, Pt, RoomShape, Unit } from './types'
 
 export type Severity = 'good' | 'info' | 'warn' | 'bad'
@@ -41,6 +41,7 @@ export function roomShapeAnchor(r: RoomShape): Pt | null {
  *  and pillars they keep off it. */
 const MARMA_IMPURE = ['toilet', 'septic', 'dustbin']
 const MARMA_HEAVY = ['water', 'staircase', 'store']
+const MARMA_NAME: Record<MarmaKind, string> = { centre: 'the centre’s marma', maha: 'a maha-marmasthan', up: 'an up-marmasthan', marma: 'a marmasthan' }
 
 /** The interpretive pass: every marker and room against the charts (areas by their real
  *  zone coverage), entrances against the 32 gates, plot-shape cuts/extensions, Brahmasthan
@@ -106,8 +107,9 @@ export function evaluateVastu(args: {
     }
   }
 
-  /* Marma sthan: the nine points where the six vamshas cross (src/marma.ts). A room is on one
-     when it covers the point, a marker when it sits within the point's own size. */
+  /* Marma sthan: the 32 marmasthans and the centre (src/marma.ts). A room is on one when it
+     covers the point, a marker when it sits within the point's own size. The maha-marma weigh
+     most. */
   const marma = marmaPoints(center, northDeg, wheelRadius(sampled) * ((args.scalePct ?? 100) / 100))
   if (marma) {
     for (const a of assessments) {
@@ -118,12 +120,16 @@ export function evaluateVastu(args: {
       const poly = room ? roomPolygon(room) : null
       const hit = marma.points.findIndex((p) => (poly ? pointInPolygon(p, poly) : dist(a.anchor, p) <= marma.r))
       if (hit < 0) continue
+      const kind = MARMA_POINTS[hit].kind
       // the central marma is the Brahmasthan's own centre, and that finding already names it
-      if (hit === 0 && dist(a.anchor, center) < bR) continue
+      if (kind === 'centre' && dist(a.anchor, center) < bR) continue
+      const major = kind === 'maha' || kind === 'centre'
+      const p = marma.points[hit]
+      const where = kind === 'centre' ? '' : ` ${ZONES16[Math.round((((Math.atan2(p.x - center.x, center.y - p.y) * 180) / Math.PI - northDeg + 720) % 360) / 22.5) % 16].key} of the centre`
       findings.push({
-        severity: impure ? 'bad' : 'warn', markerId: a.id,
+        severity: impure ? (major ? 'bad' : 'warn') : (major ? 'warn' : 'info'), markerId: a.id,
         title: `${a.label} stands on a marma point`,
-        detail: `${poly ? 'it covers' : 'it sits on'} ${ATIMARMA[hit].name}, where two vamshas cross — ${impure
+        detail: `${poly ? 'it covers' : 'it sits on'} ${MARMA_NAME[kind]}${where} — ${impure
           ? 'the texts keep a marma free of anything impure'
           : 'keep weight, pits and pillars off a marma'}`,
       })

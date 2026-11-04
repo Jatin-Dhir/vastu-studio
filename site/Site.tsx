@@ -113,7 +113,7 @@ const DETAILS: { h: string; rows: [string, ReactNode][] }[] = [
     ['Sixteen zones', '22.5° each, clipped to the plot, in the colours the practitioner sets'],
     ['Thirty-two gates', 'Entrance padas of 11.25° with their devtas'],
     ['Mandala', 'The nine-by-nine Vastu Purusha Mandala with all forty-five devtas'],
-    ['Marma sthan', 'The six vamshas of Brihat Samhita and the nine marma points where they cross, each an eighth of a pada'],
+    ['Marma sthan', 'The 32 marmasthans of the 64-pada mandala, 16 maha, 8 up and 8 marma, on its six lines and four circles'],
     ['Your own chakra', 'Load a chakra image, size and turn it over any plan'],
   ] },
   { h: 'North', rows: [
@@ -361,9 +361,9 @@ export function Site({ returning }: { returning: boolean }) {
           <p>The Brahmasthan is found by area, and the nine-by-nine mandala is laid over the plot in its own orientation, with all forty-five devtas in place. That orientation is true north: from the drawing’s own arrow, a typed bearing, or the phone’s compass corrected for where you stand.</p>
         </Chapter>
 
-        <Chapter id="marma" eyebrow="Marma sthan · six vamshas · nine points" title="Nine points to keep clear."
-          art={<Part id="marma" label="The marma sthan: the six vamsha lines of Brihat Samhita drawn across the nine-by-nine mandala, each named by its two end padas, and the nine marma points where they cross." />}>
-          <p>Brihat Samhita draws six lines across the mandala, each between two named padas: Roga to Agni, Pitra to Shikhi, and four more. Where they cross lie nine marma points, each an eighth of a pada, that no pillar, nail or toilet should touch. The studio draws them over the plan and flags anything that stands on one.</p>
+        <Chapter id="marma" eyebrow="Marma sthan · 64-pada mandala · 32 points" title="Thirty-two points to keep clear."
+          art={<Part id="marma" label="The marma sthan: the 64-pada mandala with its two diagonals and four parallel lines, four circles round the centre, and the 32 marmasthans where the padas meet: 16 maha-marma, 8 up-marma and 8 marma." />}>
+          <p>Six lines cross the 64-pada mandala: its two diagonals, and a parallel to each one pada off it, from between Diti and Aditi to between Dauwarik and Pitra. Where the padas meet lie 32 marmasthans, 16 maha-marma, 8 up-marma and 8 marma, that no pillar, nail or toilet should touch. The studio draws them over the plan, sized from the plot's own circle, and flags anything that stands on one.</p>
         </Chapter>
 
         <Chapter id="verdicts" eyebrow="Rooms and verdicts" title="A verdict for every room."

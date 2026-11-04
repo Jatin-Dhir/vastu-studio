@@ -1,13 +1,10 @@
-import { MANDALA_INNER } from './vastu'
 import type { Pt } from './types'
 
-/* Marma sthan, after Brihat Samhita 53.63–64. Six lines, the vamshas, run across the 9×9
- * mandala between named padas: Roga–Anala and Pitra–Shikhi (the two diagonals), Vitatha–Shosha,
- * Mukhya–Bhrisha, Aditi–Sugriva and Jayanta–Bhringaraja. They cut one another in nine points,
- * the atimarma: vital points that no pillar, nail, peg or impurity should touch, each the size
- * of an eighth of a pada. The grid is a true square about the plot's centre, turned to north,
- * and takes its size from the outer circle (marmaFrame), so the Size dial moves it with the
- * wheel. Grid units: u across from the west edge, v down from the north edge, 0–9. */
+/* Marma sthan, drawn as the owner's MahaVastu reference draws it: the 64-pada mandala, an 8×8
+ * square about the plot's centre, turned to north, its side the outer circle's diameter
+ * (marmaFrame), so the Size dial moves it with the wheel. Six lines cross it and four circles ring
+ * the centre; the 32 marmasthans sit where the padas meet, and nothing heavy or impure should
+ * stand on one. */
 
 /** The pada grid's frame: the plot's bounding box in a frame turned by -north about c (the grid
  *  itself is drawn inside rotate(north, c)). */
@@ -32,49 +29,52 @@ export function marmaFrame(c: Pt, R: number): { minX: number; minY: number; maxX
   return { minX: c.x - h, minY: c.y - h, maxX: c.x + h, maxY: c.y + h }
 }
 
-/** One vamsha, edge to edge across the grid ([u, v] at each end), through the centres of the
- *  two padas the text names it by ([row, col]) and of every pada between them. `main` marks the
- *  mandala's own diagonals. */
-export interface Vamsha { a: [number, number]; b: [number, number]; ends: [[number, number], [number, number]]; main: boolean }
+/** Where a marma point sits, in padas from the centre in the grid's own frame (x east, y south),
+ *  and which of the reference's three kinds it is; 'centre' is the Brahmasthan's own point. */
+export type MarmaKind = 'centre' | 'maha' | 'up' | 'marma'
+export interface MarmaPoint { at: [number, number]; kind: MarmaKind }
 
-export const VAMSHAS: Vamsha[] = [
-  { a: [0, 0], b: [9, 9], ends: [[0, 0], [8, 8]], main: true }, // Roga – Anala
-  { a: [9, 0], b: [0, 9], ends: [[0, 8], [8, 0]], main: true }, // Shikhi – Pitra
-  { a: [0, 2], b: [7, 9], ends: [[2, 0], [8, 6]], main: false }, // Shosha – Vitatha
-  { a: [2, 0], b: [9, 7], ends: [[0, 2], [6, 8]], main: false }, // Mukhya – Bhrisha
-  { a: [7, 0], b: [0, 7], ends: [[0, 6], [6, 0]], main: false }, // Aditi – Sugriva
-  { a: [9, 2], b: [2, 9], ends: [[2, 8], [8, 2]], main: false }, // Jayanta – Bhringaraja
+const ring = (pts: [number, number][], kind: MarmaKind): MarmaPoint[] => pts.map((at) => ({ at, kind }))
+
+/** The 32 marmasthans of the owner's reference (Location of 32 Marmasthans in Vastu Purush
+ *  Mandala), all on pada corners, plus the centre: 16 maha-marma one pada out all round and two
+ *  and three padas out on the diagonals, 8 up-marma two by three padas out, 8 marma one by two. */
+export const MARMA_POINTS: MarmaPoint[] = [
+  { at: [0, 0], kind: 'centre' },
+  ...ring([[0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1], [-1, 0], [-1, -1]], 'maha'),
+  ...ring([[2, -2], [2, 2], [-2, 2], [-2, -2], [3, -3], [3, 3], [-3, 3], [-3, -3]], 'maha'),
+  ...ring([[2, -3], [3, -2], [3, 2], [2, 3], [-2, 3], [-3, 2], [-3, -2], [-2, -3]], 'up'),
+  ...ring([[1, -2], [2, -1], [2, 1], [1, 2], [-1, 2], [-2, 1], [-2, -1], [-1, -2]], 'marma'),
 ]
 
-/** The nine atimarma, where a line of each family crosses a line of the other: the centre,
- *  the four corner padas of Brahma's nine, and the four padas just outside them on the
- *  cardinals. */
-export const ATIMARMA: { at: [number, number]; name: string }[] = [
-  { at: [4.5, 4.5], name: 'the centre' },
-  { at: [3.5, 3.5], name: 'Brahma’s north-west pada' },
-  { at: [5.5, 3.5], name: 'Brahma’s north-east pada' },
-  { at: [5.5, 5.5], name: 'Brahma’s south-east pada' },
-  { at: [3.5, 5.5], name: 'Brahma’s south-west pada' },
-  { at: [4.5, 2.5], name: `${MANDALA_INNER.n}’s pada, north of the centre` },
-  { at: [6.5, 4.5], name: `${MANDALA_INNER.e}’s pada, east of the centre` },
-  { at: [4.5, 6.5], name: `${MANDALA_INNER.s}’s pada, south of the centre` },
-  { at: [2.5, 4.5], name: `${MANDALA_INNER.w}’s pada, west of the centre` },
+/** The six lines, edge to edge, in padas from the centre: the two diagonals, and a parallel to
+ *  each one pada off it on either side, from the mid-point between a corner pada and its
+ *  neighbour (Diti and Aditi) to the matching mid-point across the square (Dauwarik and Pitra). */
+export const MARMA_LINES: { a: [number, number]; b: [number, number]; main: boolean }[] = [
+  { a: [-4, -4], b: [4, 4], main: true },
+  { a: [4, -4], b: [-4, 4], main: true },
+  { a: [-3, -4], b: [4, 3], main: false },
+  { a: [-4, -3], b: [3, 4], main: false },
+  { a: [3, -4], b: [-4, 3], main: false },
+  { a: [4, -3], b: [-3, 4], main: false },
 ]
 
-/** A marma point's radius for padas of cw × ch: a circle of an eighth of a pada's area. */
-export const marmaRadius = (cw: number, ch: number) => Math.sqrt((cw * ch) / (8 * Math.PI))
+/** The reference's four circles, in padas: the outer one touches the square's sides. */
+export const MARMA_RINGS = [1, 2, 3, 4]
 
-/** The nine atimarma in plan coordinates (in ATIMARMA's order) and their radius, for an outer
- *  circle of radius R, or null when there is no circle yet. */
+/** Padas across the marma sthan's square: the 64-pada mandala. */
+export const MARMA_PADAS = 8
+
+/** A marma point's radius for a pada of side p: a circle of an eighth of the pada's area. */
+export const marmaRadius = (p: number) => Math.sqrt((p * p) / (8 * Math.PI))
+
+/** The points in plan coordinates (in MARMA_POINTS' order) and their radius, for an outer circle
+ *  of radius R, or null when there is no circle yet. */
 export function marmaPoints(c: Pt, north: number, R: number): { points: Pt[]; r: number } | null {
   if (!(R > 0)) return null
-  const f = marmaFrame(c, R)
-  const cw = (f.maxX - f.minX) / 9, ch = cw
+  const p = (2 * R) / MARMA_PADAS
   const rad = (north * Math.PI) / 180
   const cos = Math.cos(rad), sin = Math.sin(rad)
-  const toPlan = ([u, v]: [number, number]): Pt => {
-    const dx = f.minX + u * cw - c.x, dy = f.minY + v * ch - c.y
-    return { x: c.x + dx * cos - dy * sin, y: c.y + dx * sin + dy * cos }
-  }
-  return { points: ATIMARMA.map((m) => toPlan(m.at)), r: marmaRadius(cw, ch) }
+  const toPlan = ([x, y]: [number, number]): Pt => ({ x: c.x + (x * cos - y * sin) * p, y: c.y + (x * sin + y * cos) * p })
+  return { points: MARMA_POINTS.map((m) => toPlan(m.at)), r: marmaRadius(p) }
 }

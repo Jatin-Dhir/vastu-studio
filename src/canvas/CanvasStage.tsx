@@ -1200,9 +1200,9 @@ export function CanvasStage() {
     ? { ...compass, id: 'none' as const, brahmasthan: false, devtas: false }
     : compass), [analysisOk, compass])
   useLayoutEffect(() => {
-    // the marma sthan's square reaches past its circle at the corners
+    // the marma sthan's square reaches past its circle at the corners, the chakra's rings past it
     ringRef.current = closed && center && sceneCompass.id !== 'none' && R > 0
-      ? { c: center, R: Math.min(R * ((sceneCompass.scalePct ?? 100) / 100), R * 1.5) * (sceneCompass.id === 'marma' ? 1.3 : 1) }
+      ? { c: center, R: Math.min(R * ((sceneCompass.scalePct ?? 100) / 100), R * 1.5) * (sceneCompass.id === 'marma' ? 1.45 : sceneCompass.id === 'zones16' || sceneCompass.id === 'gates32' ? 1.23 : 1) }
       : null
   })
   const tracing = tool === 'trace' && !closed

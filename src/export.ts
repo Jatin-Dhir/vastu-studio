@@ -93,10 +93,12 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     maxX = Math.max(maxX, t.p.x + bw); maxY = Math.max(maxY, t.p.y + lines.length * t.size * 1.25)
   }
   if (center && RS > 0 && s.compass.id !== 'none' && s.closed) {
-    minX = Math.min(minX, center.x - RS * 1.16)
-    minY = Math.min(minY, center.y - RS * 1.16)
-    maxX = Math.max(maxX, center.x + RS * 1.16)
-    maxY = Math.max(maxY, center.y + RS * 1.16)
+    // the wheel compasses' rings reach a third past their circle
+    const reach = RS * (s.compass.id === 'zones16' || s.compass.id === 'gates32' ? 1.42 : 1.16)
+    minX = Math.min(minX, center.x - reach)
+    minY = Math.min(minY, center.y - reach)
+    maxX = Math.max(maxX, center.x + reach)
+    maxY = Math.max(maxY, center.y + reach)
   } else if (center && R > 0 && s.markers.some((m) => m.kind === 'entrance')) {
     // no wheel drawn, but entrance ties still reach the plot circumradius (Scene's tieR fallback)
     minX = Math.min(minX, center.x - R * 1.08)

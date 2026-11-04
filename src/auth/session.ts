@@ -134,35 +134,37 @@ function fallbackToGrace(): void {
 let seq = 0
 
 /** Ask the server whether this device still holds a valid seat. Offline falls back
- *  to the grace window; a real "no" from the server always wins. */
-export async function check(): Promise<void> {
-  if (!AUTH_ENABLED || checking) return
+ *  to the grace window; a real "no" from the server always wins. Resolves false when the
+ *  server could not be reached; `quiet` then leaves the state to the caller. */
+export async function check(opts: { quiet?: boolean } = {}): Promise<boolean> {
+  if (!AUTH_ENABLED || checking) return true
   checking = true
   const my = ++seq
+  const unreachable = () => { if (!opts.quiet) fallbackToGrace(); return false }
   try {
     const { data: { session }, error } = await supabase().auth.getSession()
     if (!session) {
       // an expired token that could not refresh (no signal) is not a sign-out
-      if (error || !navigator.onLine) { fallbackToGrace(); return }
-      setAuth({ status: 'signed-out' }); return
+      if (error || !navigator.onLine) return unreachable()
+      setAuth({ status: 'signed-out' }); return true
     }
     let res: StateRes
     try {
       res = await rpc<StateRes>('heartbeat', { p_device: deviceId() })
     } catch (e) {
-      if (my !== seq) return
+      if (my !== seq) return true
       const msg = e instanceof Error ? e.message : String(e)
-      if (/not signed in|JWT|jwt/i.test(msg)) { setAuth({ status: 'signed-out' }); return }
-      fallbackToGrace()
-      return
+      if (/not signed in|JWT|jwt/i.test(msg)) { setAuth({ status: 'signed-out' }); return true }
+      return unreachable()
     }
-    if (my !== seq) return
+    if (my !== seq) return true
     apply(res)
     lastCheckAt = Date.now()
     if (res.state === 'ok') {
       try { await loadCharts() } catch { /* keep the previous charts */ }
       void fetchBroadcast()
     }
+    return true
   } finally {
     checking = false
   }
@@ -226,18 +228,27 @@ function loadDevCharts() {
 export function initAuth(): void {
   if (!AUTH_ENABLED) { setAuth({ status: 'off' }); loadDevCharts(); return }
   setAuth({ status: 'loading' })
+  // a returning user opens straight into the studio on the identity this device last verified
+  // and the charts it kept, inside the same grace window that carries a day without signal; the
+  // server's word follows and wins. Waiting for it first held the door on "Opening the studio"
+  // for as long as a token refresh took, and showed the offline screen whenever the network came
+  // up a moment after the app
+  const ok = lastOk()
+  if (ok && Date.now() - ok.t < GRACE_MS) {
+    const cached = cachedCharts()
+    if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
+    setAuth({ status: 'ok', user: ok.user })
+  }
   void (async () => {
     try {
-      // a returning user opens straight into the studio: the last verified identity and the
-      // cached charts carry the first second, the heartbeat confirms (or revokes) right after
-      const { data: { session }, error } = await supabase().auth.getSession()
-      const ok = lastOk()
-      if ((session || error) && ok && Date.now() - ok.t < GRACE_MS) {
-        const cached = cachedCharts()
-        if (cached) { setCharts(cached); useStore.getState().setChartsReady(true) }
-        setAuth({ status: 'ok', user: ok.user })
+      // a few quiet tries before the grace window has its say: at a cold start the network
+      // often lags the app by a few seconds
+      let reached = false
+      for (const wait of [0, 2000, 5000]) {
+        if (wait) await new Promise((r) => window.setTimeout(r, wait))
+        if (await check({ quiet: true })) { reached = true; break }
       }
-      await check()
+      if (!reached) fallbackToGrace()
       if (useStore.getState().auth.status === 'ok') logEvent('open')
     } catch {
       // the auth client itself failed to start (blocked storage, a broken token): never

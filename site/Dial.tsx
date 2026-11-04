@@ -70,7 +70,8 @@ const ring = (c: Pt, r0: number, r1: number) =>
 /** The whole instrument: the sample residence seen through the dial, the sixteen zones turned to
  *  `north`, rooms and doors marked, inside the bezel. `paper` false is the Ink (night) view. */
 export function Instrument({ north, paper }: { north: number; paper: boolean }) {
-  const r0 = R * 1.16, r1 = R * 1.27, pad = R * 0.03
+  // the bezel sits outside the chakra's own rings (they reach 1.34R)
+  const r0 = R * 1.37, r1 = R * 1.48, pad = R * 0.03
   const box = { x: CENTER.x - r1 - pad, y: CENTER.y - r1 - pad, w: 2 * (r1 + pad), h: 2 * (r1 + pad) }
   const [ref, k] = useScale(box.w)
   return (
@@ -119,8 +120,8 @@ export function Part({ id, highlight = null, onZone, label }: {
   label: string
 }) {
   const square = id === 'grid9' || id === 'marma'
-  const r0 = PART_R * 1.16, r1 = PART_R * 1.27
-  // the marma sthan writes its vamshas' pada names outside its grid, so its sheet runs wider
+  const r0 = PART_R * 1.39, r1 = PART_R * 1.5
+  // the marma sthan writes the sixteen directions outside its grid, so its sheet runs wider
   const sheet = PART_R * (id === 'marma' ? 1.24 : 1.02)
   const half = square ? sheet * TILT + PART_R * 0.04 : r1 * 1.02
   const box = { x: -half, y: -half, w: half * 2, h: half * 2 }

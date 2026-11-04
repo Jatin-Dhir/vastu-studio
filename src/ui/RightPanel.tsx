@@ -12,7 +12,7 @@ import { processCompassImage } from '../imageTools'
 import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
 import { COMPASS_META, ZONES16 } from '../vastu'
-import { ATIMARMA, VAMSHAS } from '../marma'
+import { MARMA_LINES, MARMA_POINTS } from '../marma'
 import type { CompassId, Marker, Pt, RoomShape, Tool } from '../types'
 import { hasPdfOpen } from '../importers/pdfState'
 import { useSettled } from '../canvas/gesture'
@@ -133,18 +133,19 @@ function preview(id: string) {
         </svg>
       )
     case 'marma': {
-      // the six vamshas over the grid's frame, and the nine points where they cross
-      const at = ([u, v]: [number, number]) => ({ x: 6 + (u * 28) / 9, y: 6 + (v * 28) / 9 })
+      // the square, its six lines and the maha-marma, as the reference draws them
+      const at = ([x, y]: [number, number]) => ({ x: 20 + x * 3.5, y: 20 + y * 3.5 })
       return (
         <svg viewBox="0 0 40 40">
           <rect x={6} y={6} width={28} height={28} fill="none" stroke="currentColor" strokeWidth="0.8" opacity="0.85" />
-          {VAMSHAS.map((l, i) => {
+          <circle cx={20} cy={20} r={14} fill="none" stroke="currentColor" strokeWidth="0.6" opacity="0.5" />
+          {MARMA_LINES.map((l, i) => {
             const a = at(l.a), b = at(l.b)
-            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#E0684F" strokeWidth="0.8" opacity="0.85" />
+            return <line key={i} x1={a.x} y1={a.y} x2={b.x} y2={b.y} stroke="#B08A3E" strokeWidth="0.8" opacity="0.9" />
           })}
-          {ATIMARMA.map((m, i) => {
+          {MARMA_POINTS.filter((m) => m.kind === 'maha' || m.kind === 'up').map((m, i) => {
             const p = at(m.at)
-            return <circle key={i} cx={p.x} cy={p.y} r={1.5} fill="#E0684F" />
+            return <circle key={i} cx={p.x} cy={p.y} r={1.25} fill={m.kind === 'maha' ? '#E2692F' : '#1F7F97'} />
           })}
         </svg>
       )
