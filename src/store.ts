@@ -52,6 +52,40 @@ function loadThemePrefs(): Prefs {
   return base
 }
 
+/** The practitioner's own line and logo, printed at the foot of every PDF page and under every
+ *  exported PNG. A device preference like the theme, kept in two keys so typing the line never
+ *  rewrites the logo's data URL. */
+export interface Branding {
+  footer: string
+  /** a PNG or JPEG data URL, trimmed and scaled down on the way in (see brandLogo.ts) */
+  logo: string | null
+  logoW: number
+  logoH: number
+}
+const BRAND_KEY = 'vastu-studio.branding.v1'
+const BRAND_LOGO_KEY = 'vastu-studio.brandlogo.v1'
+export const BRANDING_NONE: Branding = { footer: '', logo: null, logoW: 0, logoH: 0 }
+function loadBranding(): Branding {
+  const out: Branding = { ...BRANDING_NONE }
+  try {
+    const raw = localStorage.getItem(BRAND_KEY)
+    if (raw) {
+      const v = JSON.parse(raw) as { footer?: unknown }
+      if (typeof v.footer === 'string') out.footer = v.footer
+    }
+    const rawLogo = localStorage.getItem(BRAND_LOGO_KEY)
+    if (rawLogo) {
+      const v = JSON.parse(rawLogo) as { logo?: unknown; w?: unknown; h?: unknown }
+      if (typeof v.logo === 'string' && v.logo.startsWith('data:image/') && Number(v.w) > 0 && Number(v.h) > 0) {
+        out.logo = v.logo; out.logoW = Number(v.w); out.logoH = Number(v.h)
+      }
+    }
+  } catch { /* private mode or corrupt value */ }
+  return out
+}
+/** True when there is something of the practitioner's to print. */
+export const hasBranding = (b: Branding) => !!b.footer.trim() || !!b.logo
+
 /** A drawing currently open in a tab — only ever added once it has a real project id
  *  (see setProjectMeta), so a fresh untouched blank drawing never appears in the list. */
 export interface OpenTab { id: string; name: string }
@@ -155,6 +189,7 @@ export interface VastuStore {
   moreOpen: boolean
   clearOpen: boolean
   appearanceOpen: boolean
+  brandingOpen: boolean
   setMoreOpen: (open: boolean) => void
   mobileTab: MobileTab
   setMobileTab: (t: MobileTab) => void
@@ -163,6 +198,9 @@ export interface VastuStore {
   setMobileSheet: (s: MobileSheet) => void
   setClearOpen: (open: boolean) => void
   setAppearanceOpen: (open: boolean) => void
+  setBrandingOpen: (open: boolean) => void
+  branding: Branding
+  setBranding: (patch: Partial<Branding>) => void
   currentProjectId: string | null
   projectName: string
   setProjectMeta: (meta: { id: string | null; name?: string }) => void
@@ -422,6 +460,7 @@ export const useStore = create<VastuStore>()((set, get) => {
     moreOpen: false,
     clearOpen: false,
     appearanceOpen: false,
+    brandingOpen: false,
     setMoreOpen: (moreOpen) => set({ moreOpen }),
     mobileTab: 'plans',
     setMobileTab: (mobileTab) => set({ mobileTab, mobileSheet: null }),
@@ -429,6 +468,22 @@ export const useStore = create<VastuStore>()((set, get) => {
     setMobileSheet: (mobileSheet) => set({ mobileSheet }),
     setClearOpen: (clearOpen) => set({ clearOpen }),
     setAppearanceOpen: (appearanceOpen) => set({ appearanceOpen }),
+    setBrandingOpen: (brandingOpen) => set({ brandingOpen }),
+    branding: loadBranding(),
+    setBranding: (patch) => {
+      const branding = { ...get().branding, ...patch }
+      set({ branding })
+      try {
+        if ('footer' in patch) localStorage.setItem(BRAND_KEY, JSON.stringify({ footer: branding.footer }))
+        if ('logo' in patch) {
+          if (branding.logo) localStorage.setItem(BRAND_LOGO_KEY, JSON.stringify({ logo: branding.logo, w: branding.logoW, h: branding.logoH }))
+          else localStorage.removeItem(BRAND_LOGO_KEY)
+        }
+      } catch {
+        // storage full or private mode: it still prints for this session
+        if ('logo' in patch && branding.logo) get().toast('The logo is in use, but this device could not keep it for next time', 'warn')
+      }
+    },
     currentProjectId: null,
     projectName: 'Untitled plan',
     setProjectMeta: (meta) => {

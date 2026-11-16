@@ -83,6 +83,13 @@
   background: var(--panel-solid); border: 1px solid var(--stroke); border-radius: 16px;
   padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
 }
+/* the footer as it prints: the line over the logo, on white paper */
+.m-footer-preview {
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  padding: 12px 14px; border-radius: 12px; background: #FFFFFF; box-shadow: inset 0 0 0 1px var(--stroke-2);
+  color: #1B1B1D; font-size: 13px; font-weight: 600; text-align: center; overflow-wrap: anywhere;
+}
+.m-footer-preview img { display: block; max-width: 70%; max-height: 44px; object-fit: contain; }
 .m-card h2.m-card-title, .m-card-title { margin: 0; font-family: inherit; font-size: 13px; font-weight: 650; line-height: 1.3; color: var(--muted); }
 .m-card h2 { margin: 0; font-family: var(--display); font-size: var(--m-h2); font-weight: var(--display-weight); letter-spacing: var(--display-track); line-height: 1.15; }
 .m-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }

@@ -12,6 +12,33 @@ import type { Pt } from './types'
 
 const FONT = "'Inter Variable', Inter, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
 
+/* the report's inks (reportPdf.ts), so an image shared on its own matches the PDF it came with */
+const INK = '#1B1B1D'
+const MUTED = '#5F5F66'
+const BRAND = '#1E3A66'
+const RULE = '#E4E4E0'
+
+export interface PlanPng {
+  blob: Blob
+  w: number
+  h: number
+  /** the same figure without the practitioner's footer band, for pages that print their own
+   *  footer (the report); only made when asked for and a footer is set */
+  plain?: { blob: Blob; w: number; h: number }
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Could not load image'))
+    img.src = src
+  })
+}
+
+const canvasPng = (c: HTMLCanvasElement) => new Promise<Blob>((resolve, reject) =>
+  c.toBlob((b) => (b ? resolve(b) : reject(new Error('PNG encode failed'))), 'image/png'))
+
 /** Serialise a React SVG tree with the client renderer the app already ships — react-dom/server
  *  put ~58 KB (gz) on every start just for exports — and as XML, which an SVG image requires. */
 function svgMarkup(el: ReactElement): string {
@@ -60,7 +87,7 @@ function pickScaleBar(mpp: number, unit: 'ft' | 'm', maxWorldPx: number): { worl
   return best
 }
 
-export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number } | null> {
+export async function makePlanPng(opts: { plain?: boolean } = {}): Promise<PlanPng | null> {
   const s = useStore.getState()
   if (s.bg.kind === 'none' && s.pts.length === 0) return null
 
@@ -138,6 +165,31 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   const bandBottom = w0 * 0.06
   minY -= bandTop
   maxY += bandBottom
+
+  // the practitioner's own line, with their logo below it, closes the image under a hairline
+  const footTop = maxY
+  const brandLine = s.branding.footer.trim()
+  const brandLogo = s.branding.logo && s.branding.logoW > 0 && s.branding.logoH > 0 ? s.branding : null
+  const brandSize = w0 * 0.0155
+  let brandRuleY = 0, brandTextY = 0
+  let logoBox: { x: number; y: number; w: number; h: number } | null = null
+  if (brandLine || brandLogo) {
+    brandRuleY = footTop + w0 * 0.012
+    let at = brandRuleY + w0 * 0.016
+    if (brandLine) {
+      brandTextY = at + brandSize * 0.74
+      at = brandTextY + brandSize * 0.26
+    }
+    if (brandLogo) {
+      if (brandLine) at += w0 * 0.012
+      const aspect = brandLogo.logoW / brandLogo.logoH
+      let lh = w0 * 0.05, lw = lh * aspect
+      if (lw > w0 * 0.34) { lw = w0 * 0.34; lh = lw / aspect }
+      logoBox = { x: minX + (w0 - lw) / 2, y: at, w: lw, h: lh }
+      at += lh
+    }
+    maxY = at + w0 * 0.028
+  }
   const w = maxX - minX, h = maxY - minY
 
   // second ceiling keeps either output dimension <= 4000px (area under the ~16.7MP iOS canvas cap)
@@ -183,25 +235,25 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
   statBits.push(`North ${s.northDeg}° (${northSourceLabel})`)
 
   const bar = s.metersPerPx ? pickScaleBar(s.metersPerPx, s.unit, w * 0.24) : null
-  const barY = maxY - bandBottom * 0.42
+  const barY = footTop - bandBottom * 0.42
   // a light, paper-toned ground — this image is a deliverable (the client report,
   // or shared straight from Export PNG), not the in-app dark canvas; a dark plan
   // pasted into an otherwise-white report read as a mismatched, unfinished artifact
   const furniture = createElement('g', { fontFamily: FONT },
     createElement('text', {
-      x: minX + w * 0.02, y: minY + bandTop * 0.62, fontSize: t1, fontWeight: 800, fill: '#2A2A22',
+      x: minX + w * 0.02, y: minY + bandTop * 0.62, fontSize: t1, fontWeight: 800, fill: INK,
     }, `${title} — Vastu analysis`),
     createElement('text', {
       x: maxX - w * 0.02, y: minY + bandTop * 0.62, fontSize: t2, fontWeight: 600,
-      fill: '#6E6C5D', textAnchor: 'end',
+      fill: MUTED, textAnchor: 'end',
     }, dateStr),
     createElement('line', {
       x1: minX + w * 0.02, y1: minY + bandTop * 0.86, x2: maxX - w * 0.02, y2: minY + bandTop * 0.86,
-      stroke: '#A9782E', strokeWidth: w * 0.0012, opacity: 0.55,
+      stroke: BRAND, strokeWidth: w * 0.0012, opacity: 0.55,
     }),
     createElement('text', {
       x: maxX - w * 0.02, y: barY + t2 * 0.35, fontSize: t2, fontWeight: 600,
-      fill: '#40402E', textAnchor: 'end',
+      fill: INK, textAnchor: 'end',
     }, statBits.join('   ·   ')),
     ...(bar ? [
       ...[0, 1, 2, 3].map((i) => createElement('rect', {
@@ -210,14 +262,28 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
         y: barY - t2 * 0.42,
         width: bar.worldPx / 4,
         height: t2 * 0.5,
-        fill: i % 2 === 0 ? '#A9782E' : '#EDEAE1',
-        stroke: '#A9782E', strokeWidth: w * 0.0006,
+        fill: i % 2 === 0 ? BRAND : '#FFFFFF',
+        stroke: BRAND, strokeWidth: w * 0.0006,
       })),
       createElement('text', {
         key: 'sbl',
         x: minX + w * 0.02 + bar.worldPx + w * 0.012,
-        y: barY + t2 * 0.28, fontSize: t2 * 0.95, fontWeight: 650, fill: '#40402E',
+        y: barY + t2 * 0.28, fontSize: t2 * 0.95, fontWeight: 650, fill: INK,
       }, bar.label),
+    ] : []),
+    ...(brandLine || brandLogo ? [
+      createElement('line', {
+        key: 'brule',
+        x1: minX + w * 0.02, y1: brandRuleY, x2: maxX - w * 0.02, y2: brandRuleY,
+        stroke: RULE, strokeWidth: w * 0.0011,
+      }),
+    ] : []),
+    ...(brandLine ? [
+      createElement('text', {
+        key: 'bline',
+        x: minX + w / 2, y: brandTextY, fontSize: brandSize, fontWeight: 600,
+        fill: INK, textAnchor: 'middle',
+      }, brandLine),
     ] : []),
   )
 
@@ -246,9 +312,25 @@ export async function makePlanPng(): Promise<{ blob: Blob; w: number; h: number 
     canvas.width = outW; canvas.height = outH
     const ctx = canvas.getContext('2d')!
     ctx.drawImage(img, 0, 0, outW, outH)
-    const png = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'))
-    if (!png) throw new Error('PNG encode failed')
-    return { blob: png, w: outW, h: outH }
+    // the logo goes straight onto the canvas: WebKit can finish an SVG image's load before the
+    // pictures inside it have decoded, and draws them blank
+    // (a logo that will not decode leaves its space blank rather than failing the export)
+    const logo = logoBox && brandLogo?.logo ? await loadImage(brandLogo.logo).catch(() => null) : null
+    if (logo && logoBox) {
+      const sx = outW / w, sy = outH / h
+      ctx.imageSmoothingQuality = 'high'
+      ctx.drawImage(logo, (logoBox.x - minX) * sx, (logoBox.y - minY) * sy, logoBox.w * sx, logoBox.h * sy)
+    }
+    const png = await canvasPng(canvas)
+    let plain: PlanPng['plain']
+    if (opts.plain && (brandLine || brandLogo)) {
+      const ph = Math.round(((footTop - minY) / h) * outH)
+      const cut = document.createElement('canvas')
+      cut.width = outW; cut.height = ph
+      cut.getContext('2d')!.drawImage(canvas, 0, 0)
+      plain = { blob: await canvasPng(cut), w: outW, h: ph }
+    }
+    return { blob: png, w: outW, h: outH, plain }
   } finally {
     URL.revokeObjectURL(url)
   }

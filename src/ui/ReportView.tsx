@@ -148,6 +148,9 @@ export function ReportView() {
 
   const [imgUrl, setImgUrl] = useState<string | null>(null)
   const [imgBlob, setImgBlob] = useState<Blob | null>(null)
+  // what Share sends: the figure with the practitioner's footer band, when one is set
+  const [shareBlob, setShareBlob] = useState<Blob | null>(null)
+  const branding = useStore((s) => s.branding)
   const [imgDims, setImgDims] = useState<{ w: number; h: number } | null>(null)
   const [imgFailed, setImgFailed] = useState(false)
   const [pdfBusy, setPdfBusy] = useState(false)
@@ -167,13 +170,16 @@ export function ReportView() {
     let cancelled = false
     let url: string | null = null
     // the exporter (and its SVG serialiser) loads with the first report, not with the app
-    const job = import('../export').then((m) => m.makePlanPng())
-    planJob.current = job.catch(() => null)
+    // the page prints the practitioner's footer itself, so its figure is the copy without one
+    const job = import('../export').then((m) => m.makePlanPng({ plain: true }))
+    planJob.current = job.then((out) => (out ? out.plain ?? out : null)).catch(() => null)
     void job.then((out) => {
       if (!out || cancelled) return
-      url = URL.createObjectURL(out.blob)
-      setImgBlob(out.blob)
-      setImgDims({ w: out.w, h: out.h })
+      const fig = out.plain ?? out
+      url = URL.createObjectURL(fig.blob)
+      setImgBlob(fig.blob)
+      setShareBlob(out.blob)
+      setImgDims({ w: fig.w, h: fig.h })
       setImgUrl(url)
     }).catch(() => {
       if (cancelled) return
@@ -371,6 +377,7 @@ export function ReportView() {
         client: report.client,
         address: report.address,
         practitioner: report.practitioner,
+        branding,
         notes: report.notes,
         verdictLine,
         sevCounts,
@@ -392,10 +399,11 @@ export function ReportView() {
 
   const share = async () => {
     if (!requireLicense()) return
-    if (!imgBlob) return
-    const file = new File([imgBlob], `${projectName}-vastu.png`, { type: 'image/png' })
+    const out = shareBlob ?? imgBlob
+    if (!out) return
+    const file = new File([out], `${projectName}-vastu.png`, { type: 'image/png' })
     // Android's system WebView has no Web Share API — the app's own share sheet does it there
-    if (isNative()) { await shareBlobNative(imgBlob, file.name); return }
+    if (isNative()) { await shareBlobNative(out, file.name); return }
     try {
       if (navigator.canShare?.({ files: [file] })) {
         await navigator.share({ files: [file], title: `${projectName} — Vastu analysis` })
@@ -695,7 +703,13 @@ export function ReportView() {
           <div className="print-value">{report.notes}</div>
         </section>
 
-        <footer className="report-foot">
+        <footer className={`report-foot ${branding.footer.trim() || branding.logo ? 'branded' : ''}`}>
+          {(branding.footer.trim() || branding.logo) && (
+            <div className="report-brand">
+              {branding.footer.trim() && <div className="report-brand-line">{branding.footer.trim()}</div>}
+              {branding.logo && <img className="report-brand-logo" src={branding.logo} alt={branding.footer.trim() ? '' : 'Practitioner’s logo'} />}
+            </div>
+          )}
           Generated with Vastu Studio · angles measured clockwise from true north · zone areas by
           exact sector clipping of the traced boundary
         </footer>

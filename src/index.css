@@ -1598,6 +1598,62 @@ kbd {
 .accent-swatch.on { border-color: var(--text); transform: scale(1.08); }
 .appearance-done { margin: 12px 10px 2px; }
 
+/* ————— footer & logo sheet ————— */
+/* the preview is a report page's foot drawn small: white paper in either theme, like the export */
+.brand-preview {
+  margin: 2px 10px 0;
+  padding: 12px 14px 14px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: inset 0 0 0 1px var(--stroke-2);
+  color: #5F5F66;
+  font-size: 10px;
+  line-height: 1.3;
+}
+.brand-preview-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding-top: 9px;
+  border-top: 1px solid #E4E4E0;
+}
+.brand-preview-side { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-preview-side.end { text-align: right; }
+.brand-preview-centre {
+  min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  text-align: center; color: #1B1B1D; font-size: 10.5px; font-weight: 600;
+}
+.brand-preview-centre.stock { color: #8A8A90; font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase; }
+.brand-preview-centre img { display: block; height: 26px; max-width: 120px; object-fit: contain; }
+.brand-preview-logo { display: block; margin: 8px auto 0; height: 26px; max-width: 150px; object-fit: contain; }
+.brand-hint { margin: 8px 10px 0; padding: 0; }
+.brand-input { font-size: 14px; padding: 10px 12px; }
+@media (pointer: coarse) { .brand-input { font-size: 16px; } }
+.brand-drop {
+  display: flex; align-items: center; gap: 12px;
+  width: 100%;
+  padding: 10px;
+  border-radius: 12px;
+  border: 1.5px dashed var(--stroke-2);
+  text-align: left;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+.brand-drop:hover:not(:disabled) { background: var(--surface-2-hover); }
+.brand-logo-row { display: flex; align-items: center; gap: 8px; }
+.brand-logo-row .btn-ghost { flex: none; }
+.brand-logo-thumb {
+  flex: 1; min-width: 0; height: 58px;
+  display: grid; place-items: center;
+  padding: 8px 12px;
+  background: #FFFFFF;
+  border-radius: 10px;
+  box-shadow: inset 0 0 0 1px var(--stroke-2);
+}
+.brand-logo-thumb img { max-width: 100%; max-height: 42px; object-fit: contain; }
+.brand-sheet.dragging .brand-drop { border-color: var(--gold); background: var(--fill-1); }
+.brand-sheet.dragging .brand-logo-thumb { box-shadow: inset 0 0 0 2px var(--gold); }
+
 /* tool hint pill — the persistent "what do I do now"; quiet neutral text, not
    accent-coloured — instructions shouldn't shout in whatever accent is active */
 .tool-hint {
@@ -1887,6 +1943,11 @@ kbd {
 }
 .report-meta input:focus, .report-notes:focus { border-color: #1B1B1D; }
 .report-foot { margin-top: 26px; padding-top: 10px; border-top: 1px solid #E4E4E0; color: #5F5F66; font-size: 10.5px; }
+/* the practitioner's line and logo, centred over the method note as on every PDF page */
+.report-foot.branded { text-align: center; }
+.report-brand { display: flex; flex-direction: column; align-items: center; gap: 8px; margin: 6px 0 14px; }
+.report-brand-line { color: #1B1B1D; font-size: 12.5px; font-weight: 600; overflow-wrap: anywhere; }
+.report-brand-logo { display: block; max-width: 240px; max-height: 46px; object-fit: contain; }
 
 @media print {
   /* the app is a full-height, overflow-clipped flex shell (fixed on phones): left as it is,

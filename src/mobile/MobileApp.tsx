@@ -6,6 +6,7 @@ import { useStore, type MobileTab } from '../store'
 import { Toasts } from '../ui/Toasts'
 import { CalibrateDialog, DwgDialog, MarkerDialog, RoomShapeDialog, TextDialog } from '../ui/Dialogs'
 import { AppearanceSheet } from '../ui/AppearanceSheet'
+import { BrandingSheet } from '../ui/BrandingSheet'
 import { BroadcastBar } from '../auth/BroadcastBar'
 import { PlansScreen } from './PlansScreen'
 import { StudioScreen } from './StudioScreen'
@@ -41,6 +42,8 @@ export function MobileApp({ fileRef, cameraRef, onFiles }: {
   const detecting = useStore((s) => s.detectedRooms != null)
   const appearanceOpen = useStore((s) => s.appearanceOpen)
   const setAppearanceOpen = useStore((s) => s.setAppearanceOpen)
+  const brandingOpen = useStore((s) => s.brandingOpen)
+  const setBrandingOpen = useStore((s) => s.setBrandingOpen)
   const hasPlan = useStore((s) => s.bg.kind !== 'none' || s.pts.length > 0)
 
   return (
@@ -73,6 +76,7 @@ export function MobileApp({ fileRef, cameraRef, onFiles }: {
       <RoomShapeDialog />
       <DwgDialog />
       <AppearanceSheet open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+      <BrandingSheet open={brandingOpen} onClose={() => setBrandingOpen(false)} />
       <Suspense fallback={null}>
         {detecting && <AutoDetectDialog />}
         {mapOpen && <MapModal />}

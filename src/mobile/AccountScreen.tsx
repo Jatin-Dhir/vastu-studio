@@ -1,6 +1,6 @@
-import { Download, HelpCircle, LogOut, RefreshCw, ShieldCheck } from 'lucide-react'
+import { Download, HelpCircle, LogOut, RefreshCw, ShieldCheck, Signature } from 'lucide-react'
 import { APP_VERSION, canUpdate, checkForUpdates } from '../updater'
-import { useStore } from '../store'
+import { hasBranding, useStore } from '../store'
 import { signOut } from '../auth/session'
 import { AUTH_ENABLED } from '../auth/supabase'
 import { ShortcutsDialog } from '../ui/Dialogs'
@@ -17,6 +17,9 @@ export function AccountScreen() {
   const unit = useStore((s) => s.unit)
   const setUnit = useStore((s) => s.setUnit)
   const setShortcutsOpen = useStore((s) => s.setShortcutsOpen)
+  const branding = useStore((s) => s.branding)
+  const setBrandingOpen = useStore((s) => s.setBrandingOpen)
+  const branded = hasBranding(branding)
   const user = auth.status === 'ok' ? auth.user : null
 
   return (
@@ -52,6 +55,21 @@ export function AccountScreen() {
           <button role="radio" aria-checked={unit === 'ft'} tabIndex={unit === 'ft' ? 0 : -1} className={unit === 'ft' ? 'on' : ''} onClick={() => setUnit('ft')}>Feet</button>
           <button role="radio" aria-checked={unit === 'm'} tabIndex={unit === 'm' ? 0 : -1} className={unit === 'm' ? 'on' : ''} onClick={() => setUnit('m')}>Metres</button>
         </div>
+      </section>
+
+      <section className="m-card">
+        <h2 className="m-card-title">Footer & logo</h2>
+        {branded ? (
+          <div className="m-footer-preview">
+            {branding.footer.trim() && <span>{branding.footer.trim()}</span>}
+            {branding.logo && <img src={branding.logo} alt="Your logo" />}
+          </div>
+        ) : (
+          <p className="m-muted">Your name and logo at the foot of every PDF and PNG you share.</p>
+        )}
+        <button className="btn-ghost m-btn" onClick={() => setBrandingOpen(true)}>
+          <Signature size={15} /> {branded ? 'Change footer & logo' : 'Add footer & logo'}
+        </button>
       </section>
 
       <section className="m-card">

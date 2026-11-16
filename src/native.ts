@@ -31,6 +31,7 @@ export async function initNative(): Promise<void> {
     await App.addListener('backButton', () => {
       // peel one layer per press: dialogs → modals → selections → armed tool → home
       const s = useStore.getState()
+      if (s.brandingOpen) return s.setBrandingOpen(false)
       if (s.appearanceOpen) return s.setAppearanceOpen(false)
       if (s.mobileSheet) return s.setMobileSheet(null)
       if (s.clearOpen) return s.setClearOpen(false)

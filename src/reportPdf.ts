@@ -13,6 +13,8 @@ import type { Assessment } from './reportText'
  * Typographic system (A4, points):
  *   margins 48 · body 9.5/14 · section heads Cormorant 17 · numerals Inter 22
  *   hairlines 0.5 in RULE · the logo's navy for the masthead and section marks; colour otherwise only for verdicts
+ *   page foot: project left, page number right, and between them the practitioner's line
+ *   (Inter 7.5 semibold) with their logo 20 pt high below it, or the studio's name when unset
  */
 
 export interface ReportPdfData {
@@ -21,6 +23,8 @@ export interface ReportPdfData {
   client: string
   address: string
   practitioner: string
+  /** the practitioner's own line and logo for the foot of every page (Footer & logo) */
+  branding?: { footer: string; logo: string | null; logoW: number; logoH: number } | null
   notes: string
   verdictLine: string | null
   sevCounts: Record<Severity, number>
@@ -110,7 +114,22 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
   const H = doc.internal.pageSize.getHeight()
   const M = 48
   const CW = W - M * 2
-  const BOTTOM = H - 56
+
+  /* The page foot. With a logo it grows: under the practitioner's line, or in the line's place
+     when there is none. The body always stops 16 pt above the foot's hairline. */
+  const brandLine = clean(data.branding?.footer.trim() ?? '')
+  const brandLogo = data.branding?.logo && data.branding.logoW > 0 && data.branding.logoH > 0
+    ? { url: data.branding.logo, aspect: data.branding.logoW / data.branding.logoH } : null
+  let logoW = 0, logoH = 0, logoTop = 0
+  if (brandLogo) {
+    logoH = 20; logoW = logoH * brandLogo.aspect
+    if (logoW > 110) { logoW = 110; logoH = logoW / brandLogo.aspect }
+  }
+  let footBase: number, footRule: number
+  if (!brandLogo) { footBase = H - 28; footRule = H - 40 }
+  else if (brandLine) { logoTop = H - 24 - logoH; footBase = logoTop - 7; footRule = footBase - 12 }
+  else { logoTop = H - 26 - logoH; footRule = logoTop - 6; footBase = logoTop + logoH / 2 + 2.5 }
+  const BOTTOM = footRule - 16
   let y = 56
 
   /* ---- primitives ---- */
@@ -226,9 +245,11 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
     return splitLines(clean(raw), width).length * lh
   }
   /** Tracked uppercase label — eyebrows, table heads, tiny captions. */
-  const label = (s: string, x: number, at: number, c: RGB = MUTED, size = 6.5, align: 'left' | 'right' = 'left') => {
+  const label = (s: string, x: number, at: number, c: RGB = MUTED, size = 6.5, align: 'left' | 'right' | 'center' = 'left') => {
     font(SANS, size, true); color(c); doc.setCharSpace(0.7)
-    doc.text(clean(s).toUpperCase(), x, at, align === 'right' ? { align: 'right' } : undefined)
+    const t = clean(s).toUpperCase()
+    if (align === 'center') doc.text(t, x - doc.getTextWidth(t) / 2, at)
+    else doc.text(t, x, at, align === 'right' ? { align: 'right' } : undefined)
     doc.setCharSpace(0)
   }
   /** Tinted verdict pill. Returns its width. */
@@ -511,13 +532,43 @@ export async function buildReportPdf(data: ReportPdfData): Promise<Blob> {
 
   /* =============================================================== footer */
   const pages = doc.getNumberOfPages()
+  font(SANS, 7)
+  const pageW = doc.getTextWidth(`Page ${pages} of ${pages}`)
+  // the practitioner's line keeps the middle: it shrinks a step before it is cut, and the
+  // project name (already on the cover) gives way to it
+  let lineSize = 7.5, lineText = '', centreW = 0
+  if (brandLine) {
+    font(SANS, lineSize, true)
+    const full = widthOf(brandLine)
+    if (full > CW * 0.6) { lineSize = Math.max(6.5, (lineSize * CW * 0.6) / full); font(SANS, lineSize, true) }
+    lineText = fit(brandLine, CW - 2 * (pageW + 14))
+    centreW = widthOf(lineText)
+  } else if (brandLogo) {
+    centreW = logoW
+  } else {
+    font(SANS, 6, true); doc.setCharSpace(0.7)
+    centreW = doc.getTextWidth('VASTU STUDIO')
+    doc.setCharSpace(0)
+  }
+  const sideW = Math.min(CW / 2 - 50, (CW - centreW) / 2 - 14)
+  const logoFormat = brandLogo?.url.startsWith('data:image/png') ? 'PNG' : 'JPEG'
   for (let p = 1; p <= pages; p++) {
     doc.setPage(p)
-    hairline(M, M + CW, H - 40)
+    hairline(M, M + CW, footRule)
     font(SANS, 7); color(MUTED)
-    drawLine(fit(clean(`${data.projectName} — Vastu analysis`), CW / 2 - 50), M, H - 28)
-    doc.text(`Page ${p} of ${pages}`, M + CW, H - 28, { align: 'right' })
-    label('Vastu Studio', M + CW / 2, H - 28, mix(MUTED, 0.85), 6)
+    if (sideW >= 40) drawLine(fit(clean(`${data.projectName} — Vastu analysis`), sideW), M, footBase)
+    doc.text(`Page ${p} of ${pages}`, M + CW, footBase, { align: 'right' })
+    if (lineText) {
+      font(SANS, lineSize, true); color(INK)
+      drawLine(lineText, M + CW / 2 - centreW / 2, footBase)
+    } else if (!brandLogo) {
+      label('Vastu Studio', M + CW / 2, footBase, mix(MUTED, 0.85), 6, 'center')
+    }
+    // one embedded image, placed on every page by its alias; a logo jsPDF cannot read is left
+    // out rather than costing the client their report
+    if (brandLogo) {
+      try { doc.addImage(brandLogo.url, logoFormat, M + (CW - logoW) / 2, logoTop, logoW, logoH, 'brand-logo', 'FAST') } catch { /* unreadable logo */ }
+    }
   }
 
   return doc.output('blob')

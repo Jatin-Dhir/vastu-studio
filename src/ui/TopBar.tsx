@@ -1,9 +1,9 @@
 import {
   Check, Download, Eraser, FileText, FolderOpen, HelpCircle, Image, Lock, LockOpen, Map as MapIcon,
-  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, RefreshCw, Ruler, Save, ShieldCheck, Square as SquareIcon, Trash2, Undo2, Upload, UserRound, Wand2,
+  MapPin, Maximize2, MoreHorizontal, Palette, PenLine, Redo2, RefreshCw, Ruler, Save, ShieldCheck, Signature, Square as SquareIcon, Trash2, Undo2, Upload, UserRound, Wand2,
 } from 'lucide-react'
 import { APP_VERSION, canUpdate, checkForUpdates } from '../updater'
-import { useStore } from '../store'
+import { hasBranding, useStore } from '../store'
 import { requestFit } from '../canvas/fit'
 import { mod, press } from '../platform'
 import { requireAnalysis, requireLicense } from '../auth/gate'
@@ -11,6 +11,7 @@ import { signOut } from '../auth/session'
 import { saveProjectFile } from '../importers/project'
 import { ActionSheet, type SheetRow } from './ActionSheet'
 import { AppearanceSheet } from './AppearanceSheet'
+import { BrandingSheet } from './BrandingSheet'
 import { goToStep, useGuide } from './steps'
 import { radioGroupKeys } from './useModalFocus'
 import type { TextSample } from '../roomDetect'
@@ -107,6 +108,9 @@ export function TopBar() {
   const setClearOpen = useStore((s) => s.setClearOpen)
   const appearanceOpen = useStore((s) => s.appearanceOpen)
   const setAppearanceOpen = useStore((s) => s.setAppearanceOpen)
+  const brandingOpen = useStore((s) => s.brandingOpen)
+  const setBrandingOpen = useStore((s) => s.setBrandingOpen)
+  const branding = useStore((s) => s.branding)
   const auth = useStore((s) => s.auth)
   const appUpdate = useStore((s) => s.appUpdate)
 
@@ -172,6 +176,13 @@ export function TopBar() {
       right: <UnitSeg className="seg" unit={unit} setUnit={setUnit} onClick={(e) => e.stopPropagation()} />,
     },
     { icon: Palette, label: 'Appearance', sub: 'Theme and accent colour', onTap: () => setAppearanceOpen(true) },
+    {
+      icon: Signature, label: 'Footer & logo',
+      sub: !hasBranding(branding) ? 'Your name and logo on every PDF and PNG'
+        : !branding.footer.trim() ? 'Your logo'
+          : branding.logo ? `${branding.footer.trim()} · with logo` : branding.footer.trim(),
+      onTap: () => setBrandingOpen(true),
+    },
     { icon: Maximize2, label: 'Fit to screen', sub: 'Bring the whole plan into view', fold: true, onTap: requestFit },
     { icon: Upload, label: 'Import a plan', sub: 'PDF · DXF · photo · .vastu project', fold: true, onTap: () => window.dispatchEvent(new CustomEvent('vastu:open-file')) },
     { icon: MapIcon, label: 'From Maps', sub: 'Capture the plot from satellite view', fold: true, onTap: () => useStore.getState().setMapOpen(true) },
@@ -292,6 +303,7 @@ export function TopBar() {
     <ActionSheet open={moreOpen} title="More" rows={moreRows} onClose={() => setMoreOpen(false)} />
     <ActionSheet open={clearOpen} title="Clear…" rows={clearRows} onClose={() => setClearOpen(false)} />
     <AppearanceSheet open={appearanceOpen} onClose={() => setAppearanceOpen(false)} />
+    <BrandingSheet open={brandingOpen} onClose={() => setBrandingOpen(false)} />
     </>
   )
 }

@@ -342,6 +342,9 @@
   .report-assess-list { gap: 4px; }
   .report-note { font-size: 9.5px; }
   .report-foot { margin-top: 10px; font-size: 8.5px; }
+  .report-brand { gap: 6px; margin: 4px 0 8px; break-inside: avoid; }
+  .report-brand-line { font-size: 10px; }
+  .report-brand-logo { max-height: 0.5in; max-width: 2.4in; }
 }
 
 /* how an item spreads across zones — one chip per zone it touches */

@@ -175,7 +175,7 @@ export default function App() {
       const key = /^[a-z]$/i.test(e.key) ? e.key.toLowerCase() : /^Key[A-Z]$/.test(e.code) && e.key.length === 1 && !/[?+=_-]/.test(e.key) ? e.code.slice(3).toLowerCase() : e.key
       // modal surfaces own the keyboard while open — each closes itself on Escape
       if (s.calDialogOpen || s.markerEditing || s.roomShapeEditing || s.textEditing || s.shortcutsOpen || s.dwgNotice || s.mapOpen || s.projectsOpen || s.reportOpen ||
-        s.moreOpen || s.clearOpen || s.appearanceOpen || s.detectedRooms || s.mobileSheet) return
+        s.moreOpen || s.clearOpen || s.appearanceOpen || s.brandingOpen || s.detectedRooms || s.mobileSheet) return
       // Enter, Space and the arrows on a focused button or link are that control's own keys
       // (Enter on "Help" must not also close the outline)
       const onControl = !!t && t !== document.body && !!t.closest?.('button, a, [role="button"], [role="tab"], [tabindex]:not(svg)')
