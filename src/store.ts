@@ -310,6 +310,8 @@ export const DEFAULT_COMPASS: CompassState = {
   scalePct: 100,
   opacity: 0.95,
   fillPct: 26,
+  bandPct: 100,
+  detailPct: 100,
   clip: true,
   labels: true,
   degreeRing: true,

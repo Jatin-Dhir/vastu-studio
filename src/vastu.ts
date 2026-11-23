@@ -314,6 +314,15 @@ export const COMPASS_META: { id: string; label: string; sub: string }[] = [
   { id: 'zones16', label: '16 Zones', sub: 'MahaVastu chakra' },
   { id: 'gates32', label: '32 Gates', sub: 'Entrance devtas' },
   { id: 'grid9',   label: 'Pada Grid', sub: '9×9 mandala' },
-  { id: 'marma',   label: 'Marma Sthan', sub: '6 vamshas · 9 marmas' },
+  { id: 'marma',   label: 'Marma Sthan', sub: '32 marmasthans' },
   { id: 'custom',  label: 'Custom', sub: 'Your own PNG' },
 ]
+
+/** What each compass's own information is called on its fader in the compass panel; the rest of
+ *  what it draws fades as "Labels & lines". The custom image has neither. */
+export const BAND_LABEL: Partial<Record<string, string>> = {
+  zones16: 'Zone ring',
+  gates32: 'Devta ring',
+  grid9: 'Pada colours & names',
+  marma: 'Marmasthans',
+}

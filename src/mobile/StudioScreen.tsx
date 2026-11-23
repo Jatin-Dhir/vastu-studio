@@ -11,7 +11,7 @@ import { runDetect } from '../ui/TopBar'
 import { evaluateVastu } from '../evaluate'
 import { centroid, sampledPolygon } from '../geometry'
 import { analysisAllowed } from '../auth/gate'
-import { COMPASS_META } from '../vastu'
+import { BAND_LABEL, COMPASS_META } from '../vastu'
 import { CentredDial } from '../ui/CentredDial'
 import { formatArea } from '../format'
 import { polygonArea } from '../geometry'
@@ -311,6 +311,18 @@ function CompassBody() {
           <input type="range" min={0} max={70} step={2} value={compass.fillPct} style={{ '--b': `${(compass.fillPct / 70) * 100}%` } as React.CSSProperties}
             onChange={(e) => setCompass({ fillPct: Number(e.target.value) })} /></label>
       )}
+      {BAND_LABEL[compass.id] && ([
+        ['bandPct', BAND_LABEL[compass.id]!],
+        ['detailPct', 'Labels & lines'],
+      ] as const).map(([key, label]) => {
+        const v = compass[key] ?? 100
+        return (
+          <label key={key} className="m-range"><span>{label} <b>{v}%</b></span>
+            <input type="range" min={0} max={100} step={5} value={v} style={{ '--b': `${v}%` } as React.CSSProperties}
+              onChange={(e) => setCompass({ [key]: Number(e.target.value) })} /></label>
+        )
+      })}
+      {BAND_LABEL[compass.id] && <p className="m-muted m-fade-note">These two leave North, East, South and West untouched.</p>}
       <div className="m-toggles">
         {COMPASS_TOGGLES.filter((t) => !t.only || t.only.includes(compass.id)).map(({ key, label }) => (
           <button key={key} className={`m-toggle ${compass[key] ? 'on' : ''}`} aria-pressed={compass[key]} onClick={() => setCompass({ [key]: !compass[key] })}>{label}</button>

@@ -69,7 +69,7 @@ export function sanitizeProject(p: any): ProjectFile {
   p.unit = p.unit === 'm' ? 'm' : 'ft'
   p.compass = p.compass && typeof p.compass === 'object' ? p.compass : {}
   if (p.compass.customUrl != null && !isDataImage(p.compass.customUrl)) delete p.compass.customUrl
-  for (const k of ['scalePct', 'opacity', 'fillPct', 'brahmaPct', 'customRotDeg', 'customAspect'] as const) {
+  for (const k of ['scalePct', 'opacity', 'fillPct', 'bandPct', 'detailPct', 'brahmaPct', 'customRotDeg', 'customAspect'] as const) {
     if (p.compass[k] != null && !finite(p.compass[k])) delete p.compass[k]
   }
   if (p.bg.dataUrl != null && !isDataImage(p.bg.dataUrl)) { p.bg = { ...p.bg, kind: 'none', dataUrl: undefined } }

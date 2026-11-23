@@ -1,4 +1,5 @@
 import { cloneElement, Fragment, memo, useMemo, useRef } from 'react'
+import type { ReactNode } from 'react'
 import type { BgState, CompassState, Marker, Pt, RoomShape, Stroke, TextNote, Unit } from '../types'
 import type { DxfImport } from '../importers/dxf'
 import { edgeLength, edgePoint, outlinePathD, polar, polygonArea, sampledPolygon } from '../geometry'
@@ -475,6 +476,21 @@ interface ChakraProps {
   part?: 'body' | 'labels'
 }
 
+/** The compass's two fades, 0–1 (Vastu compass panel): `band` for its own information (the zone
+ *  ring, the devta ring, the pada colours and names, the marmasthans) and `detail` for the labels
+ *  and lines round it. North, East, South, West and the north needle take neither, so they stay
+ *  clear while the rest is faded off a long plot. Plans saved before these existed draw at full. */
+function fadesOf(compass: CompassState): { band: number; detail: number } {
+  const f = (v: number | undefined) => Math.min(1, Math.max(0, (v ?? 100) / 100))
+  return { band: f(compass.bandPct), detail: f(compass.detailPct) }
+}
+
+/** One faded layer. At nothing it is not drawn at all, so a ring faded away cannot still cover
+ *  the plan beneath it. */
+function Fade({ op, children }: { op: number; children: ReactNode }) {
+  return op <= 0 ? null : <g opacity={op < 1 ? op : undefined}>{children}</g>
+}
+
 /** The rings around a wheel compass, as a practitioner's printed chakra carries them, from the
  *  plan outward: the 32 entrances, a band (the sixteen zones and what each governs, or the
  *  thirty-two devtas), the directions, and the 360° scale. Radii in R. */
@@ -503,11 +519,12 @@ function annulusPath(c: Pt, r0: number, r1: number): string {
 
 /** The rings' drawing: their ground, the band's sectors, the entrances' verdict strip, the dividers
  *  and circles, the scale's ticks and the north flag. */
-function ChakraRings({ c, R, north, k, paper, scale, rings, band, bandEdges }: {
+function ChakraRings({ c, R, north, k, paper, scale, rings, band, bandEdges, fade }: {
   c: Pt; R: number; north: number; k: number; paper?: boolean; scale: boolean; rings: Rings
   band: { a0: number; a1: number; fill: string }[]
   /** bearings, north applied, where the band's sectors meet */
   bandEdges: number[]
+  fade: { band: number; detail: number }
 }) {
   const px = R * k
   const outer = R * (scale ? rings.s1 : rings.d1)
@@ -530,10 +547,15 @@ function ChakraRings({ c, R, north, k, paper, scale, rings, band, bandEdges }: {
   return (
     <g>
       {/* the rings' ground: the chakra reads as one instrument, and the plan shows through it */}
-      <path d={annulusPath(c, R, outer)} fillRule="evenodd" fill={paper ? '#FFFFFF' : '#12141A'} fillOpacity={paper ? 0.93 : 0.9} />
-      {band.map((b, i) => (
-        <path key={`b${i}`} d={ringSectorPath(c, R * rings.e1, R * rings.b1, b.a0, b.a1)} fill={b.fill} fillOpacity={0.94} />
-      ))}
+      <Fade op={fade.detail}>
+        <path d={annulusPath(c, R, outer)} fillRule="evenodd" fill={paper ? '#FFFFFF' : '#12141A'} fillOpacity={paper ? 0.93 : 0.9} />
+      </Fade>
+      <Fade op={fade.band}>
+        {band.map((b, i) => (
+          <path key={`b${i}`} d={ringSectorPath(c, R * rings.e1, R * rings.b1, b.a0, b.a1)} fill={b.fill} fillOpacity={0.94} />
+        ))}
+      </Fade>
+      <Fade op={fade.detail}>
       {GATES32.map((g, i) => {
         const v = verdictOf(g.code)
         if (!v) return null
@@ -556,15 +578,17 @@ function ChakraRings({ c, R, north, k, paper, scale, rings, band, bandEdges }: {
       ))}
       {ticks}
       <CasedCircle paper={paper} cx={c.x} cy={c.y} r={R} k={k} width={1.6 / k} opacity={0.9} />
+      </Fade>
       <NorthNeedle c={c} R={outer} north={north} k={k} />
     </g>
   )
 }
 
 /** The rings' lettering: the entrance codes, the band's words, the directions and the degrees. */
-function ChakraRingLabels({ c, R, north, k, vr, paper, scale, rings, band }: {
+function ChakraRingLabels({ c, R, north, k, vr, paper, scale, rings, band, fade }: {
   c: Pt; R: number; north: number; k: number; vr: number; paper?: boolean; scale: boolean; rings: Rings
   band: { deg: number; text: string; fill: string; size: number }[]
+  fade: { band: number; detail: number }
 }) {
   const px = R * k
   const textInk = paper ? '#1B1B1D' : '#ECEEF3'
@@ -574,32 +598,40 @@ function ChakraRingLabels({ c, R, north, k, vr, paper, scale, rings, band }: {
   const codeSize = Math.min(R * 0.03, Math.max(R * 0.024, 7.5 / k))
   const dirSize = Math.min(R * 0.038, Math.max(R * 0.03, 9 / k))
   const degSize = Math.min(R * 0.023, Math.max(R * 0.019, 7 / k))
+  const direction = (z: (typeof ZONES16)[number], i: number) => {
+    const cardinal = i % 4 === 0
+    return (
+      <RingLabel key={`d${z.key}`} paper={paper} c={c} deg={north + i * 22.5} r={R * (rings.b1 + rings.d1) / 2}
+        size={cardinal ? dirSize * 1.08 : dirSize * 0.92} text={DIR_WORD[z.key] ?? z.key}
+        fill={i === 0 ? red : textInk} weight={cardinal ? 800 : 650} spacing={R * 0.002} vr={vr}
+        // cased, so the four still read over the drawing when the ring beneath is faded away
+        halo={cardinal ? dirSize * 0.24 : 0} />
+    )
+  }
   return (
     <g>
-      {px >= 210 && GATES32.map((g, i) => {
-        const v = verdictOf(g.code)
-        return (
-          <RingLabel key={g.code} paper={paper} c={c} deg={north + GATE_START_DEG + (i + 0.5) * 11.25}
-            r={R * (1 + rings.e1) / 2} size={codeSize} text={g.code} fill={v ? tone[v] : dimInk} weight={700} vr={vr} />
-        )
-      })}
-      {band.map((b, i) => (
-        <RingLabel key={`w${i}`} paper={paper} c={c} deg={b.deg} r={R * (rings.e1 + rings.b1) / 2}
-          size={b.size} text={b.text} fill={b.fill} weight={700} spacing={R * 0.0012} vr={vr} />
-      ))}
-      {ZONES16.map((z, i) => {
-        if (i % 2 === 1 && px < 160) return null
-        const cardinal = i % 4 === 0
-        return (
-          <RingLabel key={`d${z.key}`} paper={paper} c={c} deg={north + i * 22.5} r={R * (rings.b1 + rings.d1) / 2}
-            size={cardinal ? dirSize * 1.08 : dirSize * 0.92} text={DIR_WORD[z.key] ?? z.key}
-            fill={i === 0 ? red : textInk} weight={cardinal ? 800 : 650} spacing={R * 0.002} vr={vr} />
-        )
-      })}
-      {scale && px >= 170 && Array.from({ length: 36 }, (_, j) => j * 10).filter((d) => px >= 300 || d % 30 === 0).map((d) => (
-        <RingLabel key={`g${d}`} paper={paper} c={c} deg={north + d} r={R * (rings.d1 + 0.024)}
-          size={degSize} text={String(d)} fill={d === 0 ? red : dimInk} weight={600} vr={vr} />
-      ))}
+      <Fade op={fade.detail}>
+        {px >= 210 && GATES32.map((g, i) => {
+          const v = verdictOf(g.code)
+          return (
+            <RingLabel key={g.code} paper={paper} c={c} deg={north + GATE_START_DEG + (i + 0.5) * 11.25}
+              r={R * (1 + rings.e1) / 2} size={codeSize} text={g.code} fill={v ? tone[v] : dimInk} weight={700} vr={vr} />
+          )
+        })}
+        {ZONES16.map((z, i) => (i % 4 === 0 || (i % 2 === 1 && px < 160) ? null : direction(z, i)))}
+        {scale && px >= 170 && Array.from({ length: 36 }, (_, j) => j * 10).filter((d) => px >= 300 || d % 30 === 0).map((d) => (
+          <RingLabel key={`g${d}`} paper={paper} c={c} deg={north + d} r={R * (rings.d1 + 0.024)}
+            size={degSize} text={String(d)} fill={d === 0 ? red : dimInk} weight={600} vr={vr} />
+        ))}
+      </Fade>
+      <Fade op={fade.band}>
+        {band.map((b, i) => (
+          <RingLabel key={`w${i}`} paper={paper} c={c} deg={b.deg} r={R * (rings.e1 + rings.b1) / 2}
+            size={b.size} text={b.text} fill={b.fill} weight={700} spacing={R * 0.0012} vr={vr} />
+        ))}
+      </Fade>
+      {/* North, East, South and West: never faded with the rest */}
+      {ZONES16.map((z, i) => (i % 4 === 0 ? direction(z, i) : null))}
     </g>
   )
 }
@@ -610,7 +642,8 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, pa
     const size = Math.min(R * 0.031, Math.max(R * 0.024, 7.5 / k))
     return (
       <ChakraRingLabels c={c} R={R} north={north} k={k} vr={vr} paper={paper} scale={compass.degreeRing} rings={ZONE_RINGS}
-        band={R * k >= 190 ? ZONES16.map((z, i) => ({ deg: north + i * 22.5, text: zoneWords(z.theme).toUpperCase(), fill: onColour(z.color), size })) : []} />
+        band={R * k >= 190 ? ZONES16.map((z, i) => ({ deg: north + i * 22.5, text: zoneWords(z.theme).toUpperCase(), fill: onColour(z.color), size })) : []}
+        fade={fadesOf(compass)} />
     )
   }
   const clip = compass.clip && closed && pts.length >= 3
@@ -636,10 +669,12 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, pa
     </g>
   )
   const edges = ZONES16.map((_, i) => north - 11.25 + i * 22.5)
+  const fade = fadesOf(compass)
   return (
     <g>
       {fills}
       {/* zone dividers: a quiet reference grid, not a crosshatch over the actual floor plan */}
+      <Fade op={fade.detail}>
       {edges.map((a, i) => {
         const p = polar(c, a, R)
         return (
@@ -651,8 +686,9 @@ function Zones16({ c, R, north, compass, k, vr, pts, closed, idPrefix, baseR, pa
           </Fragment>
         )
       })}
+      </Fade>
       <ChakraRings c={c} R={R} north={north} k={k} paper={paper} scale={compass.degreeRing} rings={ZONE_RINGS}
-        band={ZONES16.map((z, i) => ({ a0: edges[i], a1: edges[i] + 22.5, fill: z.color }))} bandEdges={edges} />
+        band={ZONES16.map((z, i) => ({ a0: edges[i], a1: edges[i] + 22.5, fill: z.color }))} bandEdges={edges} fade={fade} />
     </g>
   )
 }
@@ -668,12 +704,14 @@ function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraPr
       const size = Math.min(R * 0.027, (R * 0.205) / (g.devta.length * 0.64))
       return { deg: north + GATE_START_DEG + (i + 0.5) * 11.25, text: g.devta.toUpperCase(), fill: v ? onColour(GATE_BAND[v]) : textInk, size }
     }).filter((b) => b.size * k >= 5.5)
-    return <ChakraRingLabels c={c} R={R} north={north} k={k} vr={vr} paper={paper} scale={compass.degreeRing} rings={GATE_RINGS} band={band} />
+    return <ChakraRingLabels c={c} R={R} north={north} k={k} vr={vr} paper={paper} scale={compass.degreeRing} rings={GATE_RINGS} band={band} fade={fadesOf(compass)} />
   }
   const edges = GATES32.map((_, i) => north + GATE_START_DEG + i * 11.25)
+  const fade = fadesOf(compass)
   return (
     <g>
       {/* the four sides meet on the diagonals; the cardinals run through the middle of each */}
+      <Fade op={fade.detail}>
       {[45, 135, 225, 315].map((d) => {
         const p = polar(c, north + d, R)
         return <CasedLine paper={paper} key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k} width={1.2 / k} opacity={0.65} />
@@ -683,11 +721,12 @@ function Gates32({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraPr
         return <CasedLine paper={paper} key={d} x1={c.x} y1={c.y} x2={p.x} y2={p.y} k={k}
           stroke={paper ? '#55555B' : '#F2E6C4'} width={1.1 / k} opacity={0.5} dash={`${8 / k} ${6 / k}`} />
       })}
+      </Fade>
       <ChakraRings c={c} R={R} north={north} k={k} paper={paper} scale={compass.degreeRing} rings={GATE_RINGS}
         band={GATES32.map((g, i) => {
           const v = verdictOf(g.code)
           return { a0: edges[i], a1: edges[i] + 11.25, fill: v ? GATE_BAND[v] : neutral }
-        })} bandEdges={edges} />
+        })} bandEdges={edges} fade={fade} />
     </g>
   )
 }
@@ -701,12 +740,15 @@ function rayExit(c: Pt, sx: number, sy: number, b: { minX: number; minY: number;
 
 /** The sixteen directions just outside a turned square or rectangle, each where its ray from the
  *  centre leaves the frame; north is left to the frame's own needle and letter. */
-function frameDirections({ c, frame, size, upr, paper, k, R }: {
+function frameDirections({ c, frame, size, upr, paper, k, R, only }: {
   c: Pt; frame: { minX: number; minY: number; maxX: number; maxY: number }; size: number; upr: number; paper?: boolean; k: number; R: number
+  /** East, South and West, which are never faded, or the twelve between them */
+  only: 'cardinal' | 'between'
 }) {
   const gap = size * 0.95
   return ZONES16.map((z, i) => {
     if (i === 0 || (i % 2 === 1 && R * k < 170)) return null
+    if ((only === 'cardinal') !== (i % 4 === 0)) return null
     const th = (i * 22.5 * Math.PI) / 180
     const sx = Math.sin(th), sy = -Math.cos(th)
     const t = rayExit(c, sx, sy, frame)
@@ -802,10 +844,12 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
   const nx = c.x
   const needleD = `M${nx} ${minY - ch * 0.95} L${nx + cw * 0.1} ${minY - ch * 0.58} L${nx - cw * 0.1} ${minY - ch * 0.58} Z`
 
+  const fade = fadesOf(compass)
   if (part === 'labels') {
     const dirSize = Math.min(Math.max(R * 0.05, 10 / k), R * 0.085)
     return (
       <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+        <Fade op={fade.band}>
         {cellNames}
         {compass.devtas && (
           <g>
@@ -820,7 +864,9 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
             {innerLabel(MANDALA_INNER.nw, 2, 2)}
           </g>
         )}
-        {compass.labels && frameDirections({ c, frame, size: dirSize, upr, paper, k, R })}
+        </Fade>
+        {compass.labels && <Fade op={fade.detail}>{frameDirections({ c, frame, size: dirSize, upr, paper, k, R, only: 'between' })}</Fade>}
+        {compass.labels && frameDirections({ c, frame, size: dirSize, upr, paper, k, R, only: 'cardinal' })}
         {compass.labels && (
           <text {...at(nx, minY - ch * 0.35, upr, Math.min(cw, ch) * 0.42)} fontSize={Math.min(cw, ch) * 0.42}
             fontFamily={FONT} fontWeight={800} fill={ink('#F26B57', paper)} textAnchor="middle"
@@ -846,12 +892,14 @@ function Grid9({ c, north, compass, k, vr, pts, closed, paper, part = 'body' }: 
 
   return (
     <g transform={`rotate(${north} ${c.x} ${c.y})`}>
-      {cellRects}
-      {lines}
-      <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
-        fill="none" stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
-      <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
-        fill="none" stroke={brass} strokeWidth={(paper ? 1.6 : 2) / k} opacity={0.95} />
+      <Fade op={fade.band}>{cellRects}</Fade>
+      <Fade op={fade.detail}>
+        {lines}
+        <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
+          fill="none" stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
+        <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
+          fill="none" stroke={brass} strokeWidth={(paper ? 1.6 : 2) / k} opacity={0.95} />
+      </Fade>
       <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke={paper ? PAPERHALO : INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
       <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
     </g>
@@ -877,6 +925,7 @@ function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProp
   const upr = -(north + vr)
   const needleD = `M${c.x} ${minY - p * 0.95} L${c.x + p * 0.11} ${minY - p * 0.56} L${c.x - p * 0.11} ${minY - p * 0.56} Z`
 
+  const fade = fadesOf(compass)
   if (part === 'labels') {
     if (!compass.labels) return null
     // the sixteen directions just outside the square, where each one's ray leaves it; north is the
@@ -884,7 +933,7 @@ function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProp
     const size = Math.min(Math.max(R * 0.05, 10 / k), R * 0.085)
     const show = (i: number) => i % 2 === 0 || R * k >= 170
     const gap = size * 0.95
-    const labels = ZONES16.map((z, i) => {
+    const direction = (z: (typeof ZONES16)[number], i: number) => {
       if (i === 0 || !show(i)) return null
       const th = (i * 22.5 * Math.PI) / 180
       const sx = Math.sin(th), sy = -Math.cos(th)
@@ -902,11 +951,12 @@ function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProp
           {z.key}
         </text>
       )
-    })
+    }
     const nSize = Math.max(p * 0.42, 12 / k)
     return (
       <g transform={`rotate(${north} ${c.x} ${c.y})`}>
-        {labels}
+        <Fade op={fade.detail}>{ZONES16.map((z, i) => (i % 4 === 0 ? null : direction(z, i)))}</Fade>
+        {ZONES16.map((z, i) => (i % 4 === 0 ? direction(z, i) : null))}
         <text {...at(c.x, minY - p * 0.34, upr, nSize)} fontSize={nSize} fontFamily={FONT} fontWeight={800}
           fill={ink('#F26B57', paper)} textAnchor="middle" dominantBaseline="central" {...haloProps(nSize * 0.2, paper)}>
           N
@@ -937,6 +987,7 @@ function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProp
   const r = Math.max(marmaRadius(p) * 1.1, 5.5 / k)
   return (
     <g transform={`rotate(${north} ${c.x} ${c.y})`}>
+      <Fade op={fade.detail}>
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
         fill={paper ? 'rgba(255,255,255,0.35)' : 'rgba(9,10,14,0.25)'} stroke="none" />
       {grid}
@@ -950,6 +1001,8 @@ function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProp
         fill="none" stroke={paper ? PAPERHALO : INKHALO} strokeWidth={3.8 / k} opacity={0.5} />
       <rect x={minX} y={minY} width={maxX - minX} height={maxY - minY}
         fill="none" stroke={brass} strokeWidth={(paper ? 1.5 : 2) / k} opacity={0.95} />
+      </Fade>
+      <Fade op={fade.band}>
       {MARMA_LINES.map((l, i) => {
         const a = at2(l.a), b = at2(l.b)
         return <CasedLine paper={paper} key={`l${i}`} x1={a.x} y1={a.y} x2={b.x} y2={b.y} k={k} stroke={brass}
@@ -965,6 +1018,7 @@ function Marma({ c, R, north, compass, k, vr, paper, part = 'body' }: ChakraProp
         return <circle key={i} cx={q.x} cy={q.y} r={r} fill={m.kind === 'maha' ? fill.maha : fill.up}
           stroke={edge} strokeWidth={1.2 / k} />
       })}
+      </Fade>
       <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke={paper ? PAPERHALO : INKHALO} strokeWidth={2.4 / k} strokeLinejoin="round" opacity={0.98} />
       <path d={needleD} fill={paper ? '#C43B28' : '#F26B57'} stroke="#FFFDF4" strokeWidth={0.9 / k} strokeLinejoin="round" />
     </g>
@@ -1248,8 +1302,10 @@ export function Scene(props: SceneProps) {
     if (drawn.compass.id === 'zones16' || drawn.compass.id === 'gates32') {
       const rings = drawn.compass.id === 'zones16' ? ZONE_RINGS : GATE_RINGS
       const size = Math.min(drawn.R * 0.038, Math.max(drawn.R * 0.03, 9 / k))
+      const between = fadesOf(drawn.compass).detail > 0
       ZONES16.forEach((z, i) => {
         if (i % 2 === 1 && drawn.R * k < 160) return
+        if (i % 4 !== 0 && !between) return
         const p = polar(drawn.c, drawn.north + i * 22.5, drawn.R * (rings.b1 + rings.d1) / 2)
         keepouts.push({ a: p, b: p, r: textW(DIR_WORD[z.key] ?? z.key, size) / 2 + size * 0.3 })
       })
@@ -1335,7 +1391,10 @@ export function Scene(props: SceneProps) {
       <TextsLayer texts={props.texts ?? []} selected={props.selectedText} k={k} vr={vr} paper={props.paper} />
       <RoomShapesLayer shapes={props.roomShapes ?? []} selected={props.selectedRoomShape} k={k} vr={vr} keepouts={tagKeepouts} paper={props.paper} />
       <MarkersLayer markers={props.markers ?? []} k={k} vr={vr} center={center} north={northDeg} R={tieR} paper={props.paper}
-        ringCodes={!!drawn && !props.compassHidden && (drawn.compass.id === 'zones16' || drawn.compass.id === 'gates32')} />
+        // the door prints its own gate code whenever the ring's cannot be read: labels off, faded
+        // below half, or the wheel too small for ChakraRingLabels to print them (under 210 px)
+        ringCodes={!!drawn && !props.compassHidden && (drawn.compass.id === 'zones16' || drawn.compass.id === 'gates32') &&
+          drawn.compass.labels && fadesOf(drawn.compass).detail >= 0.5 && drawn.R * k >= 210} />
       {center && pts.length >= 3 && (
         <CenterMarker c={center}
           brahmaR={brahmaR}

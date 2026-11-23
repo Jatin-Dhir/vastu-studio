@@ -11,7 +11,7 @@ import { useChartsVersion } from './useChartsVersion'
 import { processCompassImage } from '../imageTools'
 import { deletePreset, listPresets, putPreset, type CompassPreset } from '../db'
 import { formatArea, formatLen, formatScale } from '../format'
-import { COMPASS_META, ZONES16 } from '../vastu'
+import { BAND_LABEL, COMPASS_META, ZONES16 } from '../vastu'
 import { MARMA_LINES, MARMA_POINTS } from '../marma'
 import type { CompassId, Marker, Pt, RoomShape, Tool } from '../types'
 import { hasPdfOpen } from '../importers/pdfState'
@@ -792,6 +792,15 @@ export function RightPanel() {
             {compass.id === 'zones16' && (
               <Slider label="Zone fill" value={compass.fillPct} min={0} max={70}
                 onChange={(v) => setCompass({ fillPct: v })} />
+            )}
+            {BAND_LABEL[compass.id] && (
+              <>
+                <Slider label={BAND_LABEL[compass.id]!} value={compass.bandPct ?? 100} min={0} max={100}
+                  onChange={(v) => setCompass({ bandPct: v })} />
+                <Slider label="Labels & lines" value={compass.detailPct ?? 100} min={0} max={100}
+                  onChange={(v) => setCompass({ detailPct: v })} />
+                <p className="fade-note">These two leave North, East, South and West untouched.</p>
+              </>
             )}
             <div className="toggle-row wrap">
               {compass.id === 'zones16' && (

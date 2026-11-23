@@ -87,6 +87,13 @@ export interface CompassState {
   scalePct: number
   opacity: number
   fillPct: number
+  /** fade, 0–100, for the compass's own information: the zone ring, the devta ring, the pada
+   *  colours and names, the marmasthans. Absent (plans saved before it) = 100 */
+  bandPct?: number
+  /** fade, 0–100, for its labels and lines: the rings' ground and rules, entrance codes, degrees,
+   *  the twelve in-between directions, grid lines. North, East, South, West and the needle never
+   *  fade with it. Absent = 100 */
+  detailPct?: number
   clip: boolean
   labels: boolean
   degreeRing: boolean
